@@ -1,0 +1,5 @@
+# name,type,length_ft,beam_ft,draught_ft,displacement_tons,block_coefficient,speed_kt,reference_hp,confidence,source
+PT-596,motor,78,20,4,50,0.42,40,1350,0.65,historical
+MTB 71,motor,110,19,5,85,0.43,39,3200,0.65,historical
+S-38,motor,114,17,5,90,0.43,40,3000,0.65,historical
+Vosper 73,motor,68,19,4,44,0.40,38,1100,0.65,historical

@@ -1,0 +1,3 @@
+# name,type,length_ft,beam_ft,draught_ft,displacement_tons,block_coefficient,speed_kt,reference_hp,confidence,source
+Test Battleship,battleship,600,90,28,23760,0.55,24,50000,0.9,example
+Test Destroyer,destroyer,376,40,13,2100,0.48,36.5,60000,0.8,example

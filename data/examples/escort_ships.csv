@@ -1,0 +1,7 @@
+# name,type,length_ft,beam_ft,draught_ft,displacement_tons,block_coefficient,speed_kt,reference_hp,confidence,source
+Bogue Example,carrier,496,69,24,9393,0.59,18,8500,0.80,historical
+CVE Example,carrier,512,65,22,10000,0.56,19,9500,0.70,approximate
+Flower Class,patrol,205,33,11,925,0.55,16,2750,0.70,approximate
+Hunt Class,patrol,280,31,10,1050,0.52,27,19000,0.70,approximate
+Black Swan,patrol,283,37,11,1250,0.53,19.8,4300,0.70,approximate
+River Class,frigate,301,36,12,1475,0.52,20,6500,0.70,approximate

@@ -1,0 +1,7 @@
+# name,type,length_ft,beam_ft,draught_ft,displacement_tons,block_coefficient,speed_kt,reference_hp,confidence,source
+Fletcher Example,destroyer,376,40,13,2100,0.48,36.5,60000,0.85,historical
+Kagero Example,destroyer,388,38,12,2500,0.48,35,52000,0.85,historical
+Atlanta Example,cruiser,541,53,17,6000,0.50,32.5,75000,0.80,historical
+Independence Example,carrier,622,71,24,10662,0.56,31.6,100000,0.80,historical
+Bogue Example,carrier,496,69,24,9393,0.59,18,8500,0.80,historical
+South Dakota Example,battleship,680,108,34,35000,0.60,27.5,130000,0.85,historical

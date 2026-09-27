@@ -1,0 +1,5 @@
+# name,type,length_ft,beam_ft,draught_ft,displacement_tons,block_coefficient,speed_kt,reference_hp,confidence,source
+PT-109,motor,80,20,4,56,0.42,41,1500,0.65,historical
+Motor Gun Boat,motor,117,20,5,95,0.44,40,3600,0.65,historical
+MTB 424,motor,72,19,4,47,0.40,39,1200,0.65,historical
+S-Boat,motor,115,17,5,92,0.43,39,3000,0.65,historical

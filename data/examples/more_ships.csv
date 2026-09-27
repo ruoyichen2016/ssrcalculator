@@ -1,0 +1,7 @@
+# name,type,length_ft,beam_ft,draught_ft,displacement_tons,block_coefficient,speed_kt,reference_hp,confidence,source
+Hood Example,battleship,860,104,30,42000,0.56,32,144000,0.85,historical
+Shokaku Example,carrier,845,95,27,25675,0.58,34.2,160000,0.85,historical
+Mogami Example,cruiser,650,66,18,11200,0.51,35,152000,0.80,historical
+Somers Example,destroyer,381,36,10,1850,0.47,37.5,52000,0.80,historical
+Brooklyn Example,cruiser,608,61,19,9700,0.53,32.5,100000,0.80,historical
+Gneisenau Example,battleship,754,98,32,31500,0.56,32,160000,0.80,historical

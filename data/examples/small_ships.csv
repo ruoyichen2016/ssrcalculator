@@ -1,0 +1,5 @@
+# name,type,length_ft,beam_ft,draught_ft,displacement_tons,block_coefficient,speed_kt,reference_hp,confidence,source
+PT Boat,motor,80,20,4,50,0.42,40,1500,0.65,approximate
+Torpedo Boat,motor,110,17,5,120,0.44,36,4200,0.65,approximate
+Corvette,patrol,205,33,11,925,0.55,16,2750,0.70,approximate
+Gunboat,patrol,180,24,8,650,0.50,20,2200,0.65,approximate
