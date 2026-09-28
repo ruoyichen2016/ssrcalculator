@@ -86,6 +86,18 @@
 - New tests: deck/access feasibility; existing determinism and seed-comparison
   tests cover the multi-deck GA.
 
+## Phase 7 — passage capacity, escape distance, structural-weight linkage (completed 2026-09-27)
+
+- Access network now carries a capacity model: unit-capacity edge-disjoint paths
+  (Edmonds-Karp max flow) to the main trunk; required paths per compartment
+  (accommodation and machinery need 2, others 1)
+- Escape-distance constraints: max 3 hops and max 0.90 normalised path from the
+  trunk, enforced by repair and checked in the report
+- Structural-weight proxy (deck levels + 5 transverse bulkheads + longitudinal
+  span) is minimised in the GA objective and reported in JSON/HTML/CLI
+- Three new constraint checks (13 total); deterministic fallback arrangement is
+  guaranteed feasible for all of them
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model
@@ -101,7 +113,7 @@
 - CFD-surrogate correction framework + CSV fitting + R²/RMSE + LOOCV/holdout + Ridge/λ selection + `cfd-apply` + HTML report + propulsion breakdown in reports
 - Global GA general-arrangement optimizer + calibre/rounds/mounts-scaled magazine volume + structural continuity + maintenance void constraints
 - 52 built-in historical cases + multiple example CSV datasets + replacement-priority + source-summary + quality-score + progress/target/tier + replacement-log + version + multi-target reports
-- 94 unit tests + 7 accuracy-regression integration tests
+- 94 unit tests + 7 accuracy-regression integration tests (GA suite exercises the capacity/escape checks)
 
 ## Remaining
 
@@ -111,7 +123,7 @@
   citation + URL + verifier (needed to pass `data-target`); currently unavailable
 - Replace the analytic CFD placeholder with real measured CFD (>20 samples)
 - Add more cruiser/battleship literature points to reduce the regime weights
-- Add a real structural model (scantlings, hatches) and dimensioned access trunks to the GA
+- Replace the structural-weight proxy with scantling-based estimates and dimensioned trunks/hatches
 
 ### P2/P3
 

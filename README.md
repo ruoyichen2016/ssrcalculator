@@ -418,8 +418,9 @@ The `calibrate-stats` command also reports:
   `cfd-apply` requires >= 20 measured CFD samples. `data/examples/cfd_reference.csv` has 30
   analytic rows (Savitsky vs empirical) to exercise the pipeline but is not evidence
 - compartment optimizer upgraded to a deterministic **multi-deck** GA: 6 volumes, deck index +
-  within-deck offset, and longitudinal position per compartment, plus a structural access-network
-  connectivity constraint; JSON/HTML report decks, access edges and objective
+  within-deck offset, and longitudinal position per compartment, plus a structural access network
+  with passage capacity (edge-disjoint paths), escape-hop/path limits and a structural-weight
+  proxy; JSON/HTML report decks, access edges, escape metrics, structure weight and objective
 - regime-aware modern model: Holtrop-Mennen + per-ship-type 15% trimmed-mean factor (nested LOOCV 8.92% case-weighted / 8.39% type-averaged over 52 cases); original retained as baseline
 - `validate-regime`, `regime-table`, `calibrate-regime` and `accuracy-target` commands
 - grouped CLI aliases (`calibrate stats`, `validate holdout`, `data score`, `regime show`, `accuracy target`, `cfd fit`, ...) with flat names preserved

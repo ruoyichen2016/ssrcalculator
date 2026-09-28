@@ -1103,6 +1103,12 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                     "Decks: {:?}  Access network: {} edges, connected={}",
                     placement.decks, placement.access_edges, placement.access_connected
                 );
+                println!(
+                    "Escape: max {} hops / {:.2} path   Structural-weight proxy: {:.0} t",
+                    placement.escape_max_hops,
+                    placement.escape_max_path,
+                    placement.structure_weight_tons
+                );
                 for (name, ok) in &placement.checks {
                     println!("  [{}] {name}", if *ok { "ok" } else { "FAIL" });
                 }
@@ -1158,6 +1164,12 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
             println!(
                 "Decks: {:?}  Access network: {} edges, connected={}",
                 placement.decks, placement.access_edges, placement.access_connected
+            );
+            println!(
+                "Escape: max {} hops / {:.2} path   Structural-weight proxy: {:.0} t",
+                placement.escape_max_hops,
+                placement.escape_max_path,
+                placement.structure_weight_tons
             );
             for (name, ok) in &placement.checks {
                 println!("  [{}] {name}", if *ok { "ok" } else { "FAIL" });

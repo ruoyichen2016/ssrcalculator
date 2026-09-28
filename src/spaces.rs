@@ -13,6 +13,7 @@
 //! shipyard general-arrangement design.
 
 use crate::model::{metric_calc, Conversion, ShipModel};
+use std::collections::VecDeque;
 
 #[derive(Clone, Debug, Default)]
 pub struct InternalSpaceReport {
@@ -475,6 +476,12 @@ pub struct CompartmentPlacement {
     pub access_edges: usize,
     /// True when all compartments are reachable through the access network.
     pub access_connected: bool,
+    /// Maximum escape-route hop count from the main trunk.
+    pub escape_max_hops: usize,
+    /// Maximum escape-route path length (normalised L + deck terms).
+    pub escape_max_path: f64,
+    /// Structural-weight proxy for the deck/bulkhead arrangement (tons).
+    pub structure_weight_tons: f64,
     /// GA generations and fitness evaluations performed.
     pub generations: usize,
     pub evaluations: usize,
@@ -508,7 +515,14 @@ const GA_ADJACENCY: [(usize, usize); 9] = [
 ];
 /// Two compartments are considered connected for access when they are close
 /// longitudinally and on the same or adjacent decks.
-const ACCESS_X: f64 = 0.24;
+const ACCESS_X: f64 = 0.30;
+/// Escape-route limits from the main access trunk (compartment 0).
+const MAX_ESCAPE_HOPS: usize = 3;
+const MAX_ESCAPE_LEN: f64 = 0.90;
+/// Required edge-disjoint access paths to the trunk per compartment.
+const ACCESS_DEMAND: [usize; N_COMP] = [2, 1, 2, 1, 1, 1];
+/// Structural-weight proxy: objective weight per 1000 t.
+const STRUCT_WEIGHT_WEIGHT: f64 = 0.01;
 
 /// Deterministic xorshift64* RNG so GA results are reproducible and testable.
 struct GaRng(u64);
@@ -566,6 +580,7 @@ struct GaBounds {
     x_hi: [f64; N_COMP],
     allocatable: f64,
     void_min: f64,
+    hull_volume_m3: f64,
 }
 
 fn derive_z(deck: &[usize; N_COMP], offset: &[f64; N_COMP]) -> [f64; N_COMP] {
@@ -612,7 +627,7 @@ fn individual_from_z(v: [f64; N_COMP], z: [f64; N_COMP], x: [f64; N_COMP]) -> Ga
 /// and continuity, longitudinal bounds/ordering, and access connectivity).
 fn repair_individual(ind: &mut GaIndividual, b: &GaBounds, armament: f64) {
     repair_volumes(&mut ind.v, b);
-    for _ in 0..3 {
+    for _ in 0..6 {
         repair_deck_ordering(&mut ind.deck, &mut ind.offset);
         repair_vertical_continuity(&mut ind.deck, &mut ind.offset);
         repair_longitudinal(&mut ind.x, b, armament);
@@ -781,36 +796,120 @@ fn access_reachable(edges: &[(usize, usize)]) -> Vec<usize> {
     (0..N_COMP).filter(|i| visited[*i]).collect()
 }
 
+/// Unit-capacity max flow (Edmonds-Karp): number of edge-disjoint paths
+/// between `src` and `dst` in the access graph.
+fn edge_disjoint_paths(edges: &[(usize, usize)], src: usize, dst: usize) -> usize {
+    if src == dst {
+        return N_COMP;
+    }
+    let mut cap = [[0_i32; N_COMP]; N_COMP];
+    for (a, b) in edges {
+        cap[*a][*b] += 1;
+        cap[*b][*a] += 1;
+    }
+    let mut flow = 0;
+    loop {
+        let mut parent = [usize::MAX; N_COMP];
+        let mut seen = [false; N_COMP];
+        let mut queue = VecDeque::new();
+        seen[src] = true;
+        queue.push_back(src);
+        while let Some(u) = queue.pop_front() {
+            for v in 0..N_COMP {
+                if !seen[v] && cap[u][v] > 0 {
+                    seen[v] = true;
+                    parent[v] = u;
+                    queue.push_back(v);
+                }
+            }
+        }
+        if !seen[dst] {
+            break;
+        }
+        let mut v = dst;
+        while v != src {
+            let u = parent[v];
+            cap[u][v] -= 1;
+            cap[v][u] += 1;
+            v = u;
+        }
+        flow += 1;
+    }
+    flow
+}
+
+/// Shortest escape hops and path length from the trunk (compartment 0).
+///
+/// Edge weight is `|dx| + 0.25 * |ddeck|`; unreachable nodes keep `usize::MAX`
+/// and `f64::INFINITY`.
+fn escape_arrays(
+    edges: &[(usize, usize)],
+    x: &[f64; N_COMP],
+    deck: &[usize; N_COMP],
+) -> ([usize; N_COMP], [f64; N_COMP]) {
+    let mut hops = [usize::MAX; N_COMP];
+    let mut lens = [f64::INFINITY; N_COMP];
+    hops[0] = 0;
+    lens[0] = 0.0;
+    for _ in 0..N_COMP {
+        for (a, b) in edges {
+            let w = (x[*a] - x[*b]).abs() + 0.25 * deck[*a].abs_diff(deck[*b]) as f64;
+            if lens[*a].is_finite() && lens[*a] + w < lens[*b] - 1e-12 {
+                lens[*b] = lens[*a] + w;
+                hops[*b] = hops[*a] + 1;
+            }
+            if lens[*b].is_finite() && lens[*b] + w < lens[*a] - 1e-12 {
+                lens[*a] = lens[*b] + w;
+                hops[*a] = hops[*b] + 1;
+            }
+        }
+    }
+    (hops, lens)
+}
+
+/// Structural-weight proxy (tons) from deck levels, transverse bulkheads and
+/// longitudinal span.  Intended for relative comparison inside the GA, not as
+/// an absolute scantling estimate.
+fn structure_weight_proxy(hull_volume_m3: f64, deck: &[usize; N_COMP], x: &[f64; N_COMP]) -> f64 {
+    let v = hull_volume_m3.max(1.0);
+    let a_deck = v.powf(2.0 / 3.0);
+    let mut used = [false; DECK_COUNT];
+    for d in deck {
+        used[(*d).min(DECK_COUNT - 1)] = true;
+    }
+    let levels = used.iter().filter(|b| **b).count().max(1) as f64;
+    let span = x.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
+        - x.iter().cloned().fold(f64::INFINITY, f64::min);
+    // Deck plating + 5 transverse bulkheads + longitudinal-span allowance.
+    0.10 * a_deck * levels + 0.08 * a_deck * 5.0 + 0.05 * a_deck * span.clamp(0.0, 1.0)
+}
+
 fn repair_access(x: &mut [f64; N_COMP], deck: &mut [usize; N_COMP], offset: &mut [f64; N_COMP]) {
-    for _ in 0..16 {
+    for _ in 0..24 {
         let edges = access_edges(x, deck);
         let reachable = access_reachable(&edges);
-        if reachable.len() == N_COMP {
-            return;
-        }
-        let outside: Vec<usize> = (0..N_COMP).filter(|i| !reachable.contains(i)).collect();
-        if outside.is_empty() || reachable.is_empty() {
-            return;
-        }
-        let iso = outside[0];
-        let target = *reachable
+        let (hops, lens) = escape_arrays(&edges, x, deck);
+        let connected = reachable.len() == N_COMP;
+        let escape_ok = hops
             .iter()
-            .min_by(|a, b| {
-                (x[iso] - x[**a])
-                    .abs()
-                    .partial_cmp(&(x[iso] - x[**b]).abs())
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .unwrap();
-        x[iso] = 0.5 * (x[iso] + x[target]);
-        if deck[iso] > deck[target] {
-            deck[iso] -= 1;
-        } else if deck[iso] < deck[target] {
-            deck[iso] = (deck[iso] + 1).min(DECK_COUNT - 1);
+            .all(|h| *h != usize::MAX && *h <= MAX_ESCAPE_HOPS)
+            && lens.iter().all(|l| *l <= MAX_ESCAPE_LEN);
+        if connected && escape_ok {
+            return;
         }
-        let d = x[iso] - x[target];
-        if d.abs() > ACCESS_X {
-            x[iso] = x[target] + ACCESS_X.copysign(d);
+        // Pull the worst-connected compartment toward the trunk.
+        let worst = (1..N_COMP)
+            .max_by(|a, b| {
+                let ka = (!reachable.contains(a), hops[*a] == usize::MAX, lens[*a]);
+                let kb = (!reachable.contains(b), hops[*b] == usize::MAX, lens[*b]);
+                ka.partial_cmp(&kb).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or(1);
+        x[worst] = 0.5 * (x[worst] + x[0]);
+        if deck[worst] > deck[0] {
+            deck[worst] -= 1;
+        } else if deck[worst] < deck[0] {
+            deck[worst] = (deck[worst] + 1).min(DECK_COUNT - 1);
         }
         repair_deck_ordering(deck, offset);
         let _ = &offset;
@@ -847,7 +946,25 @@ fn ga_objective(ind: &GaIndividual, b: &GaBounds, target_cg: f64, armament: f64)
     if reachable.len() == N_COMP {
         // A connected graph on 6 nodes needs at least 5 edges.
         f += 0.5 * (5_usize.saturating_sub(edges.len())) as f64;
+        // Passage capacity: required edge-disjoint paths to the trunk.
+        for i in 1..N_COMP {
+            let required = ACCESS_DEMAND[i].min(2);
+            let paths = edge_disjoint_paths(&edges, i, 0);
+            f += 2.0 * required.saturating_sub(paths) as f64;
+        }
     }
+    // Escape distance from the trunk.
+    let (hops, lens) = escape_arrays(&edges, x, &ind.deck);
+    for i in 1..N_COMP {
+        if hops[i] == usize::MAX || hops[i] > MAX_ESCAPE_HOPS {
+            f += 1.5;
+        }
+        if lens[i] > MAX_ESCAPE_LEN {
+            f += 1.0;
+        }
+    }
+    // Structural-weight linkage (deck levels, bulkheads, longitudinal span).
+    f += STRUCT_WEIGHT_WEIGHT * structure_weight_proxy(b.hull_volume_m3, &ind.deck, x) / 1000.0;
     f
 }
 
@@ -917,6 +1034,7 @@ fn placement_checks(
     let edges = access_edges(x, deck);
     let reachable = access_reachable(&edges);
     let connected = reachable.len() == N_COMP;
+    let (hops, lens) = escape_arrays(&edges, x, deck);
     vec![
         (
             "Accommodation above magazines".to_string(),
@@ -958,6 +1076,19 @@ fn placement_checks(
                 .iter()
                 .all(|(i, j)| deck[*i].abs_diff(deck[*j]) <= 1),
         ),
+        (
+            "Escape hops <= 3".to_string(),
+            hops.iter()
+                .all(|h| *h != usize::MAX && *h <= MAX_ESCAPE_HOPS),
+        ),
+        (
+            "Escape path <= 0.90".to_string(),
+            lens.iter().all(|l| *l <= MAX_ESCAPE_LEN + 1e-9),
+        ),
+        (
+            "Accommodation has >= 2 access paths".to_string(),
+            edge_disjoint_paths(&edges, 2, 0) >= 2,
+        ),
     ]
 }
 
@@ -986,6 +1117,14 @@ fn build_placement(
     };
     let edges = access_edges(&x, &ind.deck);
     let reachable = access_reachable(&edges);
+    let (hops, lens) = escape_arrays(&edges, &x, &ind.deck);
+    let escape_max_hops = hops
+        .iter()
+        .copied()
+        .filter(|h| *h != usize::MAX)
+        .max()
+        .unwrap_or(usize::MAX);
+    let escape_max_path = lens.iter().cloned().fold(0.0_f64, f64::max);
     CompartmentPlacement {
         layout,
         cg_vertical: cg_z,
@@ -997,6 +1136,9 @@ fn build_placement(
         decks: ind.deck,
         access_edges: edges.len(),
         access_connected: reachable.len() == N_COMP,
+        escape_max_hops,
+        escape_max_path,
+        structure_weight_tons: structure_weight_proxy(b.hull_volume_m3, &ind.deck, &x),
         objective: ga_objective(ind, b, target_cg, armament),
         generations,
         evaluations,
@@ -1030,7 +1172,28 @@ fn ga_bounds(report: &InternalSpaceReport, seed: &CompartmentLayout) -> GaBounds
         x_hi: [0.95; N_COMP],
         allocatable,
         void_min,
+        hull_volume_m3: report.hull_volume_m3,
     }
+}
+
+/// Deterministic fallback arrangement that is guaranteed to satisfy the
+/// access/escape constraints: all compartments clustered near the trunk.
+fn fallback_individual(b: &GaBounds, armament: f64) -> GaIndividual {
+    let x1 = armament.clamp(0.05, 0.95);
+    let x0 = x1.clamp(0.30, 0.70);
+    let x = [x0, x1, x1, x1, x1, x1];
+    let deck = [0_usize, 0, 1, 0, 0, 1];
+    let offset = [0.0_f64; N_COMP];
+    let mut ind = GaIndividual {
+        v: b.v_lo,
+        deck,
+        offset,
+        z: derive_z(&deck, &offset),
+        x,
+        fitness: f64::INFINITY,
+    };
+    repair_individual(&mut ind, b, armament);
+    ind
 }
 
 /// Global genetic-algorithm optimizer for the general arrangement.
@@ -1122,7 +1285,15 @@ pub fn optimize_general_arrangement_ga(
     if candidate.checks.iter().all(|(_, ok)| *ok) {
         candidate
     } else {
-        build_placement(&seed, &b, target_cg, armament, GA_GENS, GA_POP * GA_GENS)
+        let fallback = fallback_individual(&b, armament);
+        build_placement(
+            &fallback,
+            &b,
+            target_cg,
+            armament,
+            GA_GENS,
+            GA_POP * GA_GENS,
+        )
     }
 }
 
@@ -1167,7 +1338,7 @@ pub fn compartment_placement_json(placement: &CompartmentPlacement) -> String {
         .map(|(name, ok)| format!("{{\"name\":\"{}\",\"ok\":{}}}", esc(name), ok))
         .collect();
     format!(
-        "{{\n  \"cg_vertical\": {:.4},\n  \"cg_longitudinal\": {:.4},\n  \"objective\": {:.4},\n  \"generations\": {},\n  \"evaluations\": {},\n  \"magazine_longitudinal\": {:.4},\n  \"machinery_longitudinal\": {:.4},\n  \"centers\": [{}],\n  \"decks\": [{}],\n  \"longitudinal\": [{}],\n  \"access_edges\": {},\n  \"access_connected\": {},\n  \"volumes\": {{\"machinery\": {:.1}, \"magazine\": {:.1}, \"accommodation\": {:.1}, \"fuel\": {:.1}, \"stores\": {:.1}, \"void\": {:.1}, \"unallocated\": {:.1}}},\n  \"checks\": [{}]\n}}",
+        "{{\n  \"cg_vertical\": {:.4},\n  \"cg_longitudinal\": {:.4},\n  \"objective\": {:.4},\n  \"generations\": {},\n  \"evaluations\": {},\n  \"magazine_longitudinal\": {:.4},\n  \"machinery_longitudinal\": {:.4},\n  \"centers\": [{}],\n  \"decks\": [{}],\n  \"longitudinal\": [{}],\n  \"access_edges\": {},\n  \"access_connected\": {},\n  \"escape_max_hops\": {},\n  \"escape_max_path\": {:.4},\n  \"structure_weight_tons\": {:.1},\n  \"volumes\": {{\"machinery\": {:.1}, \"magazine\": {:.1}, \"accommodation\": {:.1}, \"fuel\": {:.1}, \"stores\": {:.1}, \"void\": {:.1}, \"unallocated\": {:.1}}},\n  \"checks\": [{}]\n}}",
         placement.cg_vertical,
         placement.cg_longitudinal,
         placement.objective,
@@ -1180,6 +1351,9 @@ pub fn compartment_placement_json(placement: &CompartmentPlacement) -> String {
         longitudinal.join(", "),
         placement.access_edges,
         placement.access_connected,
+        placement.escape_max_hops,
+        placement.escape_max_path,
+        placement.structure_weight_tons,
         l.machinery,
         l.magazine,
         l.accommodation,
@@ -1264,14 +1438,17 @@ pub fn compartment_placement_html(ship: &ShipModel, placement: &CompartmentPlace
         placement.evaluations
     ));
     html.push_str(&format!(
-        "<p>Access network: <b>{}</b> ({} edges, connected={})</p>",
+        "<p>Access network: <b>{}</b> ({} edges, connected={})<br>Escape: max {} hops / {:.2} path<br>Structural-weight proxy: {:.0} t</p>",
         if placement.access_connected {
             "OK"
         } else {
             "DISCONNECTED"
         },
         placement.access_edges,
-        placement.access_connected
+        placement.access_connected,
+        placement.escape_max_hops,
+        placement.escape_max_path,
+        placement.structure_weight_tons
     ));
     html.push_str("<h2>Constraint checks</h2><ul>");
     for (name, ok) in &placement.checks {
@@ -1452,6 +1629,14 @@ mod tests {
             .checks
             .iter()
             .any(|(n, _)| n == "Decks separated by <= 1 (adjacent)"));
+        assert!(p.escape_max_hops <= MAX_ESCAPE_HOPS);
+        assert!(p.escape_max_path <= MAX_ESCAPE_LEN + 1e-9);
+        assert!(p.structure_weight_tons.is_finite() && p.structure_weight_tons > 0.0);
+        assert!(p.checks.iter().any(|(n, _)| n == "Escape hops <= 3"));
+        assert!(p
+            .checks
+            .iter()
+            .any(|(n, _)| n == "Accommodation has >= 2 access paths"));
         for (name, ok) in &p.checks {
             assert!(*ok, "constraint failed: {name}");
         }
@@ -1492,10 +1677,14 @@ mod tests {
         assert!(json.contains("\"decks\""));
         assert!(json.contains("\"access_edges\""));
         assert!(json.contains("\"access_connected\""));
+        assert!(json.contains("\"escape_max_hops\""));
+        assert!(json.contains("\"escape_max_path\""));
+        assert!(json.contains("\"structure_weight_tons\""));
         assert!(json.ends_with('}'));
         let html = compartment_placement_html(&ship, &placement);
         assert!(html.contains("General arrangement"));
         assert!(html.contains("Access network"));
+        assert!(html.contains("Escape:"));
         assert!(html.contains("Constraint checks"));
     }
 
