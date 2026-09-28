@@ -135,3 +135,72 @@ fn regularization_grid_is_not_a_noop() {
     assert!(ridge.best_lambda > 0.0 && lasso.best_lambda > 0.0);
     assert!(ridge.best_loocv_mape.is_finite() && lasso.best_loocv_mape.is_finite());
 }
+
+// ---------------------------------------------------------------------------
+// Regime-aware modern model: Holtrop + per-ship-type calibration factor.
+// Baseline nested LOOCV ~8.66% (2026-09-27).
+// ---------------------------------------------------------------------------
+
+const REGIME_OVERALL_MAX: f64 = 0.095;
+
+#[test]
+fn regime_nested_loocv_does_not_regress() {
+    let r = springsharp::run_loocv_regime();
+    assert!(
+        r.overall_mape <= REGIME_OVERALL_MAX,
+        "regime nested LOOCV {:.2}% exceeded frozen baseline (max {:.2}%)",
+        r.overall_mape * 100.0,
+        REGIME_OVERALL_MAX * 100.0
+    );
+    // The modern regime model must beat both comparison baselines.
+    assert!(
+        r.overall_mape < r.original_baseline_mape,
+        "regime {:.2}% should beat original+factor {:.2}%",
+        r.overall_mape * 100.0,
+        r.original_baseline_mape * 100.0
+    );
+    assert!(
+        r.overall_mape < r.holtrop_uncalibrated_mape,
+        "regime {:.2}% should beat uncalibrated Holtrop {:.2}%",
+        r.overall_mape * 100.0,
+        r.holtrop_uncalibrated_mape * 100.0
+    );
+
+    let lookup = |ty: &str| {
+        r.per_type
+            .iter()
+            .find(|(t, _, _)| t == ty)
+            .map(|(_, _, m)| *m)
+            .unwrap_or_else(|| panic!("no regime entry for {ty}"))
+    };
+    assert!(lookup("battleship") <= 0.096);
+    assert!(lookup("carrier") <= 0.142);
+    assert!(lookup("cruiser") <= 0.088);
+    assert!(lookup("destroyer") <= 0.073);
+}
+
+#[test]
+fn regime_table_is_well_formed_and_applicable() {
+    let table = springsharp::fit_regime_calibration();
+    assert!(!table.is_empty());
+    for row in &table {
+        assert_eq!(row.model, springsharp::ResistanceModel::HoltropMennen);
+        assert!(row.count > 0);
+        assert!(row.factor > 0.0 && row.factor.is_finite());
+        assert!(row.train_mape.is_finite());
+    }
+
+    let mut ship = springsharp::ShipModel::new();
+    ship.ship_type = "Battleship".to_string();
+    ship.engine.resistance_model = springsharp::ResistanceModel::Original;
+    let applied = springsharp::apply_regime_calibration(&mut ship);
+    assert!(
+        applied.is_some(),
+        "demo-like battleship should match the regime table"
+    );
+    assert_eq!(
+        ship.engine.resistance_model,
+        springsharp::ResistanceModel::HoltropMennen
+    );
+    assert!(ship.engine.power_factor > 0.0);
+}

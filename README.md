@@ -160,21 +160,50 @@ Yorktown, Illustrious, North Carolina, Vanguard, Shokaku, Hood, Zara, Mogami,
 Kagero, Brooklyn, Dido, Somers, Benson, Independence, Bogue, Alaska, Gneisenau,
 Porter, Sims, Mahan, New Orleans, Kuma, Sendai, Admiral Hipper).
 
-Every case carries explicit provenance (`Provenance { source_type, confidence,
-source, verification_date }`).  The current built-in database is **public
-reference only** (`SourceType::PublicReference`) and is **not independently
-verified**: only official trial or model-basin test data counts as verified.
+Every case carries explicit provenance (`Provenance { source_type,
+displacement_type, confidence, source, source_url, verifier,
+verification_date }`).  The current built-in database is **public reference
+only** (`SourceType::PublicReference`) and is **not independently verified**:
+only official trial or model-basin test data counts as verified.  Official
+trial/model-basin data is not available to this project, so the database is
+explicitly approximate.
 
 ```bash
-cargo run -- validate          # per-case comparison (in-sample)
-cargo run -- validate-types    # grouped by ship type
+cargo run -- validate-regime   # primary: nested-LOOCV regime vs baselines
+cargo run -- accuracy-target   # check nested regime LOOCV (default <= 10%)
+cargo run -- regime-table      # production factors per ship type
 cargo run -- validate-holdout  # calibration fit on 28 train / scored on 9 held-out cases
+cargo run -- validate          # per-case comparison (in-sample, diagnostic)
+cargo run -- validate-types    # grouped by ship type (in-sample, diagnostic)
 ```
 
+### Modern regime model (default)
+
+For modern accuracy prediction use the **Holtrop-Mennen model with a
+per-ship-type calibration factor** fitted to the public historical dataset.
+Nested leave-one-out cross-validation (the factor is re-fitted on every training
+split) gives:
+
+```text
+regime (Holtrop + per-type factor) : 8.66%
+original + per-type factor         : 10.57%   <- comparison baseline
+Holtrop uncalibrated               : 19.42%
+```
+
+Apply it to a design with:
+
+```bash
+cargo run -- calibrate-regime example.ssr
+```
+
+This sets `engine.resistance_model=holtrop` and `engine.power_factor` for the
+design's ship type.  The original SpringSharp model is retained as a comparison
+baseline.  In-sample fits are diagnostic only; use `validate-regime` for the
+out-of-sample number.
+
 Because all 37 cases are also used by the `calibrate-*` fits, the in-sample
-numbers printed by `calibrate-stats` are optimistic.  `calibrate-stats` now
-prints the LOOCV summary first and labels the in-sample fits as diagnostic
-only.  Use LOOCV and `validate-holdout` as the accuracy evidence.
+numbers printed by `calibrate-stats` are optimistic.  `calibrate-stats` prints
+the LOOCV summary first and labels the in-sample fits as diagnostic only.
 
 The current SpringSharp empirical model tends to over-predict power for these
 cases.  The reported calibration factor can be applied to a design with:
@@ -366,11 +395,14 @@ The `calibrate-stats` command also reports:
   verified, 0/37 traceable); `validate`, `data-score`, `data-target` report this honestly
 - explicit `Provenance { source_type, displacement_type, confidence, source, source_url, verifier, verification_date }` on every case
 - hardcoded `DATA_UPGRADES` / `case_source_confidence` removed; confidence is explicit provenance data
-- composite quality gate: `0.4*official + 0.2*traceable + 0.4*LOOCV-accuracy`, with per-ship-type output
+- composite quality gate: `0.4*official + 0.2*traceable + 0.4*nested-regime-LOOCV accuracy`, with per-ship-type output
 - deterministic holdout split (`validate-holdout`): calibration fit on 28 train, scored on 9 held-out cases
 - `tests/accuracy_regression.rs` freezes overall/per-type LOOCV and holdout baselines with regression thresholds
 - Ridge/Lasso structural fits standardize features and target, with a scale-aware lambda grid (`1e-4` .. `1e4`)
 - QPC shown only for the Holtrop model; original-model output states that no QPC applies
+- regime-aware modern model: Holtrop-Mennen + per-ship-type calibration factor (nested LOOCV 8.66%); original retained as comparison baseline
+- `validate-regime`, `regime-table`, `calibrate-regime` and `accuracy-target` commands
+- grouped CLI aliases (`calibrate stats`, `validate holdout`, `data score`, `regime show`, `accuracy target`, `cfd fit`, ...) with flat names preserved
 - quality-report HTML test
 - `external-report` command for HTML external data reports
 - `apply-ensemble-external` command writes external-data ensemble weights into `.ssr`
@@ -393,11 +425,11 @@ The `calibrate-stats` command also reports:
 - `planing-hp` optional calibration factor
 
 > Note: the built-in database is approximate public historical data, not
-> independent verification.  Segmented structural fits can be
-> over-parameterized; LOOCV and `validate-holdout` give more honest estimates of
-> predictive error than in-sample MAPE.  `data-target` is a composite gate
-> (official/model-test coverage + traceability + out-of-sample accuracy), so it
-> currently fails honestly.  See `docs/VALIDATION.md` for the frozen baselines.
+> independent verification (official trial / model-basin data is unavailable).
+> `validate-regime` and `accuracy-target` are the primary accuracy evidence;
+> `data-target` is a separate provenance gate (official/model-test coverage +
+> traceability + accuracy) and correctly fails while the data is public-reference
+> only.  See `docs/VALIDATION.md` for the frozen baselines.
 
 ## Algorithmic improvements (CLRS-inspired)
 

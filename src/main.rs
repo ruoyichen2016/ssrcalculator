@@ -1,7 +1,7 @@
 use std::io::{self, BufRead, Write};
 
 use springsharp::{
-    apply_ensemble_calibration, apply_ensemble_calibration_with_external,
+    apply_ensemble_calibration, apply_ensemble_calibration_with_external, apply_regime_calibration,
     apply_structural_calibration, apply_structural_calibration_lasso,
     apply_structural_calibration_ridge, apply_structural_calibration_segmented,
     bootstrap_uncertainty_for_ship, bootstrap_uncertainty_for_ship_weighted,
@@ -14,19 +14,19 @@ use springsharp::{
     data_version, demo_ship, deserialize, detect_duplicate_external_cases, external_report_html,
     fit_cfd_proxy_report, fit_cfd_proxy_ridge, fit_ensemble, fit_ensemble_cv, fit_reduced_form,
     fit_reduced_form_by_type, fit_reduced_form_interaction, fit_reduced_form_weighted,
-    fit_reduced_form_with_external, fit_structural_form, fit_structural_form_segmented,
-    fit_structural_form_segmented_lasso, fit_structural_form_segmented_ridge,
-    fit_structural_form_segmented_weighted, fit_structural_form_weighted,
-    fit_structural_form_with_external, format_compartment_report, format_space_report,
-    froude_number, generate_html_report, generate_report, holdout_validation, is_planing_eligible,
-    load_from_file, loocv_by_type, parse_cfd_samples, parse_external_cases,
+    fit_reduced_form_with_external, fit_regime_calibration, fit_structural_form,
+    fit_structural_form_segmented, fit_structural_form_segmented_lasso,
+    fit_structural_form_segmented_ridge, fit_structural_form_segmented_weighted,
+    fit_structural_form_weighted, fit_structural_form_with_external, format_compartment_report,
+    format_space_report, froude_number, generate_html_report, generate_report, holdout_validation,
+    is_planing_eligible, load_from_file, parse_cfd_samples, parse_external_cases,
     planing_hp_estimate_calibrated, quality_gate_by_type, quality_gate_with_loocv, run_loocv,
-    run_loocv_weighted, run_loocv_with_external, run_loocv_with_external_weighted, run_server,
-    run_validation, save_to_file, segmented_calibration, select_cfd_ridge_lambda,
-    select_lasso_lambda, select_ridge_lambda, small_fast_error_diagnostic, solve_max_speed,
-    solve_range, suggest_compartment_placement, summarize_external_by_source,
-    summarize_external_by_type, type_calibration_factors, validate_external_cases,
-    validation_by_type, CfdProxyConfig, ShipModel,
+    run_loocv_regime, run_loocv_weighted, run_loocv_with_external,
+    run_loocv_with_external_weighted, run_server, run_validation, save_to_file,
+    segmented_calibration, select_cfd_ridge_lambda, select_lasso_lambda, select_ridge_lambda,
+    small_fast_error_diagnostic, solve_max_speed, solve_range, suggest_compartment_placement,
+    summarize_external_by_source, summarize_external_by_type, type_calibration_factors,
+    validate_external_cases, validation_by_type, CfdProxyConfig, ShipModel,
 };
 
 fn print_help() {
@@ -48,6 +48,10 @@ COMMANDS:
   validate             Run historical speed/power validation
   validate-types       Show validation errors grouped by ship type
   validate-holdout     Out-of-sample check (calibration fit on training split only)
+  validate-regime      Nested-LOOCV comparison of regime model vs original baseline
+  accuracy-target [m]  Check nested regime LOOCV against a MAPE target (default 0.10)
+  regime-table         Show production regime table (Holtrop + per-ship-type factor)
+  calibrate-regime <file>  Apply Holtrop + per-ship-type factor (modern default)
   calibrate-type <file>  Apply per-ship-type power calibration
   calibrate <file>     Apply historical power calibration to a design
   spaces <file>        Show improved internal-space volume model
@@ -86,13 +90,67 @@ COMMANDS:
   calibrate-structural-segmented <file>  Apply Fn-segmented structural multipliers
   interact [file]      Start an interactive terminal session
 
+Grouped aliases (flat names still work):
+  calibrate <stats|regime|type|ridge|lasso|structural|external> ...
+  validate  <types|holdout|regime>
+  data      <score|progress|target|targets|tiers|priority|sources|replace-log|version>
+  regime    <show|apply|validate>
+  accuracy  target [mape]
+  cfd       <proxy|fit|report|fit-ridge|select-lambda|apply>
+  planing   <hp|calibrate|calibrate-all>
+
 Run without a command to enter interactive mode.
 "
     );
 }
 
+/// Map grouped invocations (`calibrate stats`, `data score`, ...) onto the
+/// canonical flat command names.  Flat names remain supported as aliases.
+fn normalize_grouped_command(mut args: Vec<String>) -> Vec<String> {
+    if args.len() < 2 {
+        return args;
+    }
+    let canonical: Option<String> = match (args[0].as_str(), args[1].as_str()) {
+        (
+            "calibrate",
+            s @ ("stats"
+            | "regime"
+            | "type"
+            | "ridge"
+            | "lasso"
+            | "structural"
+            | "structural-segmented"
+            | "external"),
+        ) => Some(format!("calibrate-{s}")),
+        (
+            "data",
+            s @ ("score" | "progress" | "target" | "targets" | "tiers" | "priority" | "sources"
+            | "replace-log" | "version"),
+        ) => Some(format!("data-{s}")),
+        ("validate", s @ ("types" | "holdout")) => Some(format!("validate-{s}")),
+        ("accuracy", "target") => Some("accuracy-target".to_string()),
+        ("regime", "show") => Some("regime-table".to_string()),
+        ("regime", "apply") => Some("calibrate-regime".to_string()),
+        ("regime", "validate") => Some("validate-regime".to_string()),
+        ("cfd", s @ ("proxy" | "fit" | "report" | "fit-ridge" | "select-lambda" | "apply")) => {
+            Some(format!("cfd-{s}"))
+        }
+        ("planing", "hp") => Some("planing-hp".to_string()),
+        ("planing", "calibrate") => Some("planing-calibrate".to_string()),
+        ("planing", "calibrate-all") => Some("planing-calibrate-all".to_string()),
+        _ => None,
+    };
+    if let Some(c) = canonical {
+        let rest = args.split_off(2);
+        let mut out = vec![c];
+        out.extend(rest);
+        args = out;
+    }
+    args
+}
+
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args = normalize_grouped_command(std::env::args().skip(1).collect());
     let cmd = args.first().map(String::as_str).unwrap_or("interact");
 
     match cmd {
@@ -299,8 +357,8 @@ fn main() {
                 .get(1)
                 .map(|x| x.parse().expect("target must be a number"))
                 .unwrap_or(0.8);
-            let loocv = run_loocv();
-            let gate = quality_gate_with_loocv(loocv.ensemble_mape);
+            let regime = run_loocv_regime();
+            let gate = quality_gate_with_loocv(regime.overall_mape);
             println!("Composite data-quality gate (target {target:.2}):");
             println!("  composite             : {:.3}", gate.composite);
             println!(
@@ -312,7 +370,7 @@ fn main() {
                 gate.traceability_fraction * 100.0
             );
             println!(
-                "  LOOCV ensemble MAPE   : {:.1}%  -> accuracy score {:.3}",
+                "  nested LOOCV MAPE     : {:.1}%  -> accuracy score {:.3}",
                 gate.loocv_mape * 100.0,
                 gate.loocv_accuracy_score
             );
@@ -322,7 +380,7 @@ fn main() {
                 "{:<12} {:>4} {:>10} {:>12} {:>9} {:>10}",
                 "Type", "N", "Official%", "Traceable%", "LOOCV%", "Composite"
             );
-            for g in quality_gate_by_type(&loocv_by_type()) {
+            for g in quality_gate_by_type(&regime.per_type) {
                 println!(
                     "{:<12} {:>4} {:>9.1}% {:>11.1}% {:>8.1}% {:>10.3}",
                     g.ship_type,
@@ -342,8 +400,8 @@ fn main() {
             }
         }
         "data-targets" => {
-            let loocv = run_loocv();
-            let gate = quality_gate_with_loocv(loocv.ensemble_mape);
+            let regime = run_loocv_regime();
+            let gate = quality_gate_with_loocv(regime.overall_mape);
             for (target, met) in data_target_matrix_for(gate.composite) {
                 println!(
                     "target {:.1}: {}",
@@ -399,10 +457,10 @@ fn main() {
                 score.total_cases,
                 score.verified_fraction * 100.0
             );
-            let loocv = run_loocv();
-            let gate = quality_gate_with_loocv(loocv.ensemble_mape);
+            let regime = run_loocv_regime();
+            let gate = quality_gate_with_loocv(regime.overall_mape);
             println!(
-                "Composite quality gate: {:.3} (official {:.1}%, traceable {:.1}%, LOOCV {:.1}% -> accuracy {:.3})",
+                "Composite quality gate: {:.3} (official {:.1}%, traceable {:.1}%, nested LOOCV {:.1}% -> accuracy {:.3})",
                 gate.composite,
                 gate.official_model_fraction * 100.0,
                 gate.traceability_fraction * 100.0,
@@ -1052,6 +1110,95 @@ fn main() {
                 "Applied {} calibration factor {:.3} to {path}",
                 entry.ship_type, factor
             );
+        }
+        "regime-table" => {
+            println!(
+                "{:<12} {:>4} {:>18} {:>9} {:>11}",
+                "Type", "N", "Model", "Factor", "Train MAPE"
+            );
+            for r in fit_regime_calibration() {
+                println!(
+                    "{:<12} {:>4} {:>18} {:>9.3} {:>10.1}%",
+                    r.ship_type,
+                    r.count,
+                    r.model_label,
+                    r.factor,
+                    r.train_mape * 100.0
+                );
+            }
+            println!(
+                "\nNote: Train MAPE is in-sample/diagnostic. Use `validate-regime` for nested LOOCV."
+            );
+        }
+        "calibrate-regime" => {
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: springsharp calibrate-regime <file>");
+                std::process::exit(2);
+            };
+            let mut ship = ShipModel::new();
+            load_from_file(&mut ship, path).expect("failed to load design");
+            ship.calculate();
+            match apply_regime_calibration(&mut ship) {
+                Some(entry) => {
+                    save_to_file(&ship, path).expect("failed to save design");
+                    println!(
+                        "Applied regime to {path}: type={} model={} factor={:.3} (in-sample MAPE {:.1}%)",
+                        entry.ship_type,
+                        entry.model_label,
+                        entry.factor,
+                        entry.train_mape * 100.0
+                    );
+                    println!("NOTE: use `validate-regime` for the out-of-sample error.");
+                }
+                None => {
+                    eprintln!("No regime entry for ship type '{}'", ship.ship_type);
+                    std::process::exit(3);
+                }
+            }
+        }
+        "validate-regime" => {
+            let r = run_loocv_regime();
+            println!("Regime model: Holtrop-Mennen + per-ship-type calibration factor");
+            println!("Nested LOOCV (out-of-sample):");
+            println!(
+                "  regime (Holtrop + factor) : {:.2}%",
+                r.overall_mape * 100.0
+            );
+            println!(
+                "  original + per-type factor: {:.2}%  (comparison baseline)",
+                r.original_baseline_mape * 100.0
+            );
+            println!(
+                "  Holtrop uncalibrated       : {:.2}%",
+                r.holtrop_uncalibrated_mape * 100.0
+            );
+            println!("\nPer ship type (regime, nested):");
+            for (ty, n, m) in &r.per_type {
+                println!("  {:<12} n={:<2} {:.2}%", ty, n, m * 100.0);
+            }
+        }
+        "accuracy-target" => {
+            let target: f64 = args
+                .get(1)
+                .map(|x| x.parse().expect("target must be a number"))
+                .unwrap_or(0.10);
+            let r = run_loocv_regime();
+            println!(
+                "Nested-LOOCV regime MAPE {:.2}% vs target {:.1}%",
+                r.overall_mape * 100.0,
+                target * 100.0
+            );
+            for (ty, n, m) in &r.per_type {
+                println!("  {:<12} n={:<2} {:.2}%", ty, n, m * 100.0);
+            }
+            if !r.overall_mape.is_finite() || r.overall_mape > target {
+                eprintln!(
+                    "Accuracy target not met: regime nested LOOCV {:.2}% > {:.2}%",
+                    r.overall_mape * 100.0,
+                    target * 100.0
+                );
+                std::process::exit(4);
+            }
         }
         "validate-types" => {
             println!(

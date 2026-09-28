@@ -50,6 +50,18 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 - Bootstrap 5%-50%-95% intervals
 - External CSV import / merge calibration
 
+## Regime model (modern default)
+
+- Base model: Holtrop-Mennen
+- Per-ship-type calibration factor `reference / simulated`, fitted to the public
+  historical dataset (battleship 0.763, carrier 0.783, cruiser 0.925, destroyer 1.058)
+- The original SpringSharp empirical model is retained as a comparison baseline
+- Validated by **nested** LOOCV: the factor is re-fitted on each training split
+  - regime (Holtrop + factor): 8.66%
+  - original + factor: 10.57%
+  - Holtrop uncalibrated: 19.42%
+- Applied to a design via `calibrate-regime` (sets `resistance_model` + `power_factor`)
+
 ## Internal Space Model
 
 - Hull volume estimate
@@ -78,6 +90,7 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
   0.4*LOOCV-accuracy`, with per-ship-type breakdown
 - `validate-holdout`: calibration fitted on 28 training cases, scored on 9 held-out cases
 - Per-type LOOCV (`loocv_by_type`) feeds the per-type quality gate
-- LOOCV is the primary metric in `calibrate-stats`; in-sample fits are diagnostic only
+- Nested-LOOCV regime accuracy (`validate-regime`, `accuracy-target`) is the primary metric;
+  in-sample fits are diagnostic only
 - `tests/accuracy_regression.rs` freezes overall/per-type LOOCV and holdout baselines
-- 80 unit tests + 5 accuracy-regression integration tests
+- 83 unit tests + 7 accuracy-regression integration tests

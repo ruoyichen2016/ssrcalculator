@@ -27,28 +27,48 @@ Provenance {
 In-sample fits (all 37 cases used for fitting and scoring) are optimistic and
 must not be used as accuracy claims.
 
-- **LOOCV** (`run_loocv`, `calibrate-stats`) is the primary metric.
+**Primary metric: nested LOOCV of the regime model** (`run_loocv_regime`,
+`validate-regime`).  This is an out-of-sample estimate: the per-ship-type
+calibration factor is re-fitted on each training split.
+
+Secondary metrics:
+
 - **Holdout** (`validate-holdout`) fits calibration on 28 training cases and
   scores 9 held-out cases.
-- Per-ship-type LOOCV (`loocv_by_type`) feeds the per-type quality gate.
+- The reduced/structural ensemble (`run_loocv`, `calibrate-stats`) is retained
+  as a diagnostic; its `ensemble_mape` fits the blend weight on all folds, so it
+  is optimistic.  The honest nested 2-way number is ~10.8%.
+
+### Modern regime model
+
+`Holtrop-Mennen + per-ship-type calibration factor`, fitted on the public
+historical dataset (the default when a design is run through
+`calibrate-regime`).  Factors (ref/sim): battleship 0.763, carrier 0.783,
+cruiser 0.925, destroyer 1.058.
 
 ### Frozen baseline (2026-09-27)
 
 | Metric | Baseline | Regression threshold |
 |---|---|---|
-| Overall LOOCV ensemble MAPE | ~10.5% | <= 12.0% |
-| Overall LOOCV reduced MAPE | ~12.7% | <= 14.2% |
-| Overall LOOCV structural MAPE | ~14.9% | <= 16.5% |
-| Battleship LOOCV | ~11.1% | <= 12.6% |
-| Carrier LOOCV | ~12.6% | <= 14.1% |
-| Cruiser LOOCV | ~12.3% | <= 13.8% |
-| Destroyer LOOCV | ~5.3% | <= 6.8% |
+| **Regime nested LOOCV, overall** | **~8.66%** | **<= 9.5%** |
+| Regime nested, battleship | ~8.64% | <= 9.6% |
+| Regime nested, carrier | ~13.13% | <= 14.2% |
+| Regime nested, cruiser | ~7.89% | <= 8.8% |
+| Regime nested, destroyer | ~6.47% | <= 7.3% |
+| Original + per-type factor (baseline) | ~10.57% | (must be beaten) |
+| Holtrop uncalibrated | ~19.42% | (must be beaten) |
+| 2-way ensemble, reported (optimistic) | ~10.5% | <= 12.0% |
 | Holdout MAPE, original | ~16.5% | <= 18.5% |
 | Holdout MAPE, Holtrop | ~10.9% | <= 12.5% |
 
 These are enforced by `tests/accuracy_regression.rs`.  If a change is a
 deliberate improvement, update the baseline here and the constants in that file
 together.
+
+> Official trial / model-basin data is **not available** to this project.  The
+> database is public historical reference data and is explicitly approximate;
+> the regime factors are fitted to it and should be treated as empirical
+> corrections, not as validation against measured trial data.
 
 ## Composite quality gate (`data-target`)
 
