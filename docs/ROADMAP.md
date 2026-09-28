@@ -88,13 +88,15 @@
 
 ## Phase 7 — passage capacity, escape distance, structural-weight linkage (completed 2026-09-27)
 
-- Access network now carries a capacity model: unit-capacity edge-disjoint paths
-  (Edmonds-Karp max flow) to the main trunk; required paths per compartment
-  (accommodation and machinery need 2, others 1)
-- Escape-distance constraints: max 3 hops and max 0.90 normalised path from the
-  trunk, enforced by repair and checked in the report
-- Structural-weight proxy (deck levels + 5 transverse bulkheads + longitudinal
-  span) is minimised in the GA objective and reported in JSON/HTML/CLI
+- Access capacity is now **person-based**: compartment occupancy derived from
+  crew (machinery watch, magazine handling, accommodation), sized at 250 persons
+  per edge-disjoint route via Edmonds-Karp max flow; accommodation always needs
+  at least two independent routes
+- Escape distance is measured on the **real deck plan**
+  (`sqrt((dx*L)^2 + (ddeck*H)^2)`) with limits of 3 hops / 45 m
+- Structural weight uses a **plating + bulkhead + framing formula** (steel
+  density, 6 mm decks, 8 mm bulkheads, 35% framing) optimised in the GA objective
+  and reported in JSON/HTML/CLI
 - Three new constraint checks (13 total); deterministic fallback arrangement is
   guaranteed feasible for all of them
 

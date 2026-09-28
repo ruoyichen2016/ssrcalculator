@@ -1104,7 +1104,7 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                     placement.decks, placement.access_edges, placement.access_connected
                 );
                 println!(
-                    "Escape: max {} hops / {:.2} path   Structural-weight proxy: {:.0} t",
+                    "Escape: max {} hops / {:.1} m   Structural-weight estimate: {:.0} t",
                     placement.escape_max_hops,
                     placement.escape_max_path,
                     placement.structure_weight_tons
@@ -1166,7 +1166,7 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                 placement.decks, placement.access_edges, placement.access_connected
             );
             println!(
-                "Escape: max {} hops / {:.2} path   Structural-weight proxy: {:.0} t",
+                "Escape: max {} hops / {:.1} m   Structural-weight estimate: {:.0} t",
                 placement.escape_max_hops,
                 placement.escape_max_path,
                 placement.structure_weight_tons

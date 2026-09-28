@@ -76,11 +76,13 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 - Multi-deck global genetic-algorithm optimizer: per compartment a volume, a
   deck index + within-deck vertical offset, and a longitudinal position; a
   feasibility repair operator enforces volume, void, deck ordering, structural
-  continuity, armament position, access-network connectivity, passage capacity
-  (edge-disjoint paths via unit max-flow), escape-hop/path limits
-  (`<= 3` hops / `<= 0.90` normalised path), and minimises a structural-weight
-  proxy (deck levels, bulkheads, longitudinal span); JSON/HTML report decks,
-  access edges, escape metrics, structure weight and the objective
+  continuity, armament position, access-network connectivity, **person-based
+  passage capacity** (occupancy from crew; 250 persons per edge-disjoint route,
+  via max-flow), and **escape limits measured on the real deck plan**
+  (`sqrt((dx*L)^2 + (ddeck*H)^2)`, `<= 3` hops / `<= 45 m`); it minimises a
+  **plating + bulkhead + framing structural-weight estimate**; JSON/HTML report
+  decks, access edges, occupancy, required paths, escape metres, structure
+  weight and the objective
 
 ## Reporting / GUI
 

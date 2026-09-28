@@ -147,8 +147,8 @@ target normalized to unit RMS, so the lambda grid `1e-4 .. 1e4` is meaningful.
   rows are bundled.
 - Many of the 15 added carrier cases are approximate (design/trial figures,
   normal vs standard displacement mixed); treat the carrier factor as empirical.
-- The compartment optimizer now has decks, a unit-capacity access network
-  (edge-disjoint paths), escape-hop/path limits and a structural-weight proxy,
-  but the network is still geometric proximity (same/adjacent deck + longitudinal
-  distance) rather than dimensioned trunks/hatches, and the weight model is a
-  relative planning proxy, not a scantling calculation.
+- The compartment optimizer now has decks, a person-based access-capacity model
+  (250 persons per edge-disjoint route), escape distances on the real deck plan
+  and a plating/bulkhead/framing weight estimate, but access edges are still
+  geometric proximity rather than dimensioned trunks/hatches, and the weight
+  model uses planning thicknesses rather than a full scantling calculation.
