@@ -71,6 +71,21 @@
   constraint penalties; JSON/HTML/CLI report objective, generations, evaluations
 - New unit tests: determinism/feasibility and armament-position adherence
 
+## Phase 6 — multi-deck access-network GA + robust regime factor (completed 2026-09-27)
+
+- Compartment GA extended to a multi-deck model: 6 volumes, per-compartment deck
+  index + within-deck offset, and longitudinal position (24 genes); deck ordering
+  and adjacency constraints replace raw vertical-centre search.
+- Structural access network: compartments are linked when within 0.24 L and on
+  the same/adjacent deck; the GA must produce a **connected** network (>= 5
+  edges), enforced by repair and checked in the report.
+- JSON/HTML/CLI report decks, access edges and connectivity; 10 constraint checks.
+- Regime factor switched to a 15% trimmed mean (outlier-robust); nested LOOCV
+  8.92% case-weighted / 8.39% type-averaged.  Per-type Fn slopes tested and
+  rejected as overfitting.
+- New tests: deck/access feasibility; existing determinism and seed-comparison
+  tests cover the multi-deck GA.
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model
@@ -86,7 +101,7 @@
 - CFD-surrogate correction framework + CSV fitting + R²/RMSE + LOOCV/holdout + Ridge/λ selection + `cfd-apply` + HTML report + propulsion breakdown in reports
 - Global GA general-arrangement optimizer + calibre/rounds/mounts-scaled magazine volume + structural continuity + maintenance void constraints
 - 52 built-in historical cases + multiple example CSV datasets + replacement-priority + source-summary + quality-score + progress/target/tier + replacement-log + version + multi-target reports
-- 93 unit tests + 7 accuracy-regression integration tests
+- 94 unit tests + 7 accuracy-regression integration tests
 
 ## Remaining
 
@@ -96,7 +111,7 @@
   citation + URL + verifier (needed to pass `data-target`); currently unavailable
 - Replace the analytic CFD placeholder with real measured CFD (>20 samples)
 - Add more cruiser/battleship literature points to reduce the regime weights
-- Extend the GA with a structural/access-network model and multi-deck compartments
+- Add a real structural model (scantlings, hatches) and dimensioned access trunks to the GA
 
 ### P2/P3
 

@@ -43,23 +43,21 @@ Secondary metrics:
 
 `Holtrop-Mennen + per-ship-type calibration factor`, fitted on the public
 historical dataset (the default when a design is run through
-`calibrate-regime`).  Factors (ref/sim): battleship 0.763, carrier 0.790,
-cruiser 0.925, destroyer 1.058.  The carrier factor was refitted after adding 15
-literature carrier cases (carrier nested LOOCV 13.13% -> 10.94%).  Fn-segmented
-per-type factors were tested and rejected: they made the carrier and overall
-errors worse than a single per-type factor.
+`calibrate-regime`).  Factors (ref/sim, 15% trimmed mean): battleship 0.760,
+carrier 0.778, cruiser 0.922, destroyer 1.053.  The carrier factor was refitted
+after adding 15 literature carrier cases (carrier nested LOOCV 13.13% -> 10.68%).
 
 ### Frozen baseline (2026-09-27)
 
 | Metric | Baseline (52 cases) | Regression threshold |
 |---|---|---|
-| **Regime nested LOOCV, case-weighted** | **~9.06%** | **<= 10.0%** |
-| Regime nested, type-averaged (macro) | ~8.49% | <= 9.5% |
-| Regime nested, battleship | ~8.64% | <= 9.6% |
-| Regime nested, carrier | ~10.94% | <= 12.5% |
-| Regime nested, cruiser | ~7.89% | <= 8.8% |
-| Regime nested, destroyer | ~6.47% | <= 7.3% |
-| Original + per-type factor (baseline) | ~11.53% | (must be beaten) |
+| **Regime nested LOOCV, case-weighted** | **~8.92%** | **<= 10.0%** |
+| Regime nested, type-averaged (macro) | ~8.39% | <= 9.5% |
+| Regime nested, battleship | ~8.50% | <= 9.6% |
+| Regime nested, carrier | ~10.68% | <= 12.5% |
+| Regime nested, cruiser | ~7.84% | <= 8.8% |
+| Regime nested, destroyer | ~6.53% | <= 7.3% |
+| Original + per-type factor (baseline) | ~11.67% | (must be beaten) |
 | Holtrop uncalibrated | ~22.24% | (must be beaten) |
 | 2-way ensemble, reported (optimistic) | ~10.0% | <= 12.0% |
 | Holdout MAPE, original | ~16.1% | <= 18.5% |
@@ -68,6 +66,12 @@ errors worse than a single per-type factor.
 These are enforced by `tests/accuracy_regression.rs`.  If a change is a
 deliberate improvement, update the baseline here and the constants in that file
 together.
+
+**Factor estimator.**  The per-ship-type factor is a 15% trimmed mean of
+`reference / simulated`, which rejects outlier cases.  A nested-LOOCV sweep over
+5-20% trims and the geometric mean showed a stable ~0.1pp improvement over the
+plain mean; a per-type *linear-in-Fn* factor was tested and rejected (it
+overfits: overall nested error rises from ~8.9% to 11.7%+).
 
 > Official trial / model-basin data is **not available** to this project.  The
 > database is public historical reference data and is explicitly approximate;
@@ -143,3 +147,6 @@ target normalized to unit RMS, so the lambda grid `1e-4 .. 1e4` is meaningful.
   rows are bundled.
 - Many of the 15 added carrier cases are approximate (design/trial figures,
   normal vs standard displacement mixed); treat the carrier factor as empirical.
+- The compartment optimizer now has decks and an access network, but the network
+  is geometric proximity (same/adjacent deck + longitudinal distance), not a
+  structural scantling/hatch model; access edges are not dimensioned.

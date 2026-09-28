@@ -193,7 +193,7 @@ Nested leave-one-out cross-validation (the factor is re-fitted on every training
 split) gives:
 
 ```text
-regime (Holtrop + per-type factor) : 9.06% case-weighted, 8.49% type-averaged
+regime (Holtrop + per-type factor) : 8.92% case-weighted, 8.39% type-averaged
 original + per-type factor         : 11.53%   <- comparison baseline
 Holtrop uncalibrated               : 22.24%
 ```
@@ -370,7 +370,7 @@ The `calibrate-stats` command also reports:
 - CFD Ridge lambda selection by LOOCV (`cfd-select-lambda`)
 - Apply fitted CFD proxy into `.ssr` (`cfd-apply`) with LOOCV R² threshold check
 - `cfd-status` command and a 20-sample minimum guard: the bundled `cfd_samples.csv` is synthetic (9 rows) and `cfd-apply` refuses it unless `force` is given
-- global genetic-algorithm general-arrangement optimizer (`compartments` / `optimize-compartments`)
+- multi-deck genetic-algorithm general-arrangement optimizer with an access network (`compartments` / `optimize-compartments`)
 - `compartments` includes magazine/machinery longitudinal hints
 - `compartments --json` machine-readable output and `compartments-report` general-arrangement HTML report
 - `optimize-compartments` prints constraint check results (placement, void, continuity)
@@ -403,8 +403,8 @@ The `calibrate-stats` command also reports:
 - `data/CHANGELOG.md` tracking database versions
 - built-in-v1.7: 52 cases, all `SourceType::PublicReference` (0/52 independently
   verified, 0/52 traceable); `validate`, `data-score`, `data-target` report this honestly
-- 15 additional carrier cases (literature): carrier nested LOOCV improved 13.13% -> 10.94%
-- Fn-segmented per-type factors tested and rejected (worse than a single per-type factor)
+- 15 additional carrier cases (literature): carrier nested LOOCV improved 13.13% -> 10.68%
+- Fn-segmented per-type factors and per-type Fn slopes tested and rejected (overfit: 9.06% -> 11.7%+); a 15% trimmed-mean factor is used instead
 - explicit `Provenance { source_type, displacement_type, confidence, source, source_url, verifier, verification_date }` on every case
 - hardcoded `DATA_UPGRADES` / `case_source_confidence` removed; confidence is explicit provenance data
 - composite quality gate: `0.4*official + 0.2*traceable + 0.4*nested-regime-LOOCV accuracy`, with per-ship-type output
@@ -417,9 +417,10 @@ The `calibrate-stats` command also reports:
 - provenance-aware CFD ingestion (`measured_cfd` / `literature` / `analytic` / `synthetic`);
   `cfd-apply` requires >= 20 measured CFD samples. `data/examples/cfd_reference.csv` has 30
   analytic rows (Savitsky vs empirical) to exercise the pipeline but is not evidence
-- compartment optimizer upgraded to a deterministic global GA (18 variables) with feasibility
-  repair; reports objective, generations and evaluations in JSON/HTML
-- regime-aware modern model: Holtrop-Mennen + per-ship-type calibration factor (nested LOOCV 9.06% over 52 cases); original retained as comparison baseline
+- compartment optimizer upgraded to a deterministic **multi-deck** GA: 6 volumes, deck index +
+  within-deck offset, and longitudinal position per compartment, plus a structural access-network
+  connectivity constraint; JSON/HTML report decks, access edges and objective
+- regime-aware modern model: Holtrop-Mennen + per-ship-type 15% trimmed-mean factor (nested LOOCV 8.92% case-weighted / 8.39% type-averaged over 52 cases); original retained as baseline
 - `validate-regime`, `regime-table`, `calibrate-regime` and `accuracy-target` commands
 - grouped CLI aliases (`calibrate stats`, `validate holdout`, `data score`, `regime show`, `accuracy target`, `cfd fit`, ...) with flat names preserved
 - quality-report HTML test

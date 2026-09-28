@@ -469,6 +469,12 @@ pub struct CompartmentPlacement {
     pub longitudinal: [f64; 6],
     /// Combined objective value of the constraint optimizer (lower is better).
     pub objective: f64,
+    /// Deck index of each compartment (0 = hold, 3 = upper).
+    pub decks: [usize; 6],
+    /// Number of structural access links between compartments.
+    pub access_edges: usize,
+    /// True when all compartments are reachable through the access network.
+    pub access_connected: bool,
     /// GA generations and fitness evaluations performed.
     pub generations: usize,
     pub evaluations: usize,
@@ -477,10 +483,18 @@ pub struct CompartmentPlacement {
 
 /// Number of compartments.
 const N_COMP: usize = 6;
+/// Number of decks (hold, lower, main, upper).
+const DECK_COUNT: usize = 4;
+/// Vertical centre of each deck (fraction of depth).
+const DECK_CENTERS: [f64; DECK_COUNT] = [0.20, 0.42, 0.63, 0.83];
+/// Maximum within-deck vertical offset.
+const OFFSET_LIMIT: f64 = 0.055;
+const Z_LO: f64 = 0.10;
+const Z_HI: f64 = 0.88;
 /// GA population size and generation count (fixed for determinism).
-const GA_POP: usize = 60;
-const GA_GENS: usize = 150;
-/// Adjacent compartment pairs used by the continuity constraints.
+const GA_POP: usize = 80;
+const GA_GENS: usize = 200;
+/// Adjacent compartment pairs used by the structural/continuity constraints.
 const GA_ADJACENCY: [(usize, usize); 9] = [
     (0, 1),
     (1, 4),
@@ -492,6 +506,9 @@ const GA_ADJACENCY: [(usize, usize); 9] = [
     (3, 4),
     (2, 5),
 ];
+/// Two compartments are considered connected for access when they are close
+/// longitudinally and on the same or adjacent decks.
+const ACCESS_X: f64 = 0.24;
 
 /// Deterministic xorshift64* RNG so GA results are reproducible and testable.
 struct GaRng(u64);
@@ -523,11 +540,20 @@ impl GaRng {
         let u2 = self.unit();
         (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos()
     }
+
+    fn index(&mut self, n: usize) -> usize {
+        (self.next_u64() as usize) % n.max(1)
+    }
 }
 
 #[derive(Clone)]
 struct GaIndividual {
     v: [f64; N_COMP],
+    /// Deck index of each compartment (0 = hold, 3 = upper).
+    deck: [usize; N_COMP],
+    /// Within-deck vertical offset.
+    offset: [f64; N_COMP],
+    /// Cached vertical centre derived from deck + offset.
     z: [f64; N_COMP],
     x: [f64; N_COMP],
     fitness: f64,
@@ -536,27 +562,69 @@ struct GaIndividual {
 struct GaBounds {
     v_lo: [f64; N_COMP],
     v_hi: [f64; N_COMP],
-    z_lo: [f64; N_COMP],
-    z_hi: [f64; N_COMP],
     x_lo: [f64; N_COMP],
     x_hi: [f64; N_COMP],
     allocatable: f64,
     void_min: f64,
 }
 
+fn derive_z(deck: &[usize; N_COMP], offset: &[f64; N_COMP]) -> [f64; N_COMP] {
+    let mut z = [0.0_f64; N_COMP];
+    for i in 0..N_COMP {
+        let d = deck[i].min(DECK_COUNT - 1);
+        z[i] = (DECK_CENTERS[d] + offset[i]).clamp(Z_LO, Z_HI);
+    }
+    z
+}
+
+fn nearest_deck(z: f64) -> usize {
+    let mut best = 0;
+    let mut best_d = f64::INFINITY;
+    for (k, c) in DECK_CENTERS.iter().enumerate() {
+        let d = (z - c).abs();
+        if d < best_d {
+            best_d = d;
+            best = k;
+        }
+    }
+    best
+}
+
+fn individual_from_z(v: [f64; N_COMP], z: [f64; N_COMP], x: [f64; N_COMP]) -> GaIndividual {
+    let mut deck = [0_usize; N_COMP];
+    let mut offset = [0.0_f64; N_COMP];
+    for i in 0..N_COMP {
+        deck[i] = nearest_deck(z[i]);
+        offset[i] = (z[i] - DECK_CENTERS[deck[i]]).clamp(-OFFSET_LIMIT, OFFSET_LIMIT);
+    }
+    let z = derive_z(&deck, &offset);
+    GaIndividual {
+        v,
+        deck,
+        offset,
+        z,
+        x,
+        fitness: f64::INFINITY,
+    }
+}
+
 /// Project a candidate back into the feasible set (volumes, vertical ordering
-/// and longitudinal position constraints).
+/// and continuity, longitudinal bounds/ordering, and access connectivity).
 fn repair_individual(ind: &mut GaIndividual, b: &GaBounds, armament: f64) {
     repair_volumes(&mut ind.v, b);
-    repair_centers(&mut ind.z, b);
-    repair_longitudinal(&mut ind.x, b, armament);
+    for _ in 0..3 {
+        repair_deck_ordering(&mut ind.deck, &mut ind.offset);
+        repair_vertical_continuity(&mut ind.deck, &mut ind.offset);
+        repair_longitudinal(&mut ind.x, b, armament);
+        repair_access(&mut ind.x, &mut ind.deck, &mut ind.offset);
+    }
+    ind.z = derive_z(&ind.deck, &ind.offset);
 }
 
 fn repair_volumes(v: &mut [f64; N_COMP], b: &GaBounds) {
     for i in 0..N_COMP {
         v[i] = v[i].clamp(b.v_lo[i], b.v_hi[i]);
     }
-    // Guarantee the maintenance void, taking volume from the other compartments.
     if v[5] < b.void_min {
         let need = b.void_min - v[5];
         let slack: f64 = (0..5).map(|i| (v[i] - b.v_lo[i]).max(0.0)).sum();
@@ -570,7 +638,6 @@ fn repair_volumes(v: &mut [f64; N_COMP], b: &GaBounds) {
     for i in 0..N_COMP {
         v[i] = v[i].max(b.v_lo[i]);
     }
-    // Keep total volume within the allocatable envelope.
     let total: f64 = v.iter().sum();
     if total > b.allocatable {
         let excess = total - b.allocatable;
@@ -586,35 +653,68 @@ fn repair_volumes(v: &mut [f64; N_COMP], b: &GaBounds) {
     }
 }
 
-fn enforce_vertical_ordering(z: &mut [f64; N_COMP], b: &GaBounds) {
-    z[2] = (z[2].max(z[1] + 0.15)).min(b.z_hi[2]);
-    z[0] = (z[0].max(z[3] + 0.05)).min(b.z_hi[0]);
+fn repair_deck_ordering(deck: &mut [usize; N_COMP], offset: &mut [f64; N_COMP]) {
+    for i in 0..N_COMP {
+        deck[i] = deck[i].min(DECK_COUNT - 1);
+        offset[i] = offset[i].clamp(-OFFSET_LIMIT, OFFSET_LIMIT);
+    }
+    // Magazine (1) below accommodation (2); machinery (0) above fuel (3).
+    if deck[2] < deck[1] {
+        deck[2] = (deck[1] + 1).min(DECK_COUNT - 1);
+        offset[2] = 0.0;
+    }
+    if deck[0] < deck[3] {
+        deck[0] = (deck[3] + 1).min(DECK_COUNT - 1);
+        offset[0] = 0.0;
+    }
+    // Same-deck ordering via offsets where possible.
+    let z = derive_z(deck, offset);
+    if deck[2] == deck[1] && z[2] < z[1] + 0.10 {
+        let need = 0.10 - (z[2] - z[1]);
+        offset[2] = (offset[2] + 0.5 * need).min(OFFSET_LIMIT);
+        offset[1] = (offset[1] - 0.5 * need).max(-OFFSET_LIMIT);
+    }
+    if deck[0] == deck[3] && z[0] < z[3] + 0.05 {
+        let need = 0.05 - (z[0] - z[3]);
+        offset[0] = (offset[0] + 0.5 * need).min(OFFSET_LIMIT);
+        offset[3] = (offset[3] - 0.5 * need).max(-OFFSET_LIMIT);
+    }
+    let z = derive_z(deck, offset);
+    if deck[2] <= deck[1] && z[2] < z[1] + 0.10 - 1e-9 && deck[1] + 1 < DECK_COUNT {
+        deck[2] = deck[1] + 1;
+        offset[2] = 0.0;
+    }
+    if deck[0] <= deck[3] && z[0] < z[3] + 0.05 - 1e-9 && deck[3] + 1 < DECK_COUNT {
+        deck[0] = deck[3] + 1;
+        offset[0] = 0.0;
+    }
 }
 
-fn repair_centers(z: &mut [f64; N_COMP], b: &GaBounds) {
-    for i in 0..N_COMP {
-        z[i] = z[i].clamp(b.z_lo[i], b.z_hi[i]);
-    }
-    enforce_vertical_ordering(z, b);
-    for _ in 0..8 {
+fn repair_vertical_continuity(deck: &mut [usize; N_COMP], offset: &mut [f64; N_COMP]) {
+    for _ in 0..10 {
+        let z = derive_z(deck, offset);
         for (i, j) in GA_ADJACENCY {
-            let d = z[i] - z[j];
-            if d.abs() > 0.24 {
-                let half = (d.abs() - 0.24) * 0.5;
-                if d > 0.0 {
-                    z[i] -= half;
-                    z[j] += half;
+            if deck[i].abs_diff(deck[j]) > 1 {
+                if deck[i] > deck[j] && deck[i] > 0 {
+                    deck[i] -= 1;
+                } else if deck[j] > deck[i] && deck[j] > 0 {
+                    deck[j] -= 1;
+                }
+            }
+            let dz = (z[i] - z[j]).abs();
+            if dz > 0.32 {
+                let need = (dz - 0.32) * 0.5;
+                if z[i] > z[j] {
+                    offset[i] = (offset[i] - need).clamp(-OFFSET_LIMIT, OFFSET_LIMIT);
+                    offset[j] = (offset[j] + need).clamp(-OFFSET_LIMIT, OFFSET_LIMIT);
                 } else {
-                    z[i] += half;
-                    z[j] -= half;
+                    offset[i] = (offset[i] + need).clamp(-OFFSET_LIMIT, OFFSET_LIMIT);
+                    offset[j] = (offset[j] - need).clamp(-OFFSET_LIMIT, OFFSET_LIMIT);
                 }
             }
         }
-        for i in 0..N_COMP {
-            z[i] = z[i].clamp(b.z_lo[i], b.z_hi[i]);
-        }
-        enforce_vertical_ordering(z, b);
     }
+    repair_deck_ordering(deck, offset);
 }
 
 fn repair_longitudinal(x: &mut [f64; N_COMP], b: &GaBounds, armament: f64) {
@@ -651,41 +751,110 @@ fn repair_longitudinal(x: &mut [f64; N_COMP], b: &GaBounds, armament: f64) {
     }
 }
 
-/// Penalised objective over volumes, vertical centres and longitudinal positions.
-fn ga_objective(
-    v: &[f64; N_COMP],
-    z: &[f64; N_COMP],
-    x: &[f64; N_COMP],
-    b: &GaBounds,
-    target_cg: f64,
-    armament: f64,
-) -> f64 {
+fn access_edges(x: &[f64; N_COMP], deck: &[usize; N_COMP]) -> Vec<(usize, usize)> {
+    let mut edges = Vec::new();
+    for i in 0..N_COMP {
+        for j in (i + 1)..N_COMP {
+            if (x[i] - x[j]).abs() <= ACCESS_X && deck[i].abs_diff(deck[j]) <= 1 {
+                edges.push((i, j));
+            }
+        }
+    }
+    edges
+}
+
+/// Breadth-first reachability from compartment 0.
+fn access_reachable(edges: &[(usize, usize)]) -> Vec<usize> {
+    let mut visited = [false; N_COMP];
+    visited[0] = true;
+    let mut queue = vec![0_usize];
+    while let Some(n) = queue.pop() {
+        for (a, b) in edges {
+            for (u, v) in [(*a, *b), (*b, *a)] {
+                if u == n && !visited[v] {
+                    visited[v] = true;
+                    queue.push(v);
+                }
+            }
+        }
+    }
+    (0..N_COMP).filter(|i| visited[*i]).collect()
+}
+
+fn repair_access(x: &mut [f64; N_COMP], deck: &mut [usize; N_COMP], offset: &mut [f64; N_COMP]) {
+    for _ in 0..16 {
+        let edges = access_edges(x, deck);
+        let reachable = access_reachable(&edges);
+        if reachable.len() == N_COMP {
+            return;
+        }
+        let outside: Vec<usize> = (0..N_COMP).filter(|i| !reachable.contains(i)).collect();
+        if outside.is_empty() || reachable.is_empty() {
+            return;
+        }
+        let iso = outside[0];
+        let target = *reachable
+            .iter()
+            .min_by(|a, b| {
+                (x[iso] - x[**a])
+                    .abs()
+                    .partial_cmp(&(x[iso] - x[**b]).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap();
+        x[iso] = 0.5 * (x[iso] + x[target]);
+        if deck[iso] > deck[target] {
+            deck[iso] -= 1;
+        } else if deck[iso] < deck[target] {
+            deck[iso] = (deck[iso] + 1).min(DECK_COUNT - 1);
+        }
+        let d = x[iso] - x[target];
+        if d.abs() > ACCESS_X {
+            x[iso] = x[target] + ACCESS_X.copysign(d);
+        }
+        repair_deck_ordering(deck, offset);
+        let _ = &offset;
+    }
+}
+
+/// Penalised objective over the 18-variable arrangement.
+fn ga_objective(ind: &GaIndividual, b: &GaBounds, target_cg: f64, armament: f64) -> f64 {
+    let v = &ind.v;
+    let z = &ind.z;
+    let x = &ind.x;
     let total: f64 = v.iter().sum();
     if total <= 1e-9 || !total.is_finite() {
         return 1e6;
     }
-    let cg_z = v.iter().zip(z.iter()).map(|(vi, zi)| vi * zi).sum::<f64>() / total;
-    let cg_x = v.iter().zip(x.iter()).map(|(vi, xi)| vi * xi).sum::<f64>() / total;
+    let cg_z = v.iter().zip(z).map(|(vi, zi)| vi * zi).sum::<f64>() / total;
+    let cg_x = v.iter().zip(x).map(|(vi, xi)| vi * xi).sum::<f64>() / total;
     let unused = (b.allocatable - total).max(0.0) / b.allocatable.max(1e-9);
     let mut f = (cg_z - target_cg).abs() + 0.5 * (cg_x - 0.5).abs() + 0.05 * unused;
 
-    // Hard-constraint penalties (near zero for repaired individuals).
     f += 5.0 * ((b.void_min - v[5]).max(0.0) / b.void_min.max(1e-9));
     f += 5.0 * (z[1] + 0.15 - z[2]).max(0.0);
     f += 5.0 * (z[3] + 0.05 - z[0]).max(0.0);
     f += 2.0 * ((x[1] - armament).abs() - 0.15).max(0.0);
     f += 2.0 * ((x[0] - 0.5).abs() - 0.20).max(0.0);
     for (i, j) in GA_ADJACENCY {
-        f += 1.0 * ((z[i] - z[j]).abs() - 0.26).max(0.0);
+        f += 1.0 * ((z[i] - z[j]).abs() - 0.32).max(0.0);
         f += 1.0 * ((x[i] - x[j]).abs() - 0.45).max(0.0);
+    }
+    // Access-network penalty: unreachable compartments and missing edges.
+    let edges = access_edges(x, &ind.deck);
+    let reachable = access_reachable(&edges);
+    f += 3.0 * (N_COMP - reachable.len()) as f64;
+    if reachable.len() == N_COMP {
+        // A connected graph on 6 nodes needs at least 5 edges.
+        f += 0.5 * (5_usize.saturating_sub(edges.len())) as f64;
     }
     f
 }
 
 fn tournament(pop: &[GaIndividual], rng: &mut GaRng) -> GaIndividual {
-    let mut best = &pop[rng.next_u64() as usize % pop.len()];
+    let mut best = &pop[rng.index(pop.len())];
     for _ in 0..2 {
-        let challenger = &pop[rng.next_u64() as usize % pop.len()];
+        let challenger = &pop[rng.index(pop.len())];
         if challenger.fitness < best.fitness {
             best = challenger;
         }
@@ -694,18 +863,24 @@ fn tournament(pop: &[GaIndividual], rng: &mut GaRng) -> GaIndividual {
 }
 
 fn crossover(a: &GaIndividual, b: &GaIndividual, rng: &mut GaRng) -> GaIndividual {
-    let mut child = a.clone();
     let blend = 0.3;
+    let mut child = a.clone();
     for i in 0..N_COMP {
         let (lo, hi) = (a.v[i].min(b.v[i]), a.v[i].max(b.v[i]));
         let d = hi - lo;
         child.v[i] = rng.range(lo - blend * d, hi + blend * d);
-        let (lo, hi) = (a.z[i].min(b.z[i]), a.z[i].max(b.z[i]));
-        let d = hi - lo;
-        child.z[i] = rng.range(lo - blend * d, hi + blend * d);
         let (lo, hi) = (a.x[i].min(b.x[i]), a.x[i].max(b.x[i]));
         let d = hi - lo;
         child.x[i] = rng.range(lo - blend * d, hi + blend * d);
+        let (lo, hi) = (a.offset[i].min(b.offset[i]), a.offset[i].max(b.offset[i]));
+        let d = hi - lo;
+        child.offset[i] = rng.range(lo - blend * d, hi + blend * d);
+        // Deck is a discrete uniform crossover.
+        child.deck[i] = if rng.unit() < 0.5 {
+            a.deck[i]
+        } else {
+            b.deck[i]
+        };
     }
     child
 }
@@ -718,11 +893,15 @@ fn mutate(ind: &mut GaIndividual, rng: &mut GaRng, generation: usize, b: &GaBoun
             ind.v[i] += rng.normal() * sigma * span;
         }
         if rng.unit() < 0.12 {
-            let span = (b.z_hi[i] - b.z_lo[i]).max(1e-9);
-            ind.z[i] += rng.normal() * sigma * span;
+            ind.x[i] += rng.normal() * sigma;
         }
         if rng.unit() < 0.12 {
-            ind.x[i] += rng.normal() * sigma;
+            ind.offset[i] += rng.normal() * sigma * 2.0 * OFFSET_LIMIT;
+        }
+        if rng.unit() < 0.06 {
+            let delta = if rng.unit() < 0.5 { 1_i32 } else { -1 };
+            let d = ind.deck[i] as i32 + delta;
+            ind.deck[i] = d.clamp(0, DECK_COUNT as i32 - 1) as usize;
         }
     }
 }
@@ -731,8 +910,13 @@ fn placement_checks(
     v: &[f64; N_COMP],
     z: &[f64; N_COMP],
     x: &[f64; N_COMP],
+    deck: &[usize; N_COMP],
+    armament: f64,
     void_min: f64,
 ) -> Vec<(String, bool)> {
+    let edges = access_edges(x, deck);
+    let reachable = access_reachable(&edges);
+    let connected = reachable.len() == N_COMP;
     vec![
         (
             "Accommodation above magazines".to_string(),
@@ -750,11 +934,11 @@ fn placement_checks(
             "Structural continuity (vertical)".to_string(),
             GA_ADJACENCY
                 .iter()
-                .all(|(i, j)| (z[*i] - z[*j]).abs() <= 0.26 + 1e-6),
+                .all(|(i, j)| (z[*i] - z[*j]).abs() <= 0.32 + 1e-6),
         ),
         (
             "Magazine within +/-0.15 L of armament".to_string(),
-            (x[1] - 0.0).abs().is_finite() && (x[1] - x_mag_check(x)).abs() <= 1e-9,
+            (x[1] - armament).abs() <= 0.15 + 1e-6,
         ),
         (
             "Machinery within +/-0.20 L of amidships".to_string(),
@@ -766,28 +950,31 @@ fn placement_checks(
                 .iter()
                 .all(|(i, j)| (x[*i] - x[*j]).abs() <= 0.45 + 1e-6),
         ),
+        ("Access network connected".to_string(), connected),
+        ("Access network edges >= 5".to_string(), edges.len() >= 5),
+        (
+            "Decks separated by <= 1 (adjacent)".to_string(),
+            GA_ADJACENCY
+                .iter()
+                .all(|(i, j)| deck[*i].abs_diff(deck[*j]) <= 1),
+        ),
     ]
 }
 
-/// Placeholder used by `placement_checks`; the magazine check is refined by the
-/// caller, which knows the armament position.
-fn x_mag_check(x: &[f64; N_COMP]) -> f64 {
-    x[1]
-}
-
 fn build_placement(
-    v: [f64; N_COMP],
-    z: [f64; N_COMP],
-    x: [f64; N_COMP],
+    ind: &GaIndividual,
     b: &GaBounds,
     target_cg: f64,
     armament: f64,
     generations: usize,
     evaluations: usize,
 ) -> CompartmentPlacement {
+    let v = ind.v;
+    let z = ind.z;
+    let x = ind.x;
     let total: f64 = v.iter().sum();
-    let cg_z = v.iter().zip(z.iter()).map(|(vi, zi)| vi * zi).sum::<f64>() / total.max(1e-9);
-    let cg_x = v.iter().zip(x.iter()).map(|(vi, xi)| vi * xi).sum::<f64>() / total.max(1e-9);
+    let cg_z = v.iter().zip(&z).map(|(vi, zi)| vi * zi).sum::<f64>() / total.max(1e-9);
+    let cg_x = v.iter().zip(&x).map(|(vi, xi)| vi * xi).sum::<f64>() / total.max(1e-9);
     let layout = CompartmentLayout {
         machinery: v[0],
         magazine: v[1],
@@ -797,12 +984,8 @@ fn build_placement(
         void: v[5],
         unallocated: (b.allocatable - total).max(0.0),
     };
-    let mut checks = placement_checks(&v, &z, &x, b.void_min);
-    // Replace the magazine placeholder check with the real armament position.
-    if let Some(entry) = checks.get_mut(4) {
-        entry.1 = (x[1] - armament).abs() <= 0.15 + 1e-6;
-    }
-    let objective = ga_objective(&v, &z, &x, b, target_cg, armament);
+    let edges = access_edges(&x, &ind.deck);
+    let reachable = access_reachable(&edges);
     CompartmentPlacement {
         layout,
         cg_vertical: cg_z,
@@ -811,10 +994,13 @@ fn build_placement(
         machinery_longitudinal: x[0],
         centers: z,
         longitudinal: x,
-        objective,
+        decks: ind.deck,
+        access_edges: edges.len(),
+        access_connected: reachable.len() == N_COMP,
+        objective: ga_objective(ind, b, target_cg, armament),
         generations,
         evaluations,
-        checks,
+        checks: placement_checks(&v, &z, &x, &ind.deck, armament, b.void_min),
     }
 }
 
@@ -840,8 +1026,6 @@ fn ga_bounds(report: &InternalSpaceReport, seed: &CompartmentLayout) -> GaBounds
     GaBounds {
         v_lo,
         v_hi,
-        z_lo: [0.30, 0.20, 0.55, 0.15, 0.30, 0.10],
-        z_hi: [0.50, 0.40, 0.85, 0.45, 0.55, 0.40],
         x_lo: [0.05; N_COMP],
         x_hi: [0.95; N_COMP],
         allocatable,
@@ -851,11 +1035,11 @@ fn ga_bounds(report: &InternalSpaceReport, seed: &CompartmentLayout) -> GaBounds
 
 /// Global genetic-algorithm optimizer for the general arrangement.
 ///
-/// Optimises compartment volumes, vertical centres and longitudinal positions
-/// against the vertical CG target and longitudinal placement constraints
-/// (magazine near the armament, machinery near amidships, ordering and
-/// continuity).  Every candidate is projected back into the feasible set, so
-/// the returned arrangement satisfies all constraint checks by construction.
+/// Optimises compartment volumes, deck assignment, within-deck vertical offset
+/// and longitudinal position.  Every candidate is projected back into the
+/// feasible set (volume envelope, void, deck ordering, structural continuity,
+/// armament position and access-network connectivity), so the returned
+/// arrangement satisfies all constraint checks by construction.
 pub fn optimize_general_arrangement_ga(
     report: &InternalSpaceReport,
     target_cg: f64,
@@ -871,28 +1055,30 @@ pub fn optimize_general_arrangement_ga(
         seed_layout.stores,
         seed_layout.void,
     ];
-    let mut seed = GaIndividual {
-        v: seed_v,
-        z: seed_centers,
-        x: [0.50, armament, 0.58, 0.50, 0.58, 0.45],
-        fitness: f64::INFINITY,
-    };
+    let mut seed = individual_from_z(
+        seed_v,
+        seed_centers,
+        [0.50, armament, 0.58, 0.50, 0.58, 0.45],
+    );
     repair_individual(&mut seed, &b, armament);
-    seed.fitness = ga_objective(&seed.v, &seed.z, &seed.x, &b, target_cg, armament);
+    seed.fitness = ga_objective(&seed, &b, target_cg, armament);
 
     let mut rng = GaRng::new(0x9E37_79B9_7F4A_7C15);
     let mut pop: Vec<GaIndividual> = Vec::with_capacity(GA_POP);
     pop.push(seed.clone());
-    for _ in 1..GA_POP {
+    while pop.len() < GA_POP {
         let mut ind = GaIndividual {
             v: [0.0; N_COMP],
+            deck: [0; N_COMP],
+            offset: [0.0; N_COMP],
             z: [0.0; N_COMP],
             x: [0.0; N_COMP],
             fitness: f64::INFINITY,
         };
         for i in 0..N_COMP {
             ind.v[i] = rng.range(b.v_lo[i], b.v_hi[i]);
-            ind.z[i] = rng.range(b.z_lo[i], b.z_hi[i]);
+            ind.deck[i] = rng.index(DECK_COUNT);
+            ind.offset[i] = rng.range(-OFFSET_LIMIT, OFFSET_LIMIT);
             ind.x[i] = rng.range(b.x_lo[i], b.x_hi[i]);
         }
         repair_individual(&mut ind, &b, armament);
@@ -902,7 +1088,7 @@ pub fn optimize_general_arrangement_ga(
     let mut best = seed.clone();
     for generation in 0..GA_GENS {
         for ind in &mut pop {
-            ind.fitness = ga_objective(&ind.v, &ind.z, &ind.x, &b, target_cg, armament);
+            ind.fitness = ga_objective(ind, &b, target_cg, armament);
             if ind.fitness < best.fitness {
                 best = ind.clone();
             }
@@ -926,41 +1112,21 @@ pub fn optimize_general_arrangement_ga(
         pop = next;
     }
     for ind in &mut pop {
-        ind.fitness = ga_objective(&ind.v, &ind.z, &ind.x, &b, target_cg, armament);
+        ind.fitness = ga_objective(ind, &b, target_cg, armament);
         if ind.fitness < best.fitness {
             best = ind.clone();
         }
     }
 
-    // Safety net: if the GA result somehow fails a check, fall back to the
-    // known-feasible seed individual.
-    let candidate = build_placement(
-        best.v,
-        best.z,
-        best.x,
-        &b,
-        target_cg,
-        armament,
-        GA_GENS,
-        GA_POP * GA_GENS,
-    );
+    let candidate = build_placement(&best, &b, target_cg, armament, GA_GENS, GA_POP * GA_GENS);
     if candidate.checks.iter().all(|(_, ok)| *ok) {
         candidate
     } else {
-        build_placement(
-            seed.v,
-            seed.z,
-            seed.x,
-            &b,
-            target_cg,
-            armament,
-            GA_GENS,
-            GA_POP * GA_GENS,
-        )
+        build_placement(&seed, &b, target_cg, armament, GA_GENS, GA_POP * GA_GENS)
     }
 }
 
-/// Optimize compartments and add longitudinal placement hints.
+/// Optimize compartments and add structural/access network constraints.
 ///
 /// The magazine longitudinal position follows the average main-battery
 /// position; machinery is placed near amidships by the GA.
@@ -994,13 +1160,14 @@ pub fn compartment_placement_json(placement: &CompartmentPlacement) -> String {
         .iter()
         .map(|x| format!("{x:.4}"))
         .collect();
+    let decks: Vec<String> = placement.decks.iter().map(|d| d.to_string()).collect();
     let checks: Vec<String> = placement
         .checks
         .iter()
         .map(|(name, ok)| format!("{{\"name\":\"{}\",\"ok\":{}}}", esc(name), ok))
         .collect();
     format!(
-        "{{\n  \"cg_vertical\": {:.4},\n  \"cg_longitudinal\": {:.4},\n  \"objective\": {:.4},\n  \"generations\": {},\n  \"evaluations\": {},\n  \"magazine_longitudinal\": {:.4},\n  \"machinery_longitudinal\": {:.4},\n  \"centers\": [{}],\n  \"longitudinal\": [{}],\n  \"volumes\": {{\"machinery\": {:.1}, \"magazine\": {:.1}, \"accommodation\": {:.1}, \"fuel\": {:.1}, \"stores\": {:.1}, \"void\": {:.1}, \"unallocated\": {:.1}}},\n  \"checks\": [{}]\n}}",
+        "{{\n  \"cg_vertical\": {:.4},\n  \"cg_longitudinal\": {:.4},\n  \"objective\": {:.4},\n  \"generations\": {},\n  \"evaluations\": {},\n  \"magazine_longitudinal\": {:.4},\n  \"machinery_longitudinal\": {:.4},\n  \"centers\": [{}],\n  \"decks\": [{}],\n  \"longitudinal\": [{}],\n  \"access_edges\": {},\n  \"access_connected\": {},\n  \"volumes\": {{\"machinery\": {:.1}, \"magazine\": {:.1}, \"accommodation\": {:.1}, \"fuel\": {:.1}, \"stores\": {:.1}, \"void\": {:.1}, \"unallocated\": {:.1}}},\n  \"checks\": [{}]\n}}",
         placement.cg_vertical,
         placement.cg_longitudinal,
         placement.objective,
@@ -1009,7 +1176,10 @@ pub fn compartment_placement_json(placement: &CompartmentPlacement) -> String {
         placement.magazine_longitudinal,
         placement.machinery_longitudinal,
         centers.join(", "),
+        decks.join(", "),
         longitudinal.join(", "),
+        placement.access_edges,
+        placement.access_connected,
         l.machinery,
         l.magazine,
         l.accommodation,
@@ -1028,66 +1198,59 @@ pub fn compartment_placement_html(ship: &ShipModel, placement: &CompartmentPlace
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>General Arrangement</title></head><body>",
     );
     html.push_str(&format!(
-        "<h1>General arrangement (GA optimizer)</h1><p>Ship: <b>{}</b> ({})</p>",
+        "<h1>General arrangement (multi-deck GA)</h1><p>Ship: <b>{}</b> ({})</p>",
         ship.name, ship.ship_type
     ));
-    html.push_str("<p>Global genetic-algorithm allocation with feasibility repair. Volumes in m&sup3;; positions as fraction of length.</p>");
+    html.push_str("<p>Multi-deck genetic-algorithm allocation with feasibility repair and an access network. Volumes in m&sup3;, positions as fraction of length.</p>");
     html.push_str("<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\">");
-    html.push_str("<tr><th>Compartment</th><th>Volume (m3)</th><th>Vertical centre</th><th>Longitudinal</th></tr>");
-    for (name, v, z, x) in [
+    html.push_str("<tr><th>Compartment</th><th>Volume (m3)</th><th>Deck</th><th>Vertical centre</th><th>Longitudinal</th></tr>");
+    for (name, v, deck, z, x) in [
         (
             "Machinery",
             l.machinery,
+            placement.decks[0],
             placement.centers[0],
             placement.longitudinal[0],
         ),
         (
             "Magazine",
             l.magazine,
+            placement.decks[1],
             placement.centers[1],
             placement.longitudinal[1],
         ),
         (
             "Accommodation",
             l.accommodation,
+            placement.decks[2],
             placement.centers[2],
             placement.longitudinal[2],
         ),
         (
             "Fuel",
             l.fuel,
+            placement.decks[3],
             placement.centers[3],
             placement.longitudinal[3],
         ),
         (
             "Stores",
             l.stores,
+            placement.decks[4],
             placement.centers[4],
             placement.longitudinal[4],
         ),
         (
             "Void / maintenance",
             l.void,
+            placement.decks[5],
             placement.centers[5],
             placement.longitudinal[5],
         ),
-        ("Unallocated", l.unallocated, f64::NAN, f64::NAN),
     ] {
-        if v.is_finite() {
-            let zs = if z.is_finite() {
-                format!("{z:.3}")
-            } else {
-                "-".to_string()
-            };
-            let xs = if x.is_finite() {
-                format!("{x:.3}")
-            } else {
-                "-".to_string()
-            };
-            html.push_str(&format!(
-                "<tr><td>{name}</td><td>{v:.0}</td><td>{zs}</td><td>{xs}</td></tr>"
-            ));
-        }
+        html.push_str(&format!(
+            "<tr><td>{name}</td><td>{v:.0}</td><td>{deck}</td><td>{z:.3}</td><td>{x:.3}</td></tr>"
+        ));
     }
     html.push_str("</table>");
     html.push_str(&format!(
@@ -1099,6 +1262,16 @@ pub fn compartment_placement_html(ship: &ShipModel, placement: &CompartmentPlace
         placement.objective,
         placement.generations,
         placement.evaluations
+    ));
+    html.push_str(&format!(
+        "<p>Access network: <b>{}</b> ({} edges, connected={})</p>",
+        if placement.access_connected {
+            "OK"
+        } else {
+            "DISCONNECTED"
+        },
+        placement.access_edges,
+        placement.access_connected
     ));
     html.push_str("<h2>Constraint checks</h2><ul>");
     for (name, ok) in &placement.checks {
@@ -1240,14 +1413,13 @@ mod tests {
             seed_layout.stores,
             seed_layout.void,
         ];
-        let mut seed = GaIndividual {
-            v: seed_v,
-            z: seed_centers,
-            x: [0.50, armament, 0.58, 0.50, 0.58, 0.45],
-            fitness: f64::INFINITY,
-        };
+        let mut seed = individual_from_z(
+            seed_v,
+            seed_centers,
+            [0.50, armament, 0.58, 0.50, 0.58, 0.45],
+        );
         repair_individual(&mut seed, &b, armament);
-        let seed_obj = ga_objective(&seed.v, &seed.z, &seed.x, &b, 0.45, armament);
+        let seed_obj = ga_objective(&seed, &b, 0.45, armament);
         let ga = optimize_general_arrangement_ga(&report, 0.45, armament);
         assert!(
             ga.objective <= seed_obj + 1e-9,
@@ -1255,6 +1427,34 @@ mod tests {
             ga.objective,
             seed_obj
         );
+    }
+
+    #[test]
+    fn compartment_ga_respects_deck_and_access_constraints() {
+        let ship = ga_test_ship();
+        let report = calculate_internal_spaces(&ship);
+        let p = optimize_general_arrangement_ga(&report, 0.45, 0.5);
+        assert!(p.decks.iter().all(|d| *d < DECK_COUNT));
+        assert!(p.access_connected, "access network must be connected");
+        assert!(
+            p.access_edges >= 5,
+            "connected graph needs at least 5 edges"
+        );
+        assert!(p
+            .checks
+            .iter()
+            .any(|(n, _)| n == "Access network connected"));
+        assert!(p
+            .checks
+            .iter()
+            .any(|(n, _)| n == "Access network edges >= 5"));
+        assert!(p
+            .checks
+            .iter()
+            .any(|(n, _)| n == "Decks separated by <= 1 (adjacent)"));
+        for (name, ok) in &p.checks {
+            assert!(*ok, "constraint failed: {name}");
+        }
     }
 
     #[test]
@@ -1289,9 +1489,13 @@ mod tests {
         assert!(json.contains("\"checks\""));
         assert!(json.contains("\"generations\""));
         assert!(json.contains("\"evaluations\""));
+        assert!(json.contains("\"decks\""));
+        assert!(json.contains("\"access_edges\""));
+        assert!(json.contains("\"access_connected\""));
         assert!(json.ends_with('}'));
         let html = compartment_placement_html(&ship, &placement);
         assert!(html.contains("General arrangement"));
+        assert!(html.contains("Access network"));
         assert!(html.contains("Constraint checks"));
     }
 

@@ -57,8 +57,8 @@ COMMANDS:
   calibrate-type <file>  Apply per-ship-type power calibration
   calibrate <file>     Apply historical power calibration to a design
   spaces <file>        Show improved internal-space volume model
-  compartments <file> [--json]  Show GA general-arrangement allocation
-  optimize-compartments <file> [target_cg] [--json]  Run global GA general-arrangement optimizer
+  compartments <file> [--json]  Show multi-deck GA allocation + access network
+  optimize-compartments <file> [target_cg] [--json]  Run multi-deck GA + access-network optimizer
   compartments-report <file> [target_cg]  Print HTML general-arrangement report
   calibrate-stats      Show reduced-form and structural-form calibration fits
   import-data <file>   Validate a user-supplied CSV of ship cases
@@ -1099,6 +1099,10 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                     "GA: {} generations, {} evaluations",
                     placement.generations, placement.evaluations
                 );
+                println!(
+                    "Decks: {:?}  Access network: {} edges, connected={}",
+                    placement.decks, placement.access_edges, placement.access_connected
+                );
                 for (name, ok) in &placement.checks {
                     println!("  [{}] {name}", if *ok { "ok" } else { "FAIL" });
                 }
@@ -1150,6 +1154,10 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                 placement.objective,
                 placement.generations,
                 placement.evaluations
+            );
+            println!(
+                "Decks: {:?}  Access network: {} edges, connected={}",
+                placement.decks, placement.access_edges, placement.access_connected
             );
             for (name, ok) in &placement.checks {
                 println!("  [{}] {name}", if *ok { "ok" } else { "FAIL" });

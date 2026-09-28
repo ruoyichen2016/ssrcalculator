@@ -35,21 +35,37 @@ fn raw_holtrop(case: &HistoricalCase) -> f64 {
         .hp_max
 }
 
-/// Mean `reference / simulated` factor over a set of cases.
+/// Factor fraction trimmed from each tail before averaging.
+///
+/// A 15% trimmed mean rejects the influence of individual outlier cases.  A
+/// nested-LOOCV sweep over 5-20% trims (and the geometric mean) showed a stable
+/// ~0.13pp improvement over the plain mean; see docs/VALIDATION.md.
+const FACTOR_TRIM: f64 = 0.15;
+
+/// Robust `reference / simulated` factor over a set of cases: 15% trimmed mean.
 fn factor_for(cases: &[&HistoricalCase], power: impl Fn(&HistoricalCase) -> f64) -> f64 {
-    let mut sum = 0.0;
-    let mut n = 0.0;
-    for case in cases {
-        let p = power(case);
-        if case.reference_hp > 0.0 && p > 0.0 {
-            sum += case.reference_hp / p;
-            n += 1.0;
-        }
+    let mut ratios: Vec<f64> = cases
+        .iter()
+        .filter_map(|case| {
+            let p = power(case);
+            if case.reference_hp > 0.0 && p > 0.0 {
+                Some(case.reference_hp / p)
+            } else {
+                None
+            }
+        })
+        .collect();
+    if ratios.is_empty() {
+        return 1.0;
     }
-    if n > 0.0 {
-        sum / n
+    ratios.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let k = ((ratios.len() as f64) * FACTOR_TRIM).floor() as usize;
+    let lo = k.min(ratios.len() / 2);
+    let hi = ratios.len() - lo;
+    if hi > lo {
+        ratios[lo..hi].iter().sum::<f64>() / (hi - lo) as f64
     } else {
-        1.0
+        ratios.iter().sum::<f64>() / ratios.len() as f64
     }
 }
 
