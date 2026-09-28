@@ -178,6 +178,8 @@ explicitly approximate.
 
 ```bash
 cargo run -- validate-regime   # primary: nested-LOOCV regime vs baselines
+cargo run -- regime-residuals  # per-case historical speed/power residuals
+cargo run -- validation-audit  # which model families have historical references
 cargo run -- accuracy-target   # check nested regime LOOCV (default <= 10%)
 cargo run -- regime-table      # production factors per ship type
 cargo run -- validate-holdout  # calibration fit on 28 train / scored on 9 held-out cases
@@ -426,7 +428,7 @@ The `calibrate-stats` command also reports:
   metres, scantling utilisation, structure weight and objective (23 checks)
 - regime-aware modern model: Holtrop-Mennen + per-ship-type 15% trimmed-mean factor (nested LOOCV 8.92% case-weighted / 8.39% type-averaged over 52 cases); original retained as baseline
 - `validate-regime`, `regime-table`, `calibrate-regime` and `accuracy-target` commands
-- grouped CLI aliases (`calibrate stats`, `validate holdout`, `data score`, `regime show`, `accuracy target`, `cfd fit`, ...) with flat names preserved
+- grouped CLI aliases (`calibrate stats`, `validate holdout|audit`, `data score`, `regime show|residuals`, `accuracy target`, `cfd fit`, ...) with flat names preserved
 - quality-report HTML test
 - `external-report` command for HTML external data reports
 - `apply-ensemble-external` command writes external-data ensemble weights into `.ssr`

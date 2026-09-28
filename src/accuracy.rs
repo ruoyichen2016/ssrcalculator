@@ -1733,6 +1733,57 @@ pub fn segmented_calibration(results: &[ValidationResult]) -> Vec<CalibrationSeg
         .collect()
 }
 
+/// Coverage of historical reference data by model family.
+///
+/// The built-in dataset only carries speed/power references.  Structural
+/// weight, internal-space and general-arrangement outputs cannot be validated
+/// against it, and the minimal `simulate_case` ships do not produce credible
+/// weights (documented by the non-physical counters below).
+#[derive(Clone, Debug)]
+pub struct ValidationAudit {
+    pub case_count: usize,
+    pub speed_power_cases: usize,
+    pub structural_weight_cases: usize,
+    pub space_cases: usize,
+    pub arrangement_cases: usize,
+    pub nonphysical_hull_weight_cases: usize,
+    pub zero_magazine_cases: usize,
+    pub notes: Vec<&'static str>,
+}
+
+pub fn historical_validation_audit() -> ValidationAudit {
+    let cases = historical_cases();
+    let mut nonphysical = 0_usize;
+    let mut zero_magazine = 0_usize;
+    for case in &cases {
+        let ship = simulate_case(case);
+        let hw = ship.engine.hull_weight;
+        if !hw.is_finite() || hw <= 0.0 || hw >= case.displacement_tons {
+            nonphysical += 1;
+        }
+        let report = crate::spaces::calculate_internal_spaces(&ship);
+        if report.magazine_volume_m3 <= 0.0 {
+            zero_magazine += 1;
+        }
+    }
+    ValidationAudit {
+        case_count: cases.len(),
+        speed_power_cases: cases.len(),
+        structural_weight_cases: 0,
+        space_cases: 0,
+        arrangement_cases: 0,
+        nonphysical_hull_weight_cases: nonphysical,
+        zero_magazine_cases: zero_magazine,
+        notes: vec![
+            "speed/power: validated by nested LOOCV; see `validate-regime`",
+            "structural weight: no per-ship historical references in the dataset",
+            "internal spaces: no compartment-volume references; magazine volume is zero in simulated cases",
+            "general arrangement / evacuation / scantlings: no historical GA references; plausibility checks only",
+            "the minimal simulate_case ships give non-physical hull weights, so they must not be used to validate weight models",
+        ],
+    }
+}
+
 /// Literature pointers for improving the empirical resistance/power model.
 pub const REFERENCES: &[&str] = &[
     "Holtrop, J. & Mennen, G.J. (1978). A statistical power prediction method. International Shipbuilding Progress, 25(252).",
@@ -1769,6 +1820,19 @@ fn example_csv_files_all_parse() {
         let dup = detect_duplicate_external_cases(&cases);
         assert!(dup.is_empty(), "{file} has duplicates: {:?}", dup);
     }
+}
+
+#[test]
+fn historical_validation_audit_reports_data_gaps() {
+    let a = historical_validation_audit();
+    assert_eq!(a.case_count, historical_cases().len());
+    assert_eq!(a.speed_power_cases, a.case_count);
+    assert_eq!(a.structural_weight_cases, 0);
+    assert_eq!(a.space_cases, 0);
+    assert_eq!(a.arrangement_cases, 0);
+    // The minimal simulated ships are known to be non-physical for weights.
+    assert!(a.nonphysical_hull_weight_cases > 0);
+    assert_eq!(a.zero_magazine_cases, a.case_count);
 }
 
 #[test]

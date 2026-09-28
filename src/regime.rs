@@ -128,6 +128,16 @@ pub fn apply_regime_calibration(ship: &mut ShipModel) -> Option<RegimeCalibratio
     Some(entry)
 }
 
+/// One nested-LOOCV residual for a historical case.
+#[derive(Clone, Debug)]
+pub struct RegimeResidual {
+    pub name: &'static str,
+    pub ship_type: &'static str,
+    pub reference_hp: f64,
+    pub predicted_hp: f64,
+    pub error_pct: f64,
+}
+
 /// Nested-LOOCV result for the regime model.
 #[derive(Clone, Debug)]
 pub struct RegimeLoocv {
@@ -140,6 +150,8 @@ pub struct RegimeLoocv {
     pub original_baseline_mape: f64,
     /// Holtrop with no calibration factor (nested protocol), for reference.
     pub holtrop_uncalibrated_mape: f64,
+    /// Per-case nested-LOOCV residuals.
+    pub residuals: Vec<RegimeResidual>,
 }
 
 /// Nested leave-one-out evaluation.
@@ -156,6 +168,7 @@ pub fn run_loocv_regime() -> RegimeLoocv {
     let mut holt_uncal = Vec::new();
     let mut orig_errs = Vec::new();
     let mut per_type: Vec<(String, usize, f64)> = Vec::new();
+    let mut residuals: Vec<RegimeResidual> = Vec::new();
 
     for i in 0..cases.len() {
         let test = &cases[i];
@@ -183,6 +196,13 @@ pub fn run_loocv_regime() -> RegimeLoocv {
         errs.push(eh);
         orig_errs.push(eo);
         holt_uncal.push(eu);
+        residuals.push(RegimeResidual {
+            name: test.name,
+            ship_type: test.ship_type,
+            reference_hp: test.reference_hp,
+            predicted_hp: pred_h,
+            error_pct: (pred_h - test.reference_hp) / test.reference_hp.max(1e-9) * 100.0,
+        });
 
         let ty = test.ship_type.to_string();
         if let Some(entry) = per_type.iter_mut().find(|(t, _, _)| *t == ty) {
@@ -209,6 +229,7 @@ pub fn run_loocv_regime() -> RegimeLoocv {
         per_type,
         original_baseline_mape: mean(&orig_errs),
         holtrop_uncalibrated_mape: mean(&holt_uncal),
+        residuals,
     }
 }
 
@@ -236,6 +257,16 @@ mod tests {
         assert!(r.overall_mape < r.holtrop_uncalibrated_mape);
         let total: usize = r.per_type.iter().map(|(_, n, _)| *n).sum();
         assert_eq!(total, historical_cases().len());
+    }
+
+    #[test]
+    fn nested_residuals_cover_every_case() {
+        let r = run_loocv_regime();
+        assert_eq!(r.residuals.len(), historical_cases().len());
+        for row in &r.residuals {
+            assert!(row.predicted_hp.is_finite() && row.predicted_hp > 0.0);
+            assert!(row.error_pct.is_finite());
+        }
     }
 
     #[test]

@@ -109,6 +109,34 @@ or `synthetic` (a 3-column row defaults to `synthetic`).  Only
   the empirical planing model) to exercise the pipeline.  It is **not** evidence,
   and the project currently has **0 measured CFD samples**.
 
+## Historical data coverage (audited 2026-09-27)
+
+`validation-audit` reports which model families can actually be checked against
+the built-in historical data:
+
+| Model family | Historical references | Status |
+|---|---|---|
+| Speed/power (regime) | 52 cases | validated; nested LOOCV 8.92% case-weighted / 8.39% type-averaged |
+| Planing (Savitsky vs empirical) | 8 public planing cases | validated; both 23.3% calibrated |
+| Structural weight | 0 | **cannot be validated** with the current dataset |
+| Internal spaces (machinery/magazine/accommodation) | 0 | **cannot be validated** |
+| General arrangement / evacuation / scantlings | 0 | plausibility checks only |
+
+The built-in dataset stores only length/beam/draught/block/speed/power
+references.  A validation attempt using `simulate_case` showed the minimal
+ships are non-physical for weight/space work:
+
+- **15/52** cases give hull weight that is negative or >= displacement;
+- **52/52** cases give zero magazine volume (no guns are configured);
+- accommodation volume fractions are 40-90% of hull volume (implausible).
+
+`simulate_case` is therefore used only for speed/power validation.  Validating
+the weight, space, evacuation and scantling models needs per-ship structural
+weight, compartment-volume and general-arrangement references (or a full
+historical design file), none of which are in the current dataset.
+
+Per-case speed/power residuals are available with `regime-residuals`.
+
 ## Composite quality gate (`data-target`)
 
 ```text

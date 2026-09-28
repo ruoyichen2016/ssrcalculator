@@ -19,16 +19,17 @@ use springsharp::{
     fit_structural_form_segmented, fit_structural_form_segmented_lasso,
     fit_structural_form_segmented_ridge, fit_structural_form_segmented_weighted,
     fit_structural_form_weighted, fit_structural_form_with_external, format_compartment_report,
-    format_space_report, froude_number, generate_html_report, generate_report, holdout_validation,
-    is_planing_eligible, load_from_file, parse_cfd_samples, parse_external_cases,
-    planing_hp_estimate_calibrated, quality_gate_by_type, quality_gate_with_loocv, run_loocv,
-    run_loocv_regime, run_loocv_weighted, run_loocv_with_external,
-    run_loocv_with_external_weighted, run_server, run_validation, save_to_file, savitsky_planing,
-    segmented_calibration, select_cfd_ridge_lambda, select_lasso_lambda, select_ridge_lambda,
-    small_fast_error_diagnostic, solve_max_speed, solve_range, suggest_compartment_placement,
-    summarize_external_by_source, summarize_external_by_type, type_calibration_factors,
-    validate_external_cases, validate_planing_cases, validation_by_type, CfdProxyConfig,
-    PlaningInput, ShipModel, MAX_EVAC_TIME_S,
+    format_space_report, froude_number, generate_html_report, generate_report,
+    historical_validation_audit, holdout_validation, is_planing_eligible, load_from_file,
+    parse_cfd_samples, parse_external_cases, planing_hp_estimate_calibrated, quality_gate_by_type,
+    quality_gate_with_loocv, run_loocv, run_loocv_regime, run_loocv_weighted,
+    run_loocv_with_external, run_loocv_with_external_weighted, run_server, run_validation,
+    save_to_file, savitsky_planing, segmented_calibration, select_cfd_ridge_lambda,
+    select_lasso_lambda, select_ridge_lambda, small_fast_error_diagnostic, solve_max_speed,
+    solve_range, suggest_compartment_placement, summarize_external_by_source,
+    summarize_external_by_type, type_calibration_factors, validate_external_cases,
+    validate_planing_cases, validation_by_type, CfdProxyConfig, PlaningInput, ShipModel,
+    MAX_EVAC_TIME_S,
 };
 
 fn print_help() {
@@ -51,6 +52,8 @@ COMMANDS:
   validate-types       Show validation errors grouped by ship type
   validate-holdout     Out-of-sample check (calibration fit on training split only)
   validate-regime      Nested-LOOCV comparison of regime model vs original baseline
+  regime-residuals     Per-case nested-LOOCV residuals (historical speed/power)
+  validation-audit     Historical data coverage by model family
   accuracy-target [m]  Check nested regime LOOCV against a MAPE target (default 0.10)
   regime-table         Show production regime table (Holtrop + per-ship-type factor)
   calibrate-regime <file>  Apply Holtrop + per-ship-type factor (modern default)
@@ -98,9 +101,9 @@ COMMANDS:
 
 Grouped aliases (flat names still work):
   calibrate <stats|regime|type|ridge|lasso|structural|external> ...
-  validate  <types|holdout|regime>
+  validate  <types|holdout|regime|audit>
   data      <score|progress|target|targets|tiers|priority|sources|replace-log|version>
-  regime    <show|apply|validate>
+  regime    <show|apply|validate|residuals>
   accuracy  target [mape]
   cfd       <status|proxy|fit|report|fit-ridge|select-lambda|apply>
   planing   <hp|savitsky|validate|calibrate|calibrate-all>
@@ -134,10 +137,12 @@ fn normalize_grouped_command(mut args: Vec<String>) -> Vec<String> {
             | "replace-log" | "version"),
         ) => Some(format!("data-{s}")),
         ("validate", s @ ("types" | "holdout")) => Some(format!("validate-{s}")),
+        ("validate", "audit") => Some("validation-audit".to_string()),
         ("accuracy", "target") => Some("accuracy-target".to_string()),
         ("regime", "show") => Some("regime-table".to_string()),
         ("regime", "apply") => Some("calibrate-regime".to_string()),
         ("regime", "validate") => Some("validate-regime".to_string()),
+        ("regime", "residuals") => Some("regime-residuals".to_string()),
         (
             "cfd",
             s @ ("status" | "proxy" | "fit" | "report" | "fit-ridge" | "select-lambda" | "apply"),
@@ -1507,6 +1512,57 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
             println!(
                 "Note: public historical/approximate cases (not basin data); assumptions: deadrise 12-14 deg, LCG=0.42L, eta=0.55."
             );
+        }
+        "regime-residuals" => {
+            let r = run_loocv_regime();
+            let mut rows = r.residuals.clone();
+            rows.sort_by(|a, b| {
+                b.error_pct
+                    .abs()
+                    .partial_cmp(&a.error_pct.abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            println!(
+                "{:<28} {:>10} {:>10} {:>9}",
+                "Ship", "Ref HP", "Regime HP", "Error %"
+            );
+            for row in &rows {
+                println!(
+                    "{:<28} {:>10.0} {:>10.0} {:>8.1}%",
+                    row.name, row.reference_hp, row.predicted_hp, row.error_pct
+                );
+            }
+            println!(
+                "\nOverall nested LOOCV: {:.2}% case-weighted / {:.2}% type-averaged",
+                r.overall_mape * 100.0,
+                r.macro_mape * 100.0
+            );
+            println!(
+                "Residuals are against public historical references (approximate, not trial data)."
+            );
+        }
+        "validation-audit" => {
+            let a = historical_validation_audit();
+            println!("Historical data coverage by model family:");
+            println!("  cases: {}", a.case_count);
+            println!("  speed/power references: {}", a.speed_power_cases);
+            println!(
+                "  structural-weight references: {}",
+                a.structural_weight_cases
+            );
+            println!("  internal-space references: {}", a.space_cases);
+            println!("  general-arrangement references: {}", a.arrangement_cases);
+            println!(
+                "  non-physical hull weight in simulated cases: {}/{}",
+                a.nonphysical_hull_weight_cases, a.case_count
+            );
+            println!(
+                "  zero magazine volume in simulated cases: {}/{}",
+                a.zero_magazine_cases, a.case_count
+            );
+            for note in &a.notes {
+                println!("  - {note}");
+            }
         }
         "interact" => {
             let mut ship = ShipModel::new();
