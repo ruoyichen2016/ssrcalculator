@@ -38,6 +38,16 @@
 - Docs: `docs/VALIDATION.md` regime baseline; official/model-test data recorded
   as unavailable, so the database is explicitly approximate
 
+## Phase 3 — compartment / CFD / GUI enhancements (completed 2026-09-27)
+
+- `compartments --json` machine-readable general-arrangement output
+- `compartments-report` HTML report (volumes, CG, longitudinal positions, constraint checks)
+- `cfd-status` command plus a 20-sample minimum guard; `cfd-apply` refuses the
+  synthetic 9-row example unless `force` is passed
+- GUI Calibration page: ship-type regime lookup, "Apply regime model", nested
+  LOOCV comparison, and a public-reference provenance warning
+- Example-dataset README documents the synthetic CFD placeholder
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model
@@ -53,7 +63,7 @@
 - CFD-surrogate correction framework + CSV fitting + R²/RMSE + LOOCV/holdout + Ridge/λ selection + `cfd-apply` + HTML report + propulsion breakdown in reports
 - Prototype compartment allocation + volume/vertical-center optimizer with placement bounds and magazine/armament coupling + calibre/rounds/mounts-scaled magazine volume + structural continuity + maintenance void constraints
 - 37 built-in historical cases + multiple example CSV datasets + replacement-priority + source-summary + quality-score + progress/target/tier + replacement-log + version + multi-target reports
-- 83 unit tests + 7 accuracy-regression integration tests
+- 84 unit tests + 7 accuracy-regression integration tests
 
 ## Remaining
 
@@ -62,10 +72,11 @@
 - Replace public-reference cases with official trial / model-basin data with
   citation + URL + verifier (needed to pass `data-target`); currently unavailable
 - Improve the carrier regime (13.1% nested) and add more literature cases
-- Enhance compartment / CFD / GUI (see Phase 3)
+- Replace the synthetic CFD placeholder with a real dataset (>20 samples)
+- Replace the prototype compartment optimizer with a full general-arrangement optimizer
 
 ### P2/P3
 
-- Full Savitsky planing model validation
-- Train/validate a real CFD surrogate on larger CFD datasets
-- Replace prototype compartment optimizer with a full multi-constraint general-arrangement optimizer
+- Full Savitsky planing model validation on published planing-hull data
+- Web console: request-size limits and optional concurrency
+- More literature cases for carriers and cruisers

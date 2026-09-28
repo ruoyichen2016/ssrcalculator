@@ -72,6 +72,7 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 - Stores volume by range
 - Void volume
 - Override fields in `.ssr` / Web form
+- Constraint-aware prototype optimizer with JSON output and an HTML general-arrangement report
 
 ## Reporting / GUI
 

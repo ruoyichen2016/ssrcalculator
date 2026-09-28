@@ -7,9 +7,10 @@ use springsharp::{
     bootstrap_uncertainty_for_ship, bootstrap_uncertainty_for_ship_weighted,
     bootstrap_uncertainty_with_external, bootstrap_uncertainty_with_external_weighted,
     calculate_internal_spaces, calibration_factor, calibration_factor_holtrop, cfd_holdout_report,
-    cfd_holdout_stability, cfd_loocv_report, cfd_report_html, compare_qr_svd,
-    compute_planing_calibration, compute_planing_calibration_from_files, data_quality_report_html,
-    data_quality_score, data_quality_summary, data_replacement_log, data_replacement_priority,
+    cfd_holdout_stability, cfd_loocv_report, cfd_report_html, cfd_status, compare_qr_svd,
+    compartment_placement_html, compartment_placement_json, compute_planing_calibration,
+    compute_planing_calibration_from_files, data_quality_report_html, data_quality_score,
+    data_quality_summary, data_replacement_log, data_replacement_priority,
     data_replacement_progress, data_source_summary, data_target_matrix_for, data_tier_summary,
     data_version, demo_ship, deserialize, detect_duplicate_external_cases, external_report_html,
     fit_cfd_proxy_report, fit_cfd_proxy_ridge, fit_ensemble, fit_ensemble_cv, fit_reduced_form,
@@ -26,7 +27,7 @@ use springsharp::{
     segmented_calibration, select_cfd_ridge_lambda, select_lasso_lambda, select_ridge_lambda,
     small_fast_error_diagnostic, solve_max_speed, solve_range, suggest_compartment_placement,
     summarize_external_by_source, summarize_external_by_type, type_calibration_factors,
-    validate_external_cases, validation_by_type, CfdProxyConfig, ShipModel,
+    validate_external_cases, validation_by_type, CfdProxyConfig, ShipModel, CFD_MIN_USABLE_SAMPLES,
 };
 
 fn print_help() {
@@ -55,13 +56,15 @@ COMMANDS:
   calibrate-type <file>  Apply per-ship-type power calibration
   calibrate <file>     Apply historical power calibration to a design
   spaces <file>        Show improved internal-space volume model
-  compartments <file>  Show prototype compartment allocation
-  optimize-compartments <file> [target_cg]  Run prototype constraint optimizer
+  compartments <file> [--json]  Show prototype compartment allocation
+  optimize-compartments <file> [target_cg] [--json]  Run prototype constraint optimizer
+  compartments-report <file> [target_cg]  Print HTML general-arrangement report
   calibrate-stats      Show reduced-form and structural-form calibration fits
   import-data <file>   Validate a user-supplied CSV of ship cases
   small-fast <file>    Show small/fast external data error diagnostic
   planing-hp <len> <beam> <disp_lbs> <speed>  Estimate planing hull power (experimental)
   cfd-proxy <hp> <fn> [visc] [wave] [fn_ref]  Apply CFD surrogate correction
+  cfd-status <csv>     Report whether a CFD sample set is usable evidence
   cfd-fit <csv>        Fit CFD surrogate correction from samples
   cfd-report <csv>     Generate HTML CFD surrogate report
   cfd-fit-ridge <csv> <lambda>  Ridge-regularized CFD proxy fit
@@ -96,7 +99,7 @@ Grouped aliases (flat names still work):
   data      <score|progress|target|targets|tiers|priority|sources|replace-log|version>
   regime    <show|apply|validate>
   accuracy  target [mape]
-  cfd       <proxy|fit|report|fit-ridge|select-lambda|apply>
+  cfd       <status|proxy|fit|report|fit-ridge|select-lambda|apply>
   planing   <hp|calibrate|calibrate-all>
 
 Run without a command to enter interactive mode.
@@ -132,9 +135,10 @@ fn normalize_grouped_command(mut args: Vec<String>) -> Vec<String> {
         ("regime", "show") => Some("regime-table".to_string()),
         ("regime", "apply") => Some("calibrate-regime".to_string()),
         ("regime", "validate") => Some("validate-regime".to_string()),
-        ("cfd", s @ ("proxy" | "fit" | "report" | "fit-ridge" | "select-lambda" | "apply")) => {
-            Some(format!("cfd-{s}"))
-        }
+        (
+            "cfd",
+            s @ ("status" | "proxy" | "fit" | "report" | "fit-ridge" | "select-lambda" | "apply"),
+        ) => Some(format!("cfd-{s}")),
         ("planing", "hp") => Some("planing-hp".to_string()),
         ("planing", "calibrate") => Some("planing-calibrate".to_string()),
         ("planing", "calibrate-all") => Some("planing-calibrate-all".to_string()),
@@ -590,6 +594,14 @@ fn main() {
                 || args.iter().any(|x| x == "--force");
             let text = std::fs::read_to_string(csv).expect("failed to read CSV");
             let samples = parse_cfd_samples(&text).expect("failed to parse CFD samples");
+            if samples.len() < CFD_MIN_USABLE_SAMPLES && !force {
+                eprintln!(
+                    "Refusing to apply CFD proxy: only {} samples (< {} minimum for evidence). Use `force` to override.",
+                    samples.len(),
+                    CFD_MIN_USABLE_SAMPLES
+                );
+                std::process::exit(3);
+            }
             let selection = select_cfd_ridge_lambda(&samples);
             let cv = cfd_loocv_report(&samples);
             if cv.r2.is_finite() && cv.r2 < threshold && !force {
@@ -650,6 +662,20 @@ fn main() {
             let text = std::fs::read_to_string(path).expect("failed to read file");
             let samples = parse_cfd_samples(&text).expect("failed to parse CFD samples");
             print!("{}", cfd_report_html(&samples));
+        }
+        "cfd-status" => {
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: springsharp cfd-status <csv>");
+                std::process::exit(2);
+            };
+            let text = std::fs::read_to_string(path).expect("failed to read file");
+            let samples = parse_cfd_samples(&text).expect("failed to parse CFD samples");
+            let status = cfd_status(&samples);
+            println!("CFD surrogate status for {path}:");
+            println!("  samples: {}", status.samples);
+            println!("  minimum for evidence: {}", status.min_samples);
+            println!("  usable: {}", status.usable);
+            println!("  {}", status.message);
         }
         "cfd-fit" => {
             let Some(path) = args.get(1) else {
@@ -1023,43 +1049,70 @@ fn main() {
 
         "optimize-compartments" => {
             let Some(path) = args.get(1) else {
-                eprintln!("usage: springsharp optimize-compartments <file> [target_cg]");
+                eprintln!("usage: springsharp optimize-compartments <file> [target_cg] [--json]");
                 std::process::exit(2);
             };
+            let json = args.iter().any(|a| a == "--json");
             let target_cg: f64 = args
-                .get(2)
-                .map(|x| x.parse().expect("target_cg must be a number"))
+                .iter()
+                .skip(1)
+                .find_map(|a| a.parse::<f64>().ok())
                 .unwrap_or(0.45);
             let mut ship = ShipModel::new();
             load_from_file(&mut ship, path).expect("failed to load design");
             ship.calculate();
             let placement = suggest_compartment_placement(&ship, target_cg);
-            println!("{}", format_compartment_report(&placement.layout));
-            println!(
-                "Achieved CG ratio: {:.3} (target {target_cg:.3})",
-                placement.cg_vertical
-            );
-            println!(
-                "Magazine longitudinal position: {:.3} L (from armament layout)",
-                placement.magazine_longitudinal
-            );
-            println!(
-                "Machinery longitudinal position: {:.3} L (amidships)",
-                placement.machinery_longitudinal
-            );
-            for (name, ok) in &placement.checks {
-                println!("  [{}] {name}", if *ok { "ok" } else { "FAIL" });
+            if json {
+                print!("{}", compartment_placement_json(&placement));
+            } else {
+                println!("{}", format_compartment_report(&placement.layout));
+                println!(
+                    "Achieved CG ratio: {:.3} (target {target_cg:.3})",
+                    placement.cg_vertical
+                );
+                println!(
+                    "Magazine longitudinal position: {:.3} L (from armament layout)",
+                    placement.magazine_longitudinal
+                );
+                println!(
+                    "Machinery longitudinal position: {:.3} L (amidships)",
+                    placement.machinery_longitudinal
+                );
+                for (name, ok) in &placement.checks {
+                    println!("  [{}] {name}", if *ok { "ok" } else { "FAIL" });
+                }
             }
+        }
+        "compartments-report" => {
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: springsharp compartments-report <file> [target_cg]");
+                std::process::exit(2);
+            };
+            let target_cg: f64 = args
+                .iter()
+                .skip(1)
+                .find_map(|a| a.parse::<f64>().ok())
+                .unwrap_or(0.45);
+            let mut ship = ShipModel::new();
+            load_from_file(&mut ship, path).expect("failed to load design");
+            ship.calculate();
+            let placement = suggest_compartment_placement(&ship, target_cg);
+            print!("{}", compartment_placement_html(&ship, &placement));
         }
         "compartments" => {
             let Some(path) = args.get(1) else {
-                eprintln!("usage: springsharp compartments <file>");
+                eprintln!("usage: springsharp compartments <file> [--json]");
                 std::process::exit(2);
             };
+            let json = args.iter().any(|a| a == "--json");
             let mut ship = ShipModel::new();
             load_from_file(&mut ship, path).expect("failed to load design");
             ship.calculate();
             let placement = suggest_compartment_placement(&ship, 0.45);
+            if json {
+                print!("{}", compartment_placement_json(&placement));
+                return;
+            }
             println!("{}", format_compartment_report(&placement.layout));
             println!(
                 "Magazine longitudinal position: {:.3} L (from armament layout)",

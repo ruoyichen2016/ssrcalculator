@@ -522,6 +522,80 @@ pub fn suggest_compartment_placement(ship: &ShipModel, target_cg: f64) -> Compar
     }
 }
 
+/// Machine-readable general-arrangement summary (hand-rolled JSON, no deps).
+pub fn compartment_placement_json(placement: &CompartmentPlacement) -> String {
+    fn esc(s: &str) -> String {
+        s.replace('\\', "\\\\").replace('"', "\\\"")
+    }
+    let l = &placement.layout;
+    let centers: Vec<String> = placement
+        .centers
+        .iter()
+        .map(|c| format!("{c:.4}"))
+        .collect();
+    let checks: Vec<String> = placement
+        .checks
+        .iter()
+        .map(|(name, ok)| format!("{{\"name\":\"{}\",\"ok\":{}}}", esc(name), ok))
+        .collect();
+    format!(
+        "{{\n  \"cg_vertical\": {:.4},\n  \"magazine_longitudinal\": {:.4},\n  \"machinery_longitudinal\": {:.4},\n  \"centers\": [{}],\n  \"volumes\": {{\"machinery\": {:.1}, \"magazine\": {:.1}, \"accommodation\": {:.1}, \"fuel\": {:.1}, \"stores\": {:.1}, \"void\": {:.1}, \"unallocated\": {:.1}}},\n  \"checks\": [{}]\n}}",
+        placement.cg_vertical,
+        placement.magazine_longitudinal,
+        placement.machinery_longitudinal,
+        centers.join(", "),
+        l.machinery,
+        l.magazine,
+        l.accommodation,
+        l.fuel,
+        l.stores,
+        l.void,
+        l.unallocated,
+        checks.join(", ")
+    )
+}
+
+/// Printable HTML general-arrangement report.
+pub fn compartment_placement_html(ship: &ShipModel, placement: &CompartmentPlacement) -> String {
+    let l = &placement.layout;
+    let mut html = String::from(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>General Arrangement</title></head><body>",
+    );
+    html.push_str(&format!(
+        "<h1>General arrangement prototype</h1><p>Ship: <b>{}</b> ({})</p>",
+        ship.name, ship.ship_type
+    ));
+    html.push_str("<p>Prototype constraint-aware allocation. Volumes in m&sup3; positions as fraction of length.</p>");
+    html.push_str("<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\">");
+    html.push_str("<tr><th>Compartment</th><th>Volume (m3)</th></tr>");
+    for (name, v) in [
+        ("Machinery", l.machinery),
+        ("Magazine", l.magazine),
+        ("Accommodation", l.accommodation),
+        ("Fuel", l.fuel),
+        ("Stores", l.stores),
+        ("Void / maintenance", l.void),
+        ("Unallocated", l.unallocated),
+    ] {
+        html.push_str(&format!("<tr><td>{name}</td><td>{v:.0}</td></tr>"));
+    }
+    html.push_str("</table>");
+    html.push_str(&format!(
+        "<p>Achieved vertical CG ratio: <b>{:.3}</b><br>Magazine longitudinal: {:.3} L<br>Machinery longitudinal: {:.3} L</p>",
+        placement.cg_vertical, placement.magazine_longitudinal, placement.machinery_longitudinal
+    ));
+    html.push_str("<h2>Constraint checks</h2><ul>");
+    for (name, ok) in &placement.checks {
+        html.push_str(&format!(
+            "<li>{} {}</li>",
+            if *ok { "PASS" } else { "FAIL" },
+            name
+        ));
+    }
+    html.push_str("</ul></body></html>");
+    html
+}
+
 fn layout_longitudinal_position(ship: &ShipModel, layout: i32) -> f64 {
     let fc = ship.free.fc_length;
     let fd = ship.free.fd_length;
@@ -580,6 +654,29 @@ mod tests {
         assert!(placement.magazine_longitudinal > forward.min(aft));
         assert!(placement.magazine_longitudinal < forward.max(aft));
         assert!(placement.cg_vertical > 0.0);
+    }
+
+    #[test]
+    fn compartment_json_and_html_are_well_formed() {
+        let mut ship = ShipModel::new();
+        ship.hull.length = 600.0;
+        ship.hull.beam = 90.0;
+        ship.hull.beam_bulges = 90.0;
+        ship.hull.draught = 28.0;
+        ship.hull.block = 0.55;
+        ship.hull.date_hull = 1915;
+        ship.hull.date_engine = 1915;
+        ship.engine.screws = 4;
+        ship.calculate();
+        let placement = suggest_compartment_placement(&ship, 0.45);
+        let json = compartment_placement_json(&placement);
+        assert!(json.contains("\"cg_vertical\""));
+        assert!(json.contains("\"volumes\""));
+        assert!(json.contains("\"checks\""));
+        assert!(json.ends_with('}'));
+        let html = compartment_placement_html(&ship, &placement);
+        assert!(html.contains("General arrangement"));
+        assert!(html.contains("Constraint checks"));
     }
 
     #[test]

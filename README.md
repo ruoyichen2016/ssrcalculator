@@ -78,6 +78,7 @@ cargo run -- solve-speed example.ssr 50000
 cargo run -- solve-range example.ssr 1500
 
 # CFD surrogate correction and compartment prototype
+cargo run -- cfd-status data/examples/cfd_samples.csv
 cargo run -- cfd-proxy 49132 0.3 0.1 0.2 0.25
 cargo run -- cfd-fit data/examples/cfd_samples.csv
 cargo run -- cfd-report data/examples/cfd_samples.csv
@@ -85,7 +86,9 @@ cargo run -- cfd-fit-ridge data/examples/cfd_samples.csv 1.0
 cargo run -- cfd-select-lambda data/examples/cfd_samples.csv
 cargo run -- cfd-apply data/examples/cfd_samples.csv example.ssr 0.8
 cargo run -- compartments example.ssr
-cargo run -- optimize-compartments example.ssr 0.45
+cargo run -- compartments example.ssr --json
+cargo run -- compartments-report example.ssr > ga.html
+cargo run -- optimize-compartments example.ssr 0.45 --json
 
 # Accuracy validation / calibration
 cargo run -- validate
@@ -361,8 +364,10 @@ The `calibrate-stats` command also reports:
 - Ridge-regularized CFD proxy fit (`cfd-fit-ridge`)
 - CFD Ridge lambda selection by LOOCV (`cfd-select-lambda`)
 - Apply fitted CFD proxy into `.ssr` (`cfd-apply`) with LOOCV R² threshold check
+- `cfd-status` command and a 20-sample minimum guard: the bundled `cfd_samples.csv` is synthetic (9 rows) and `cfd-apply` refuses it unless `force` is given
 - prototype compartment allocation (`compartments` command)
 - `compartments` includes magazine/machinery longitudinal hints
+- `compartments --json` machine-readable output and `compartments-report` general-arrangement HTML report
 - `optimize-compartments` prints constraint check results (placement, void, continuity)
 - constraint-satisfaction unit test for the compartment optimizer
 - constraint-aware compartment optimizer prototype (`optimize-compartments` command)

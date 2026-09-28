@@ -16,6 +16,7 @@ enum Page {
     Armour,
     Guns,
     Engine,
+    Calibration,
     Report,
 }
 
@@ -26,6 +27,7 @@ pub struct SpringSharpApp {
     save_path: String,
     load_path: String,
     status: String,
+    regime_summary: String,
 }
 
 impl SpringSharpApp {
@@ -33,6 +35,16 @@ impl SpringSharpApp {
         let mut ship = demo_ship();
         ship.calculate();
         let report = crate::features::generate_report(&ship);
+        let regime = crate::regime::run_loocv_regime();
+        let mut regime_summary = format!(
+            "regime (Holtrop + per-type factor): {:.2}%\noriginal + per-type factor:        {:.2}%\nHoltrop uncalibrated:              {:.2}%\n\nper ship type (nested LOOCV):\n",
+            regime.overall_mape * 100.0,
+            regime.original_baseline_mape * 100.0,
+            regime.holtrop_uncalibrated_mape * 100.0
+        );
+        for (ty, n, m) in &regime.per_type {
+            regime_summary.push_str(&format!("  {ty:<12} n={n:<2} {:.2}%\n", m * 100.0));
+        }
         Self {
             ship,
             page: Page::Hull,
@@ -40,6 +52,7 @@ impl SpringSharpApp {
             save_path: "example.ssr".to_string(),
             load_path: "example.ssr".to_string(),
             status: "Demo design loaded".to_string(),
+            regime_summary,
         }
     }
 
@@ -58,6 +71,7 @@ impl SpringSharpApp {
             (Page::Armour, "Armour"),
             (Page::Guns, "Guns"),
             (Page::Engine, "Engine"),
+            (Page::Calibration, "Calibration"),
             (Page::Report, "Report"),
         ] {
             if ui.selectable_label(self.page == page, name).clicked() {
@@ -495,6 +509,53 @@ impl SpringSharpApp {
         }
     }
 
+    fn page_calibration(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Calibration (modern regime model)");
+        ui.label(
+            "Default model: Holtrop-Mennen + per-ship-type calibration factor, \
+             fitted to the public historical dataset.",
+        );
+        ui.separator();
+        ui.label(format!("Ship type: {}", self.ship.ship_type));
+        match crate::regime::regime_for_ship_type(&self.ship.ship_type) {
+            Some(r) => {
+                ui.label(format!(
+                    "Recommended: {}  factor {:.3}  (in-sample MAPE {:.1}%)",
+                    r.model_label,
+                    r.factor,
+                    r.train_mape * 100.0
+                ));
+                if ui.button("Apply regime model").clicked() {
+                    if let Some(applied) = crate::regime::apply_regime_calibration(&mut self.ship) {
+                        self.recalculate();
+                        self.status = format!(
+                            "Applied regime: {} factor {:.3}",
+                            applied.model_label, applied.factor
+                        );
+                    } else {
+                        self.status = "No regime entry for this ship type".to_string();
+                    }
+                }
+            }
+            None => {
+                ui.colored_label(
+                    egui::Color32::RED,
+                    "No regime entry for this ship type (use a known type: battleship, \
+                     carrier, cruiser, destroyer).",
+                );
+            }
+        }
+        ui.separator();
+        ui.label("Nested-LOOCV (out-of-sample) comparison:");
+        ui.monospace(self.regime_summary.as_str());
+        ui.separator();
+        ui.colored_label(
+            egui::Color32::YELLOW,
+            "Data provenance: public historical references only (not independently \
+             verified). Official trial/model-basin data unavailable; treat results as approximate.",
+        );
+    }
+
     fn page_report(&mut self, ui: &mut egui::Ui) {
         ui.heading("Report and files");
         ui.horizontal(|ui| {
@@ -559,6 +620,7 @@ impl eframe::App for SpringSharpApp {
                 Page::Armour => self.page_armour(ui),
                 Page::Guns => self.page_guns(ui),
                 Page::Engine => self.page_engine(ui),
+                Page::Calibration => self.page_calibration(ui),
                 Page::Report => self.page_report(ui),
             });
         });

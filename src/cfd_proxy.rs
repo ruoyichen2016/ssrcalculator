@@ -125,6 +125,43 @@ pub fn fit_cfd_proxy(samples: &[CfdSample]) -> CfdProxyConfig {
     }
 }
 
+/// Minimum number of independent CFD samples before a fitted surrogate is
+/// treated as usable evidence.  The bundled example dataset has far fewer and
+/// is synthetic, so the surrogate is a pipeline placeholder.
+pub const CFD_MIN_USABLE_SAMPLES: usize = 20;
+
+#[derive(Clone, Debug)]
+pub struct CfdStatus {
+    pub samples: usize,
+    pub min_samples: usize,
+    pub usable: bool,
+    pub message: String,
+}
+
+pub fn cfd_status(samples: &[CfdSample]) -> CfdStatus {
+    let usable = samples.len() >= CFD_MIN_USABLE_SAMPLES;
+    let message = if usable {
+        format!(
+            "{} samples (>= {} minimum): surrogate may be used as evidence.",
+            samples.len(),
+            CFD_MIN_USABLE_SAMPLES
+        )
+    } else {
+        format!(
+            "{} samples (< {} minimum): pipeline placeholder, NOT evidence. \
+The bundled data/examples/cfd_samples.csv is synthetic (constant empirical_hp).",
+            samples.len(),
+            CFD_MIN_USABLE_SAMPLES
+        )
+    };
+    CfdStatus {
+        samples: samples.len(),
+        min_samples: CFD_MIN_USABLE_SAMPLES,
+        usable,
+        message,
+    }
+}
+
 /// Fit-quality report for the CFD proxy.
 #[derive(Clone, Copy, Debug)]
 pub struct CfdFitReport {
