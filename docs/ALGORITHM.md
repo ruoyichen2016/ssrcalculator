@@ -57,7 +57,7 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
   historical dataset (battleship 0.763, carrier 0.783, cruiser 0.925, destroyer 1.058)
 - The original SpringSharp empirical model is retained as a comparison baseline
 - Validated by **nested** LOOCV: the factor is re-fitted on each training split
-  - regime (Holtrop + factor): 9.06% (52 cases)
+  - regime (Holtrop + factor): 9.06% case-weighted / 8.49% type-averaged (52 cases)
   - original + factor: 11.53%
   - Holtrop uncalibrated: 22.24%
 - Applied to a design via `calibrate-regime` (sets `resistance_model` + `power_factor`)

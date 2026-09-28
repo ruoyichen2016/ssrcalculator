@@ -53,7 +53,8 @@ errors worse than a single per-type factor.
 
 | Metric | Baseline (52 cases) | Regression threshold |
 |---|---|---|
-| **Regime nested LOOCV, overall** | **~9.06%** | **<= 10.0%** |
+| **Regime nested LOOCV, case-weighted** | **~9.06%** | **<= 10.0%** |
+| Regime nested, type-averaged (macro) | ~8.49% | <= 9.5% |
 | Regime nested, battleship | ~8.64% | <= 9.6% |
 | Regime nested, carrier | ~10.94% | <= 12.5% |
 | Regime nested, cruiser | ~7.89% | <= 8.8% |

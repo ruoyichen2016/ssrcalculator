@@ -115,8 +115,10 @@ pub fn apply_regime_calibration(ship: &mut ShipModel) -> Option<RegimeCalibratio
 /// Nested-LOOCV result for the regime model.
 #[derive(Clone, Debug)]
 pub struct RegimeLoocv {
-    /// Honest out-of-sample MAPE of Holtrop + per-type factor.
+    /// Honest out-of-sample MAPE of Holtrop + per-type factor (case-weighted).
     pub overall_mape: f64,
+    /// Type-averaged MAPE (each ship type weighted equally).
+    pub macro_mape: f64,
     pub per_type: Vec<(String, usize, f64)>,
     /// Same nested protocol for original + per-type factor (comparison baseline).
     pub original_baseline_mape: f64,
@@ -180,8 +182,14 @@ pub fn run_loocv_regime() -> RegimeLoocv {
     per_type.sort_by(|a, b| a.0.cmp(&b.0));
 
     let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len().max(1) as f64;
+    let macro_mape = if per_type.is_empty() {
+        f64::NAN
+    } else {
+        per_type.iter().map(|(_, _, m)| *m).sum::<f64>() / per_type.len() as f64
+    };
     RegimeLoocv {
         overall_mape: mean(&errs),
+        macro_mape,
         per_type,
         original_baseline_mape: mean(&orig_errs),
         holtrop_uncalibrated_mape: mean(&holt_uncal),

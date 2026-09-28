@@ -159,6 +159,11 @@ fn regime_nested_loocv_does_not_regress() {
         r.overall_mape * 100.0,
         REGIME_OVERALL_MAX * 100.0
     );
+    assert!(
+        r.macro_mape.is_finite() && r.macro_mape <= 0.095,
+        "regime type-averaged MAPE {:.2}% exceeded baseline",
+        r.macro_mape * 100.0
+    );
     // The modern regime model must beat both comparison baselines.
     assert!(
         r.overall_mape < r.original_baseline_mape,

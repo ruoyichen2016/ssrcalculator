@@ -1227,8 +1227,9 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
             println!("Regime model: Holtrop-Mennen + per-ship-type calibration factor");
             println!("Nested LOOCV (out-of-sample):");
             println!(
-                "  regime (Holtrop + factor) : {:.2}%",
-                r.overall_mape * 100.0
+                "  regime (Holtrop + factor) : {:.2}% case-weighted, {:.2}% type-averaged",
+                r.overall_mape * 100.0,
+                r.macro_mape * 100.0
             );
             println!(
                 "  original + per-type factor: {:.2}%  (comparison baseline)",
@@ -1250,8 +1251,9 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                 .unwrap_or(0.10);
             let r = run_loocv_regime();
             println!(
-                "Nested-LOOCV regime MAPE {:.2}% vs target {:.1}%",
+                "Nested-LOOCV regime MAPE {:.2}% case-weighted / {:.2}% type-averaged vs target {:.1}%",
                 r.overall_mape * 100.0,
+                r.macro_mape * 100.0,
                 target * 100.0
             );
             for (ty, n, m) in &r.per_type {

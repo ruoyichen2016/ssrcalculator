@@ -193,9 +193,9 @@ Nested leave-one-out cross-validation (the factor is re-fitted on every training
 split) gives:
 
 ```text
-regime (Holtrop + per-type factor) : 9.06%
-original + per-type factor         : 10.57%   <- comparison baseline
-Holtrop uncalibrated               : 19.42%
+regime (Holtrop + per-type factor) : 9.06% case-weighted, 8.49% type-averaged
+original + per-type factor         : 11.53%   <- comparison baseline
+Holtrop uncalibrated               : 22.24%
 ```
 
 Apply it to a design with:
