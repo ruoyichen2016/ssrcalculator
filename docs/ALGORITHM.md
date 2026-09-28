@@ -77,19 +77,26 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
   deck index + within-deck vertical offset, and a longitudinal position; a
   feasibility repair operator enforces volume, void, deck ordering, structural
   continuity, armament position and access-network connectivity.
-- **Evacuation (IMO MSC.1/Circ.1533, simplified)**: compartment occupancy from
-  crew; effective route width `w - 2*0.15 m`; maximum specific flow 1.316
-  (corridor) / 1.222 (stair) persons/(m*s); per-compartment evacuation time and
-  a network max-flow check that the crew reaches the trunk within 1800 s.
-- **Escape distance on a real corridor polyline**: must walk to the vertical
-  trunk, change deck and walk back, so cross-deck edges are
-  `(|xi-x0| + |xj-x0|)*L + |ddeck|*H` (metres), limited to 3 hops / 45 m.
-- **Rule-based structural weight**: actual deck/section areas (`0.85*L*B`,
-  `0.85*B*D`), classification-style plate thickness
-  `t = s*sqrt(p/(3.5*sigma))` with `sigma = 0.6*235 MPa`, stiffener area from
-  `Z = p*s*l^2/(8*sigma)`, bulkheads under the flooding head, plus girders.
-- JSON/HTML report decks, access edges, occupancy, required routes, evacuation
-  times, escape metres, structure weight and the objective.
+- **Evacuation (IMO MSC.1/Circ.1533)**: density-flow curve
+  `Fs(D) = (1 - a D) k D` with `a = 0.266`, `k = 1.4` (corridor) / `1.3`
+  (stair), capped at `k/(4a)`; effective width `w - 2*0.15 m`; per-compartment
+  evacuation time, a network max-flow check (1800 s), a **congestion** time
+  `total / max-flow-rate` (min cut) and an edge-density check (<= 4 p/m2).
+- **Assembly station**: a gene places the mustering station on the weather deck;
+  each compartment has a mustering polyline/time (walking at IMO light-density
+  speed plus exit queue), checked against 1800 s.
+- **Deck-plan polyline**: two longitudinal side corridors at +/- B/4, so routes
+  include lateral access legs; cross-deck routes go lateral -> along corridor ->
+  vertical trunk -> along the upper-deck corridor, limited to 3 hops / 45 m.
+- **Rule-style scantlings** (`scantling.rs`): actual deck/section areas
+  (`0.85*L*B`, `0.85*B*D`); plate `t = s*sqrt(p/(3.5*sigma))`, buckling
+  `s/t <= 1.9*sqrt(E/sigma_y)`, minimum thickness + 1.5 mm corrosion addition,
+  standard thickness series; stiffener `Z = p*s*l^2/(8*sigma)`; bulkheads under
+  the flooding head; deflection `<= l/200`.  Reported per element with
+  utilisation.
+- JSON/HTML report decks, access edges, occupancy, routes, evacuation and
+  mustering times, congestion, edge density, escape metres, scantling
+  utilisation, structure weight and the objective.
 
 ## Reporting / GUI
 

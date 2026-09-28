@@ -19,6 +19,7 @@ pub mod planing;
 pub mod regime;
 pub mod resistance;
 pub mod savitsky;
+pub mod scantling;
 pub mod spaces;
 pub mod web;
 
@@ -32,5 +33,6 @@ pub use planing::*;
 pub use regime::*;
 pub use resistance::*;
 pub use savitsky::*;
+pub use scantling::*;
 pub use spaces::*;
 pub use web::*;

@@ -115,6 +115,20 @@
   under the flooding head, plus main girders
 - 15 constraint checks total; tests cover IMO times, escape metres, rule weights
 
+## Phase 10 — full IMO evacuation, deck-plan polylines, rule scantlings (completed 2026-09-27)
+
+- IMO density-flow curve `Fs(D) = (1 - aD) k D` (a = 0.266, k = 1.4/1.3) with
+  capacity cap `k/(4a)`; congestion-aware network time from the max-flow rate
+  (min cut); edge-density check via curve inversion (<= 4 p/m2)
+- Assembly-station gene on the weather deck; mustering polyline/time per
+  compartment (IMO light-density walking speed + exit queue) checked at 1800 s
+- Deck-plan polylines: two longitudinal side corridors at +/- B/4, lateral
+  access legs, vertical trunk; limit 3 hops / 45 m
+- New `scantling.rs`: rule-style plate bending + buckling, minimum thickness +
+  corrosion addition, standard thickness series, stiffener section modulus,
+  bulkhead flooding head, deflection l/200; per-element utilisation reported
+- 23 constraint checks total (was 15); 96 unit + 7 integration tests
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model
@@ -140,7 +154,7 @@
   citation + URL + verifier (needed to pass `data-target`); currently unavailable
 - Replace the analytic CFD placeholder with real measured CFD (>20 samples)
 - Add more cruiser/battleship literature points to reduce the regime weights
-- Replace planning scantlings with full class-rule scantling software and dimensioned trunks/hatches
+- Replace the planning rule checks with a licensed class-rule scantling package and a real deck plan
 
 ### P2/P3
 

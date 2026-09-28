@@ -1110,14 +1110,16 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                     placement.structure_weight_tons
                 );
                 println!(
-                    "IMO evacuation: network {:.0} persons / {} s, max compartment {:.0} s",
+                    "IMO evacuation: network {:.0} persons / {} s, congestion {:.0} s, assembly at {:.2} L, density {:.2} p/m2",
                     placement.network_evacuation_capacity,
                     MAX_EVAC_TIME_S as u32,
-                    placement
-                        .evacuation_time_s
-                        .iter()
-                        .cloned()
-                        .fold(0.0_f64, f64::max)
+                    placement.congestion_time_s,
+                    placement.assembly_x,
+                    placement.max_edge_density
+                );
+                println!(
+                    "Rule scantlings: max utilization {:.2} (<= 1 ok)",
+                    placement.scantling_utilization
                 );
                 for (name, ok) in &placement.checks {
                     println!("  [{}] {name}", if *ok { "ok" } else { "FAIL" });
@@ -1182,14 +1184,16 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                 placement.structure_weight_tons
             );
             println!(
-                "IMO evacuation: network {:.0} persons / {} s, max compartment {:.0} s",
+                "IMO evacuation: network {:.0} persons / {} s, congestion {:.0} s, assembly at {:.2} L, density {:.2} p/m2",
                 placement.network_evacuation_capacity,
                 MAX_EVAC_TIME_S as u32,
-                placement
-                    .evacuation_time_s
-                    .iter()
-                    .cloned()
-                    .fold(0.0_f64, f64::max)
+                placement.congestion_time_s,
+                placement.assembly_x,
+                placement.max_edge_density
+            );
+            println!(
+                "Rule scantlings: max utilization {:.2} (<= 1 ok)",
+                placement.scantling_utilization
             );
             for (name, ok) in &placement.checks {
                 println!("  [{}] {name}", if *ok { "ok" } else { "FAIL" });

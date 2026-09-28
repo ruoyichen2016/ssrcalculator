@@ -417,12 +417,13 @@ The `calibrate-stats` command also reports:
 - provenance-aware CFD ingestion (`measured_cfd` / `literature` / `analytic` / `synthetic`);
   `cfd-apply` requires >= 20 measured CFD samples. `data/examples/cfd_reference.csv` has 30
   analytic rows (Savitsky vs empirical) to exercise the pipeline but is not evidence
-- compartment optimizer upgraded to a deterministic **multi-deck** GA: 6 volumes, deck index +
-  within-deck offset, and longitudinal position per compartment, with **IMO MSC.1/Circ.1533
-  simplified evacuation** (effective width, specific flow, 1800 s network check), **escape distance
-  on corridor polylines via the vertical trunk** (<= 3 hops / <= 45 m), and a **rule-based
-  plate/stiffener/bulkhead structural-weight** estimate; JSON/HTML report occupancy, evacuation
-  times, escape metres, structure weight and objective
+- compartment optimizer upgraded to a deterministic **multi-deck** GA (volumes, deck, offset,
+  longitudinal position, assembly-station position) with **IMO MSC.1/Circ.1533 evacuation**
+  (density-flow curve, effective width, congestion via max flow, assembly-station mustering, edge
+  density), **deck-plan corridor polylines** with lateral legs (<= 3 hops / <= 45 m), and a
+  **rule-style scantling module** (plate bending + buckling + corrosion, stiffener section modulus,
+  deflection); JSON/HTML report occupancy, evacuation/mustering times, congestion, density, escape
+  metres, scantling utilisation, structure weight and objective (23 checks)
 - regime-aware modern model: Holtrop-Mennen + per-ship-type 15% trimmed-mean factor (nested LOOCV 8.92% case-weighted / 8.39% type-averaged over 52 cases); original retained as baseline
 - `validate-regime`, `regime-table`, `calibrate-regime` and `accuracy-target` commands
 - grouped CLI aliases (`calibrate stats`, `validate holdout`, `data score`, `regime show`, `accuracy target`, `cfd fit`, ...) with flat names preserved

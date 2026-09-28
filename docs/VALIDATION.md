@@ -148,8 +148,9 @@ target normalized to unit RMS, so the lambda grid `1e-4 .. 1e4` is meaningful.
 - Many of the 15 added carrier cases are approximate (design/trial figures,
   normal vs standard displacement mixed); treat the carrier factor as empirical.
 - The compartment optimizer now has decks, an IMO MSC.1/Circ.1533-style
-  evacuation model (effective width, specific flow, 1800 s network check),
-  corridor-polyline escape distances, and a classification-style
-  plate/stiffener/bulkhead weight estimate.  Access edges are still schematic
-  (one nominal corridor/stair width per edge) and the scantlings use planning
-  values, not a full class-rule scantling calculation or a real deck plan.
+  evacuation model (density curve, congestion via max flow, assembly-station
+  mustering, edge density), corridor-polylines on a schematic deck plan and a
+  rule-style scantling module.  It is still a *schematic* plan: one nominal
+  corridor/stair width per edge, no counterflow or assembly-area sizing, and the
+  scantlings use planning pressures/corrosion margins rather than a licensed
+  class-rule scantling package.
