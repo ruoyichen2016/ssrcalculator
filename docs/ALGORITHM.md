@@ -76,13 +76,20 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 - Multi-deck global genetic-algorithm optimizer: per compartment a volume, a
   deck index + within-deck vertical offset, and a longitudinal position; a
   feasibility repair operator enforces volume, void, deck ordering, structural
-  continuity, armament position, access-network connectivity, **person-based
-  passage capacity** (occupancy from crew; 250 persons per edge-disjoint route,
-  via max-flow), and **escape limits measured on the real deck plan**
-  (`sqrt((dx*L)^2 + (ddeck*H)^2)`, `<= 3` hops / `<= 45 m`); it minimises a
-  **plating + bulkhead + framing structural-weight estimate**; JSON/HTML report
-  decks, access edges, occupancy, required paths, escape metres, structure
-  weight and the objective
+  continuity, armament position and access-network connectivity.
+- **Evacuation (IMO MSC.1/Circ.1533, simplified)**: compartment occupancy from
+  crew; effective route width `w - 2*0.15 m`; maximum specific flow 1.316
+  (corridor) / 1.222 (stair) persons/(m*s); per-compartment evacuation time and
+  a network max-flow check that the crew reaches the trunk within 1800 s.
+- **Escape distance on a real corridor polyline**: must walk to the vertical
+  trunk, change deck and walk back, so cross-deck edges are
+  `(|xi-x0| + |xj-x0|)*L + |ddeck|*H` (metres), limited to 3 hops / 45 m.
+- **Rule-based structural weight**: actual deck/section areas (`0.85*L*B`,
+  `0.85*B*D`), classification-style plate thickness
+  `t = s*sqrt(p/(3.5*sigma))` with `sigma = 0.6*235 MPa`, stiffener area from
+  `Z = p*s*l^2/(8*sigma)`, bulkheads under the flooding head, plus girders.
+- JSON/HTML report decks, access edges, occupancy, required routes, evacuation
+  times, escape metres, structure weight and the objective.
 
 ## Reporting / GUI
 

@@ -28,7 +28,7 @@ use springsharp::{
     small_fast_error_diagnostic, solve_max_speed, solve_range, suggest_compartment_placement,
     summarize_external_by_source, summarize_external_by_type, type_calibration_factors,
     validate_external_cases, validate_planing_cases, validation_by_type, CfdProxyConfig,
-    PlaningInput, ShipModel,
+    PlaningInput, ShipModel, MAX_EVAC_TIME_S,
 };
 
 fn print_help() {
@@ -1109,6 +1109,16 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                     placement.escape_max_path,
                     placement.structure_weight_tons
                 );
+                println!(
+                    "IMO evacuation: network {:.0} persons / {} s, max compartment {:.0} s",
+                    placement.network_evacuation_capacity,
+                    MAX_EVAC_TIME_S as u32,
+                    placement
+                        .evacuation_time_s
+                        .iter()
+                        .cloned()
+                        .fold(0.0_f64, f64::max)
+                );
                 for (name, ok) in &placement.checks {
                     println!("  [{}] {name}", if *ok { "ok" } else { "FAIL" });
                 }
@@ -1170,6 +1180,16 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                 placement.escape_max_hops,
                 placement.escape_max_path,
                 placement.structure_weight_tons
+            );
+            println!(
+                "IMO evacuation: network {:.0} persons / {} s, max compartment {:.0} s",
+                placement.network_evacuation_capacity,
+                MAX_EVAC_TIME_S as u32,
+                placement
+                    .evacuation_time_s
+                    .iter()
+                    .cloned()
+                    .fold(0.0_f64, f64::max)
             );
             for (name, ok) in &placement.checks {
                 println!("  [{}] {name}", if *ok { "ok" } else { "FAIL" });

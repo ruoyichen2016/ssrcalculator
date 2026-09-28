@@ -37,16 +37,21 @@ pub struct InternalSpaceReport {
 #[derive(Clone, Copy, Debug)]
 pub struct VesselGeometry {
     pub length_m: f64,
+    pub beam_m: f64,
+    pub depth_m: f64,
     pub deck_height_m: f64,
 }
 
 impl VesselGeometry {
     pub fn from_ship(ship: &ShipModel) -> Self {
         let length_m = (ship.hull.length * 0.3048).max(1.0);
-        let depth_ft = (ship.hull.draught + ship.free.free_distributed).max(1.0);
-        let deck_height_m = (depth_ft / DECK_COUNT as f64 * 0.3048).max(0.5);
+        let beam_m = (ship.hull.beam_bulges * 0.3048).max(1.0);
+        let depth_m = ((ship.hull.draught + ship.free.free_distributed) * 0.3048).max(1.0);
+        let deck_height_m = (depth_m / DECK_COUNT as f64).max(0.5);
         VesselGeometry {
             length_m,
+            beam_m,
+            depth_m,
             deck_height_m,
         }
     }
@@ -54,8 +59,12 @@ impl VesselGeometry {
     /// Fallback geometry when only the hull volume is known.
     pub fn from_hull_volume(hull_volume_m3: f64) -> Self {
         let length_m = (2.4 * hull_volume_m3.max(1.0).powf(1.0 / 3.0)).max(1.0);
+        let beam_m = (length_m / 7.0).max(1.0);
+        let depth_m = 12.0;
         VesselGeometry {
             length_m,
+            beam_m,
+            depth_m,
             deck_height_m: 2.5,
         }
     }
@@ -513,8 +522,12 @@ pub struct CompartmentPlacement {
     pub structure_weight_tons: f64,
     /// Persons occupying each compartment (escape sizing).
     pub occupancy: [f64; 6],
-    /// Required edge-disjoint access paths per compartment.
+    /// Required redundant escape routes per compartment.
     pub required_paths: [usize; 6],
+    /// Per-compartment evacuation time (s) from the IMO effective flows.
+    pub evacuation_time_s: [f64; 6],
+    /// Persons the network can move to the trunk within the target time.
+    pub network_evacuation_capacity: f64,
     /// GA generations and fitness evaluations performed.
     pub generations: usize,
     pub evaluations: usize,
@@ -551,18 +564,33 @@ const GA_ADJACENCY: [(usize, usize); 9] = [
 const ACCESS_X: f64 = 0.30;
 /// Escape-route limits from the main access trunk (compartment 0).
 const MAX_ESCAPE_HOPS: usize = 3;
-/// Nominal person-capacity of one major access route (persons).
-const EDGE_CAPACITY_PERSONS: f64 = 250.0;
 /// Fraction of the crew present in each compartment for escape sizing.
 const OCCUPANCY_FRACTION: [f64; N_COMP] = [0.20, 0.04, 1.00, 0.02, 0.02, 0.01];
-/// Hard limits for escape routes measured on the real deck plan.
+/// Hard limit for escape routes measured on the real deck plan.
+/// (Polyline routes via the vertical trunk are longer than straight lines.)
 const MAX_ESCAPE_METERS: f64 = 45.0;
-/// Scantling constants for the structural-weight estimate.
+
+// --- IMO MSC.1/Circ.1533 (simplified evacuation parameters) --------------
+/// Boundary layer at each side of a route (m).
+const IMO_BOUNDARY_LAYER_M: f64 = 0.15;
+/// Maximum specific flow (persons/(m*s)): corridor k=1.4, stair k=1.3 with
+/// a = 0.266 m2/person, i.e. Fs,max = k/(4a).
+const IMO_FS_CORRIDOR: f64 = 1.316;
+const IMO_FS_STAIR: f64 = 1.222;
+/// Nominal clear widths of a schematic access route (m).
+const CORRIDOR_WIDTH_M: f64 = 1.2;
+const STAIR_WIDTH_M: f64 = 1.0;
+/// Target time to move the crew to the trunk / assembly (s).
+pub const MAX_EVAC_TIME_S: f64 = 1800.0;
+
+// --- Classification-style scantling parameters (planning values) ----------
 const STEEL_DENSITY_KG_M3: f64 = 7850.0;
-const DECK_PLATING_M: f64 = 0.006;
-const BULKHEAD_PLATING_M: f64 = 0.008;
-const FRAMING_FACTOR: f64 = 0.35;
+/// Allowable stress, 0.6 * 235 MPa.
+const ALLOWABLE_STRESS_MPA: f64 = 141.0;
+const STIFFENER_SPACING_M: f64 = 0.7;
+const DECK_DESIGN_PRESSURE_KPA: f64 = 12.0;
 const TRANSVERSE_BULKHEADS: f64 = 5.0;
+const DECK_AREA_FACTOR: f64 = 0.85;
 /// Structural-weight proxy: objective weight per 1000 t.
 const STRUCT_WEIGHT_WEIGHT: f64 = 0.01;
 
@@ -622,7 +650,6 @@ struct GaBounds {
     x_hi: [f64; N_COMP],
     allocatable: f64,
     void_min: f64,
-    hull_volume_m3: f64,
     geometry: VesselGeometry,
     /// Persons occupying each compartment (escape sizing).
     occupancy: [f64; N_COMP],
@@ -886,10 +913,22 @@ fn edge_disjoint_paths(edges: &[(usize, usize)], src: usize, dst: usize) -> usiz
 }
 
 /// Real geometric length (m) of an access edge on the deck plan.
-fn edge_escape_len(geom: &VesselGeometry, xa: f64, xb: f64, da: usize, db: usize) -> f64 {
-    let dx = (xa - xb).abs() * geom.length_m;
-    let dz = da.abs_diff(db) as f64 * geom.deck_height_m;
-    (dx * dx + dz * dz).sqrt()
+fn edge_escape_len(
+    geom: &VesselGeometry,
+    xa: f64,
+    xb: f64,
+    da: usize,
+    db: usize,
+    x_trunk: f64,
+) -> f64 {
+    if da == db {
+        // Horizontal corridor run on one deck.
+        (xa - xb).abs() * geom.length_m
+    } else {
+        // Polyline: walk to the vertical trunk, change deck, walk back.
+        ((xa - x_trunk).abs() + (xb - x_trunk).abs()) * geom.length_m
+            + da.abs_diff(db) as f64 * geom.deck_height_m
+    }
 }
 
 /// Shortest escape hops and path length (metres) from the trunk (compartment 0).
@@ -908,7 +947,7 @@ fn escape_arrays(
     lens[0] = 0.0;
     for _ in 0..N_COMP {
         for (a, b) in edges {
-            let w = edge_escape_len(geom, x[*a], x[*b], deck[*a], deck[*b]);
+            let w = edge_escape_len(geom, x[*a], x[*b], deck[*a], deck[*b], x[0]);
             if lens[*a].is_finite() && lens[*a] + w < lens[*b] - 1e-12 {
                 lens[*b] = lens[*a] + w;
                 hops[*b] = hops[*a] + 1;
@@ -922,28 +961,170 @@ fn escape_arrays(
     (hops, lens)
 }
 
-/// Structural-weight estimate (tons) from steel plating, bulkheads and framing.
-///
-/// Deck area and section area are scaled from the hull volume; plating
-/// thicknesses are planning values.  This is a relative estimate for the GA,
-/// not a scantling calculation.
-fn structure_weight_tons(hull_volume_m3: f64, deck: &[usize; N_COMP], x: &[f64; N_COMP]) -> f64 {
-    let v = hull_volume_m3.max(1.0);
-    let a_deck = v.powf(2.0 / 3.0);
-    let a_section = 0.55 * a_deck;
-    let mut used = [false; DECK_COUNT];
-    for d in deck {
-        used[(*d).min(DECK_COUNT - 1)] = true;
+/// Simplified IMO MSC.1/Circ.1533 specific flow for a corridor or stair.
+fn imo_edge_capacity_persons_s(is_stair: bool) -> f64 {
+    let width = if is_stair {
+        STAIR_WIDTH_M
+    } else {
+        CORRIDOR_WIDTH_M
+    };
+    let effective = (width - 2.0 * IMO_BOUNDARY_LAYER_M).max(0.0);
+    let fs = if is_stair {
+        IMO_FS_STAIR
+    } else {
+        IMO_FS_CORRIDOR
+    };
+    effective * fs
+}
+
+/// Per-compartment evacuation time (s) using IMO effective flows.
+fn compartment_evacuation_times(
+    edges: &[(usize, usize)],
+    deck: &[usize; N_COMP],
+    occupancy: &[f64; N_COMP],
+) -> [f64; N_COMP] {
+    let mut capacity = [0.0_f64; N_COMP];
+    for (i, j) in edges {
+        let c = imo_edge_capacity_persons_s(deck[*i] != deck[*j]);
+        capacity[*i] += c;
+        capacity[*j] += c;
     }
-    let levels = used.iter().filter(|b| **b).count().max(1) as f64;
+    let mut times = [f64::INFINITY; N_COMP];
+    times[0] = 0.0; // the trunk is the assembly/refuge point
+    for i in 1..N_COMP {
+        times[i] = if capacity[i] > 1e-9 {
+            occupancy[i] / capacity[i]
+        } else {
+            f64::INFINITY
+        };
+    }
+    times
+}
+
+/// Persons the access network can move to the trunk within `MAX_EVAC_TIME_S`.
+///
+/// Max flow from a super-source (supply = compartment occupancy) to the trunk,
+/// with edge capacities = IMO flow rate * target time.
+fn network_evacuation_capacity(
+    edges: &[(usize, usize)],
+    deck: &[usize; N_COMP],
+    occupancy: &[f64; N_COMP],
+) -> f64 {
+    let n = N_COMP + 1;
+    let source = N_COMP;
+    let mut cap = vec![vec![0.0_f64; n]; n];
+    for (i, j) in edges {
+        let c = imo_edge_capacity_persons_s(deck[*i] != deck[*j]) * MAX_EVAC_TIME_S;
+        cap[*i][*j] += c;
+        cap[*j][*i] += c;
+    }
+    cap[source][1..N_COMP].copy_from_slice(&occupancy[1..N_COMP]);
+    let mut flow = 0.0_f64;
+    loop {
+        let mut parent = vec![usize::MAX; n];
+        let mut seen = vec![false; n];
+        let mut queue = VecDeque::new();
+        seen[source] = true;
+        queue.push_back(source);
+        while let Some(u) = queue.pop_front() {
+            for v in 0..n {
+                if !seen[v] && cap[u][v] > 1e-9 {
+                    seen[v] = true;
+                    parent[v] = u;
+                    queue.push_back(v);
+                }
+            }
+        }
+        if !seen[0] {
+            break;
+        }
+        let mut v = 0;
+        let mut bottleneck = f64::INFINITY;
+        while v != source {
+            let u = parent[v];
+            bottleneck = bottleneck.min(cap[u][v]);
+            v = u;
+        }
+        v = 0;
+        while v != source {
+            let u = parent[v];
+            cap[u][v] -= bottleneck;
+            cap[v][u] += bottleneck;
+            v = u;
+        }
+        flow += bottleneck;
+    }
+    flow
+}
+
+/// Classification-style plate thickness (mm) for a stiffened panel.
+///
+/// `t = s * sqrt(p / (k * sigma))` with k = 3.5, plus the caller's minimum.
+fn panel_thickness_mm(pressure_kpa: f64, spacing_m: f64) -> f64 {
+    let pressure_mpa = pressure_kpa / 1000.0;
+    spacing_m * (pressure_mpa / (3.5 * ALLOWABLE_STRESS_MPA)).sqrt() * 1000.0
+}
+
+/// Required stiffener cross-section (m2) from plate-panel bending.
+///
+/// `Z = p s l^2 / (8 sigma)`, web depth `l/20`, area `Z / (0.85 d)`.
+fn stiffener_area_m2(pressure_kpa: f64, spacing_m: f64, span_m: f64) -> f64 {
+    let pressure_pa = pressure_kpa * 1000.0;
+    let sigma_pa = ALLOWABLE_STRESS_MPA * 1e6;
+    let z = pressure_pa * spacing_m * span_m * span_m / (8.0 * sigma_pa);
+    let web = (span_m / 20.0).clamp(0.15, 0.6);
+    (z / (0.85 * web)).clamp(2e-4, 5e-2)
+}
+
+/// Rule-based structural-weight estimate (tons).
+///
+/// Uses actual deck/section areas (`L x B`, `B x D`) with classification-style
+/// plate-panel and stiffener formulae.  Planning values only: not a scantling
+/// calculation.
+fn structure_weight_tons(geom: &VesselGeometry, deck: &[usize; N_COMP], x: &[f64; N_COMP]) -> f64 {
+    let l = geom.length_m.max(1.0);
+    let b = geom.beam_m.max(1.0);
+    let d = geom.depth_m.max(1.0);
+    let a_deck = DECK_AREA_FACTOR * l * b;
+    let a_bhd = DECK_AREA_FACTOR * b * d;
+    let mut used = [false; DECK_COUNT];
+    for dd in deck {
+        used[(*dd).min(DECK_COUNT - 1)] = true;
+    }
+    let levels = used.iter().filter(|u| **u).count().max(1) as f64;
+    let s = STIFFENER_SPACING_M;
+
+    // Deck plating + stiffeners.
+    let t_deck = (6.0 + 0.02 * l)
+        .max(panel_thickness_mm(DECK_DESIGN_PRESSURE_KPA, s))
+        .clamp(6.0, 24.0);
+    let deck_plate_kg = a_deck * levels * (t_deck / 1000.0) * STEEL_DENSITY_KG_M3;
+    let deck_span = (b / 4.0).clamp(1.5, 6.0);
+    let deck_stiff_kg = (a_deck / s)
+        * levels
+        * stiffener_area_m2(DECK_DESIGN_PRESSURE_KPA, s, deck_span)
+        * STEEL_DENSITY_KG_M3;
+
+    // Transverse bulkheads under flooding head at half depth.
+    let p_bhd = 1.025 * 9.81 * (0.5 * d);
+    let t_bhd = (7.0 + 0.02 * l)
+        .max(panel_thickness_mm(p_bhd, s))
+        .clamp(7.0, 22.0);
+    let bhd_plate_kg = TRANSVERSE_BULKHEADS * a_bhd * (t_bhd / 1000.0) * STEEL_DENSITY_KG_M3;
+    let bhd_span = (d / 2.0).clamp(2.0, 8.0);
+    let bhd_stiff_kg = TRANSVERSE_BULKHEADS
+        * (a_bhd / s)
+        * stiffener_area_m2(p_bhd, s, bhd_span)
+        * STEEL_DENSITY_KG_M3;
+
+    // Two main longitudinal girders per deck level.
+    let girder_kg = 2.0 * l * 0.02 * STEEL_DENSITY_KG_M3 * levels;
+    // Longitudinal-span allowance.
     let span = x.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
         - x.iter().cloned().fold(f64::INFINITY, f64::min);
-    // Plating + framing + a small longitudinal-span allowance.
-    let deck_kg = a_deck * levels * DECK_PLATING_M * STEEL_DENSITY_KG_M3;
-    let bulkhead_kg = TRANSVERSE_BULKHEADS * a_section * BULKHEAD_PLATING_M * STEEL_DENSITY_KG_M3;
-    let framing_kg = FRAMING_FACTOR * (deck_kg + bulkhead_kg);
-    let span_kg = a_deck * span.clamp(0.0, 1.0) * 10.0;
-    (deck_kg + bulkhead_kg + framing_kg + span_kg) / 1000.0
+    let span_kg = a_deck * span.clamp(0.0, 1.0) * 5.0 * levels;
+
+    (deck_plate_kg + deck_stiff_kg + bhd_plate_kg + bhd_stiff_kg + girder_kg + span_kg) / 1000.0
 }
 
 fn repair_access(
@@ -1013,23 +1194,39 @@ fn ga_objective(ind: &GaIndividual, b: &GaBounds, target_cg: f64, armament: f64)
     if reachable.len() == N_COMP {
         f += 0.5 * (5_usize.saturating_sub(edges.len())) as f64;
     }
-    // Person-based passage capacity: edge-disjoint paths to the trunk.
+    // Redundant escape routes (edge-disjoint paths to the trunk).
     for i in 1..N_COMP {
         let paths = edge_disjoint_paths(&edges, i, 0);
         f += 2.0 * b.required_paths[i].saturating_sub(paths) as f64;
     }
-    // Escape distance measured on the real deck plan.
+    // IMO evacuation times (compartment and whole-network).
+    let times = compartment_evacuation_times(&edges, &ind.deck, &b.occupancy);
+    for time in times.iter() {
+        if !time.is_finite() {
+            f += 3.0;
+        } else if *time > MAX_EVAC_TIME_S {
+            f += 3.0 * (*time - MAX_EVAC_TIME_S) / MAX_EVAC_TIME_S;
+        }
+    }
+    let total_occupancy: f64 = b.occupancy[1..].iter().sum();
+    if total_occupancy > 1e-9 {
+        let network = network_evacuation_capacity(&edges, &ind.deck, &b.occupancy);
+        if network < total_occupancy {
+            f += 5.0 * (total_occupancy - network) / total_occupancy;
+        }
+    }
+    // Escape distance on the real deck plan (polyline via the trunk).
     let (hops, lens) = escape_arrays(&edges, x, &ind.deck, &b.geometry);
     for i in 1..N_COMP {
         if hops[i] == usize::MAX || hops[i] > MAX_ESCAPE_HOPS {
             f += 1.5;
         }
         if lens[i] > MAX_ESCAPE_METERS {
-            f += 1.0;
+            f += 1.0 * (lens[i] - MAX_ESCAPE_METERS) / MAX_ESCAPE_METERS;
         }
     }
-    // Structural-weight linkage (plating + bulkheads + framing).
-    f += STRUCT_WEIGHT_WEIGHT * structure_weight_tons(b.hull_volume_m3, &ind.deck, x) / 1000.0;
+    // Rule-based structural-weight linkage (plating + stiffeners + bulkheads).
+    f += STRUCT_WEIGHT_WEIGHT * structure_weight_tons(&b.geometry, &ind.deck, x) / 1000.0;
     f
 }
 
@@ -1101,6 +1298,9 @@ fn placement_checks(
     let connected = reachable.len() == N_COMP;
     let (hops, lens) = escape_arrays(&edges, x, deck, &b.geometry);
     let capacity_ok = (1..N_COMP).all(|i| edge_disjoint_paths(&edges, i, 0) >= b.required_paths[i]);
+    let comp_times = compartment_evacuation_times(&edges, deck, &b.occupancy);
+    let total_occupancy: f64 = b.occupancy[1..].iter().sum();
+    let network_capacity = network_evacuation_capacity(&edges, deck, &b.occupancy);
     vec![
         (
             "Accommodation above magazines".to_string(),
@@ -1142,7 +1342,17 @@ fn placement_checks(
                 .iter()
                 .all(|(i, j)| deck[*i].abs_diff(deck[*j]) <= 1),
         ),
-        ("Person-capacity access paths".to_string(), capacity_ok),
+        ("Redundant escape routes".to_string(), capacity_ok),
+        (
+            "Compartment evacuation <= 1800 s (IMO)".to_string(),
+            comp_times
+                .iter()
+                .all(|t| t.is_finite() && *t <= MAX_EVAC_TIME_S + 1e-6),
+        ),
+        (
+            "Network evacuates crew <= 1800 s (IMO)".to_string(),
+            total_occupancy <= 1e-9 || network_capacity + 1e-6 >= total_occupancy,
+        ),
         (
             "Escape hops <= 3".to_string(),
             hops.iter()
@@ -1181,6 +1391,8 @@ fn build_placement(
     let edges = access_edges(&x, &ind.deck);
     let reachable = access_reachable(&edges);
     let (hops, lens) = escape_arrays(&edges, &x, &ind.deck, &b.geometry);
+    let evacuation_time_s = compartment_evacuation_times(&edges, &ind.deck, &b.occupancy);
+    let network_evacuation_capacity = network_evacuation_capacity(&edges, &ind.deck, &b.occupancy);
     let escape_max_hops = hops
         .iter()
         .copied()
@@ -1201,9 +1413,11 @@ fn build_placement(
         access_connected: reachable.len() == N_COMP,
         escape_max_hops,
         escape_max_path,
-        structure_weight_tons: structure_weight_tons(b.hull_volume_m3, &ind.deck, &x),
+        structure_weight_tons: structure_weight_tons(&b.geometry, &ind.deck, &x),
         occupancy: b.occupancy,
         required_paths: b.required_paths,
+        evacuation_time_s,
+        network_evacuation_capacity,
         objective: ga_objective(ind, b, target_cg, armament),
         generations,
         evaluations,
@@ -1235,17 +1449,16 @@ fn ga_bounds(
     v_lo[5] = v_lo[5].max(void_min);
     v_hi[5] = v_hi[5].max(v_lo[5] + 1e-9);
 
-    // Person-based capacity: crew derived from the accommodation volume.
+    // Crew occupancy drives the IMO evacuation analysis; separate redundancy
+    // requirements ensure independent escape routes.
     let crew = if report.crew_volume_per_person > 0.0 {
         report.accommodation_volume_m3 / report.crew_volume_per_person
     } else {
         0.0
     };
     let occupancy = OCCUPANCY_FRACTION.map(|f| (crew * f).max(0.0));
-    let mut required_paths =
-        occupancy.map(|o| ((o / EDGE_CAPACITY_PERSONS).ceil() as usize).clamp(1, N_COMP - 1));
-    // Accommodation must always have two independent escape routes.
-    required_paths[2] = required_paths[2].max(2);
+    let mut required_paths = [1_usize; N_COMP];
+    required_paths[2] = 2; // independent escape routes for accommodation
 
     GaBounds {
         v_lo,
@@ -1254,7 +1467,6 @@ fn ga_bounds(
         x_hi: [0.95; N_COMP],
         allocatable,
         void_min,
-        hull_volume_m3: report.hull_volume_m3,
         geometry,
         occupancy,
         required_paths,
@@ -1429,13 +1641,18 @@ pub fn compartment_placement_json(placement: &CompartmentPlacement) -> String {
         .iter()
         .map(|r| r.to_string())
         .collect();
+    let evacuation_time: Vec<String> = placement
+        .evacuation_time_s
+        .iter()
+        .map(|t| format!("{t:.1}"))
+        .collect();
     let checks: Vec<String> = placement
         .checks
         .iter()
         .map(|(name, ok)| format!("{{\"name\":\"{}\",\"ok\":{}}}", esc(name), ok))
         .collect();
     format!(
-        "{{\n  \"cg_vertical\": {:.4},\n  \"cg_longitudinal\": {:.4},\n  \"objective\": {:.4},\n  \"generations\": {},\n  \"evaluations\": {},\n  \"magazine_longitudinal\": {:.4},\n  \"machinery_longitudinal\": {:.4},\n  \"centers\": [{}],\n  \"decks\": [{}],\n  \"longitudinal\": [{}],\n  \"access_edges\": {},\n  \"access_connected\": {},\n  \"escape_max_hops\": {},\n  \"escape_max_path\": {:.4},\n  \"structure_weight_tons\": {:.1},\n  \"occupancy\": [{}],\n  \"required_paths\": [{}],\n  \"volumes\": {{\"machinery\": {:.1}, \"magazine\": {:.1}, \"accommodation\": {:.1}, \"fuel\": {:.1}, \"stores\": {:.1}, \"void\": {:.1}, \"unallocated\": {:.1}}},\n  \"checks\": [{}]\n}}",
+        "{{\n  \"cg_vertical\": {:.4},\n  \"cg_longitudinal\": {:.4},\n  \"objective\": {:.4},\n  \"generations\": {},\n  \"evaluations\": {},\n  \"magazine_longitudinal\": {:.4},\n  \"machinery_longitudinal\": {:.4},\n  \"centers\": [{}],\n  \"decks\": [{}],\n  \"longitudinal\": [{}],\n  \"access_edges\": {},\n  \"access_connected\": {},\n  \"escape_max_hops\": {},\n  \"escape_max_path\": {:.4},\n  \"structure_weight_tons\": {:.1},\n  \"occupancy\": [{}],\n  \"required_paths\": [{}],\n  \"evacuation_time_s\": [{}],\n  \"network_evacuation_capacity\": {:.1},\n  \"volumes\": {{\"machinery\": {:.1}, \"magazine\": {:.1}, \"accommodation\": {:.1}, \"fuel\": {:.1}, \"stores\": {:.1}, \"void\": {:.1}, \"unallocated\": {:.1}}},\n  \"checks\": [{}]\n}}",
         placement.cg_vertical,
         placement.cg_longitudinal,
         placement.objective,
@@ -1453,6 +1670,8 @@ pub fn compartment_placement_json(placement: &CompartmentPlacement) -> String {
         placement.structure_weight_tons,
         occupancy.join(", "),
         required_paths.join(", "),
+        evacuation_time.join(", "),
+        placement.network_evacuation_capacity,
         l.machinery,
         l.magazine,
         l.accommodation,
@@ -1550,8 +1769,15 @@ pub fn compartment_placement_html(ship: &ShipModel, placement: &CompartmentPlace
         placement.structure_weight_tons
     ));
     html.push_str(&format!(
-        "<p>Escape capacity: {} persons; required paths {:?}</p>",
+        "<p>IMO evacuation: {} persons; network capacity {:.0} persons / {} s; max compartment time {:.0} s; required routes {:?}</p>",
         placement.occupancy.iter().sum::<f64>(),
+        placement.network_evacuation_capacity,
+        MAX_EVAC_TIME_S as u32,
+        placement
+            .evacuation_time_s
+            .iter()
+            .cloned()
+            .fold(0.0_f64, f64::max),
         placement.required_paths
     ));
     html.push_str("<h2>Constraint checks</h2><ul>");
@@ -1629,6 +1855,8 @@ mod tests {
     fn test_geometry() -> VesselGeometry {
         VesselGeometry {
             length_m: 180.0,
+            beam_m: 24.0,
+            depth_m: 12.0,
             deck_height_m: 3.0,
         }
     }
@@ -1743,6 +1971,19 @@ mod tests {
         assert!(p.escape_max_hops <= MAX_ESCAPE_HOPS);
         assert!(p.escape_max_path <= MAX_ESCAPE_METERS + 1e-9);
         assert!(p.structure_weight_tons.is_finite() && p.structure_weight_tons > 0.0);
+        assert!(p
+            .evacuation_time_s
+            .iter()
+            .all(|t| t.is_finite() && *t <= MAX_EVAC_TIME_S + 1e-6));
+        assert!(p.network_evacuation_capacity.is_finite());
+        assert!(p
+            .checks
+            .iter()
+            .any(|(n, _)| n == "Compartment evacuation <= 1800 s (IMO)"));
+        assert!(p
+            .checks
+            .iter()
+            .any(|(n, _)| n == "Network evacuates crew <= 1800 s (IMO)"));
         assert!(p.occupancy.iter().all(|o| *o >= 0.0 && o.is_finite()));
         assert!(p.required_paths.iter().all(|r| *r >= 1));
         assert!(
@@ -1750,10 +1991,7 @@ mod tests {
             "accommodation needs two independent escape routes"
         );
         assert!(p.checks.iter().any(|(n, _)| n == "Escape hops <= 3"));
-        assert!(p
-            .checks
-            .iter()
-            .any(|(n, _)| n == "Person-capacity access paths"));
+        assert!(p.checks.iter().any(|(n, _)| n == "Redundant escape routes"));
         for (name, ok) in &p.checks {
             assert!(*ok, "constraint failed: {name}");
         }
@@ -1799,6 +2037,8 @@ mod tests {
         assert!(json.contains("\"structure_weight_tons\""));
         assert!(json.contains("\"occupancy\""));
         assert!(json.contains("\"required_paths\""));
+        assert!(json.contains("\"evacuation_time_s\""));
+        assert!(json.contains("\"network_evacuation_capacity\""));
         assert!(json.ends_with('}'));
         let html = compartment_placement_html(&ship, &placement);
         assert!(html.contains("General arrangement"));

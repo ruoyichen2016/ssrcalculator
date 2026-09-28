@@ -100,6 +100,21 @@
 - Three new constraint checks (13 total); deterministic fallback arrangement is
   guaranteed feasible for all of them
 
+## Phase 9 — IMO evacuation, corridor polylines, rule-based scantlings (completed 2026-09-27)
+
+- Evacuation capacity now follows a simplified IMO MSC.1/Circ.1533 model:
+  boundary layer 0.15 m per side, maximum specific flow 1.316 (corridor) /
+  1.222 (stair) persons/(m*s), per-compartment evacuation times from crew
+  occupancy, and a network max-flow check that the crew reaches the trunk
+  within 1800 s
+- Escape distance uses real corridor **polylines**: cross-deck routes walk to
+  the vertical trunk, change deck and walk back; limit 3 hops / 45 m
+- Structural weight replaced by a **classification-style** estimate: actual
+  deck/section areas, plate thickness `t = s*sqrt(p/(3.5*sigma))`,
+  sigma = 0.6*235 MPa, stiffener area from `Z = p*s*l^2/(8*sigma)`, bulkheads
+  under the flooding head, plus main girders
+- 15 constraint checks total; tests cover IMO times, escape metres, rule weights
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model
@@ -125,7 +140,7 @@
   citation + URL + verifier (needed to pass `data-target`); currently unavailable
 - Replace the analytic CFD placeholder with real measured CFD (>20 samples)
 - Add more cruiser/battleship literature points to reduce the regime weights
-- Replace the structural-weight proxy with scantling-based estimates and dimensioned trunks/hatches
+- Replace planning scantlings with full class-rule scantling software and dimensioned trunks/hatches
 
 ### P2/P3
 
