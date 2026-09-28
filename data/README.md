@@ -4,7 +4,7 @@
 
 - Location: `src/accuracy.rs` (`historical_cases`)
 - Purpose: validation and calibration of the Rust SpringSharp engine.
-- Current size: 37 cases (battleships, carriers, cruisers, destroyers).
+- Current size: 52 cases (battleships, carriers, cruisers, destroyers).
 - Provenance: every case carries `Provenance { source_type,
   displacement_type, confidence, source, source_url, verifier,
   verification_date }`.
@@ -25,7 +25,7 @@ A case is **traceable** only when `source`, `source_url` and `verifier` are all
 present.  Traceable + verified are the two provenance inputs to the composite
 quality gate.
 
-Current status: **0/37 independently verified, 0/37 traceable** — all cases are
+Current status: **0/52 independently verified, 0/52 traceable** — all cases are
 `SourceType::PublicReference` with declared displacement type `Normal`
 (Conway's/Jane's/class-trial summaries; displacement and power are approximate).
 `data-target` therefore fails honestly; this is expected until official trial or

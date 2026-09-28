@@ -18,6 +18,7 @@ pub mod model;
 pub mod planing;
 pub mod regime;
 pub mod resistance;
+pub mod savitsky;
 pub mod spaces;
 pub mod web;
 
@@ -30,5 +31,6 @@ pub use model::*;
 pub use planing::*;
 pub use regime::*;
 pub use resistance::*;
+pub use savitsky::*;
 pub use spaces::*;
 pub use web::*;

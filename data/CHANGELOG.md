@@ -1,5 +1,17 @@
 # Data changelog
 
+## built-in-v1.7 (2026-09-27) — 15 literature carrier cases
+
+- Added 15 carrier cases (Lexington, Saratoga, Ranger, Wasp, Akagi, Kaga,
+  Soryu, Hiryu, Ark Royal, Victorious, Graf Zeppelin, Taiho, Unryu, Casablanca,
+  Commencement Bay), all `SourceType::PublicReference`.
+- Carrier nested LOOCV improved from 13.13% to 10.94%; overall regime nested
+  LOOCV moved from 8.66% to 9.06% because carriers are now weighted 21/52.
+- Fn-segmented per-type factors were tested and rejected (worse than a single
+  per-type factor for carrier and overall).
+- Status remains: **0/52 independently verified, 0/52 traceable**.
+
+
 ## built-in-v1.6 (2026-09-27) — provenance schema + composite quality gate
 
 - `Provenance` now carries `displacement_type`, `source_url` and `verifier`.

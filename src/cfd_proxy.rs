@@ -40,17 +40,56 @@ pub fn cfd_froude_number(speed_kt: f64, length_ft: f64) -> f64 {
     v / (9.80665 * l).sqrt()
 }
 
+/// Where a CFD surrogate sample came from.  Only measured CFD (or an official
+/// model-test surrogate) counts as evidence.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum CfdProvenance {
+    MeasuredCfd,
+    Literature,
+    Analytic,
+    #[default]
+    Synthetic,
+}
+
+impl CfdProvenance {
+    pub const fn label(self) -> &'static str {
+        match self {
+            CfdProvenance::MeasuredCfd => "measured_cfd",
+            CfdProvenance::Literature => "literature",
+            CfdProvenance::Analytic => "analytic",
+            CfdProvenance::Synthetic => "synthetic",
+        }
+    }
+
+    pub const fn is_measured_cfd(self) -> bool {
+        matches!(self, CfdProvenance::MeasuredCfd)
+    }
+
+    pub fn parse(token: &str) -> Result<Self, String> {
+        match token.trim().to_ascii_lowercase().as_str() {
+            "measured_cfd" | "cfd" | "measured" => Ok(CfdProvenance::MeasuredCfd),
+            "literature" | "model_test" | "modeltest" => Ok(CfdProvenance::Literature),
+            "analytic" | "analysis" => Ok(CfdProvenance::Analytic),
+            "synthetic" | "placeholder" | "synthetic_placeholder" => Ok(CfdProvenance::Synthetic),
+            other => Err(format!("unknown CFD provenance '{other}'")),
+        }
+    }
+}
+
 /// One CFD/empirical comparison sample.
 #[derive(Clone, Copy, Debug)]
 pub struct CfdSample {
     pub fn_: f64,
     pub empirical_hp: f64,
     pub cfd_hp: f64,
+    pub provenance: CfdProvenance,
 }
 
 /// Parse a simple CSV of CFD samples.
 ///
-/// Expected columns: `fn,empirical_hp,cfd_hp`
+/// Columns: `fn,empirical_hp,cfd_hp[,provenance]`.  A 3-column row is treated
+/// as `synthetic` (conservative).  Provenance tokens: `measured_cfd`,
+/// `literature`, `analytic`, `synthetic`.
 pub fn parse_cfd_samples(text: &str) -> Result<Vec<CfdSample>, String> {
     let mut out = Vec::new();
     for (line_no, raw) in text.lines().enumerate() {
@@ -59,9 +98,9 @@ pub fn parse_cfd_samples(text: &str) -> Result<Vec<CfdSample>, String> {
             continue;
         }
         let cols: Vec<&str> = line.split(',').map(str::trim).collect();
-        if cols.len() != 3 {
+        if cols.len() != 3 && cols.len() != 4 {
             return Err(format!(
-                "line {}: expected 3 columns, got {}",
+                "line {}: expected 3 or 4 columns, got {}",
                 line_no + 1,
                 cols.len()
             ));
@@ -71,10 +110,16 @@ pub fn parse_cfd_samples(text: &str) -> Result<Vec<CfdSample>, String> {
                 .parse::<f64>()
                 .map_err(|e| format!("line {}: {label} invalid: {e}", line_no + 1))
         };
+        let provenance = if cols.len() == 4 {
+            CfdProvenance::parse(cols[3]).map_err(|e| format!("line {}: {e}", line_no + 1))?
+        } else {
+            CfdProvenance::Synthetic
+        };
         out.push(CfdSample {
             fn_: parse(0, "fn")?,
             empirical_hp: parse(1, "empirical_hp")?,
             cfd_hp: parse(2, "cfd_hp")?,
+            provenance,
         });
     }
     Ok(out)
@@ -133,31 +178,51 @@ pub const CFD_MIN_USABLE_SAMPLES: usize = 20;
 #[derive(Clone, Debug)]
 pub struct CfdStatus {
     pub samples: usize,
+    pub measured_cfd: usize,
+    pub literature: usize,
+    pub analytic: usize,
+    pub synthetic: usize,
     pub min_samples: usize,
-    pub usable: bool,
+    /// True only when there are enough *measured* CFD samples.
+    pub usable_for_evidence: bool,
     pub message: String,
 }
 
 pub fn cfd_status(samples: &[CfdSample]) -> CfdStatus {
-    let usable = samples.len() >= CFD_MIN_USABLE_SAMPLES;
+    let mut measured = 0;
+    let mut literature = 0;
+    let mut analytic = 0;
+    let mut synthetic = 0;
+    for s in samples {
+        match s.provenance {
+            CfdProvenance::MeasuredCfd => measured += 1,
+            CfdProvenance::Literature => literature += 1,
+            CfdProvenance::Analytic => analytic += 1,
+            CfdProvenance::Synthetic => synthetic += 1,
+        }
+    }
+    let usable = measured >= CFD_MIN_USABLE_SAMPLES;
     let message = if usable {
         format!(
-            "{} samples (>= {} minimum): surrogate may be used as evidence.",
-            samples.len(),
+            "{measured} measured CFD samples (>= {} minimum): surrogate may be used as evidence.",
             CFD_MIN_USABLE_SAMPLES
         )
     } else {
         format!(
-            "{} samples (< {} minimum): pipeline placeholder, NOT evidence. \
-The bundled data/examples/cfd_samples.csv is synthetic (constant empirical_hp).",
-            samples.len(),
+            "{measured} measured CFD sample(s) (< {} minimum): NOT evidence. \
+Other rows: literature={literature}, analytic={analytic}, synthetic={synthetic}. \
+Add real CFD data with provenance `measured_cfd` to enable `cfd-apply`.",
             CFD_MIN_USABLE_SAMPLES
         )
     };
     CfdStatus {
         samples: samples.len(),
+        measured_cfd: measured,
+        literature,
+        analytic,
+        synthetic,
         min_samples: CFD_MIN_USABLE_SAMPLES,
-        usable,
+        usable_for_evidence: usable,
         message,
     }
 }
@@ -505,6 +570,7 @@ mod tests {
                     fn_,
                     empirical_hp: 1000.0,
                     cfd_hp: 1000.0 * ratio,
+                    provenance: CfdProvenance::Synthetic,
                 }
             })
             .collect();
@@ -526,6 +592,7 @@ mod tests {
                     fn_,
                     empirical_hp: 1000.0,
                     cfd_hp: 1000.0 * ratio,
+                    provenance: CfdProvenance::Synthetic,
                 }
             })
             .collect();
@@ -545,6 +612,7 @@ mod tests {
                     fn_,
                     empirical_hp: 1000.0,
                     cfd_hp: 1000.0 * ratio,
+                    provenance: CfdProvenance::Synthetic,
                 }
             })
             .collect();
@@ -565,6 +633,7 @@ mod tests {
                     fn_,
                     empirical_hp: 1000.0,
                     cfd_hp: 1000.0 * ratio,
+                    provenance: CfdProvenance::Synthetic,
                 }
             })
             .collect();
@@ -585,6 +654,7 @@ mod tests {
                     fn_,
                     empirical_hp: 1000.0,
                     cfd_hp: 1000.0 * ratio,
+                    provenance: CfdProvenance::Synthetic,
                 }
             })
             .collect();
@@ -605,6 +675,7 @@ mod tests {
                     fn_,
                     empirical_hp: 1000.0,
                     cfd_hp: 1000.0 * ratio,
+                    provenance: CfdProvenance::Synthetic,
                 }
             })
             .collect();
@@ -633,6 +704,7 @@ mod tests {
                     fn_,
                     empirical_hp: 1000.0,
                     cfd_hp: 1000.0 * ratio,
+                    provenance: CfdProvenance::Synthetic,
                 }
             })
             .collect();
@@ -649,16 +721,19 @@ mod tests {
                 fn_: 0.24,
                 empirical_hp: 1000.0,
                 cfd_hp: 980.0,
+                provenance: CfdProvenance::Synthetic,
             },
             CfdSample {
                 fn_: 0.28,
                 empirical_hp: 1000.0,
                 cfd_hp: 1050.0,
+                provenance: CfdProvenance::Synthetic,
             },
             CfdSample {
                 fn_: 0.32,
                 empirical_hp: 1000.0,
                 cfd_hp: 1140.0,
+                provenance: CfdProvenance::Synthetic,
             },
         ];
         let html = cfd_report_html(&samples);
@@ -684,5 +759,40 @@ mod tests {
         let f = c.correction_factor(0.35);
         assert!(f > 1.0);
         assert!(c.apply(1000.0, 0.35) > 1000.0);
+    }
+    #[test]
+    fn provenance_and_status_are_honest() {
+        let csv = "# fn,empirical_hp,cfd_hp,provenance\n\
+0.5,1000,900,synthetic\n\
+0.6,1000,950,analytic\n\
+0.7,1000,1100,literature\n\
+0.8,1000,1050,measured_cfd\n";
+        let s = parse_cfd_samples(csv).unwrap();
+        assert_eq!(s.len(), 4);
+        let st = cfd_status(&s);
+        assert_eq!(st.measured_cfd, 1);
+        assert_eq!(st.synthetic, 1);
+        assert_eq!(st.analytic, 1);
+        assert_eq!(st.literature, 1);
+        assert!(!st.usable_for_evidence);
+
+        // 3-column rows default to synthetic (conservative).
+        let s2 = parse_cfd_samples("0.5,1000,900\n").unwrap();
+        assert_eq!(s2[0].provenance, CfdProvenance::Synthetic);
+        assert!(CfdProvenance::parse("measured").unwrap().is_measured_cfd());
+        assert!(CfdProvenance::parse("bogus").is_err());
+    }
+
+    #[test]
+    fn analytic_reference_dataset_is_not_evidence() {
+        let text = std::fs::read_to_string("data/examples/cfd_reference.csv").unwrap();
+        let samples = parse_cfd_samples(&text).unwrap();
+        assert!(samples.len() >= 20);
+        assert!(samples
+            .iter()
+            .all(|s| s.provenance == CfdProvenance::Analytic));
+        let st = cfd_status(&samples);
+        assert_eq!(st.measured_cfd, 0);
+        assert!(!st.usable_for_evidence);
     }
 }

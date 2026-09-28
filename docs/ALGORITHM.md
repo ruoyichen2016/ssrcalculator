@@ -57,9 +57,9 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
   historical dataset (battleship 0.763, carrier 0.783, cruiser 0.925, destroyer 1.058)
 - The original SpringSharp empirical model is retained as a comparison baseline
 - Validated by **nested** LOOCV: the factor is re-fitted on each training split
-  - regime (Holtrop + factor): 8.66%
-  - original + factor: 10.57%
-  - Holtrop uncalibrated: 19.42%
+  - regime (Holtrop + factor): 9.06% (52 cases)
+  - original + factor: 11.53%
+  - Holtrop uncalibrated: 22.24%
 - Applied to a design via `calibrate-regime` (sets `resistance_model` + `power_factor`)
 
 ## Internal Space Model
@@ -81,9 +81,27 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 - Web console with design form
 - External CSV validation / calibration in Web console
 
+## Planing / Savitsky
+
+- Savitsky (1964) planing equilibrium: lift coefficient balance, centre of
+  pressure, drag with ITTC-1957 friction and a propulsive coefficient
+- `savitsky-hp` command for direct estimates; `planing-validate` compares it
+  against the empirical planing model on the public planing cases
+- Current result: calibrated Savitsky and empirical tie at 23.3% MAPE on 8
+  public PT-boat/MTB/S-boat cases; empirical stays the default
+
+## CFD surrogate provenance
+
+- `cfd_samples.csv` columns: `fn,empirical_hp,cfd_hp[,provenance]`
+- Provenance tiers: `measured_cfd`, `literature`, `analytic`, `synthetic`
+- Only >= 20 `measured_cfd` samples count as evidence; `cfd-status` reports the
+  mix and `cfd-apply` refuses otherwise (unless `force`)
+- `data/examples/cfd_reference.csv` provides 30 `analytic` rows to exercise the
+  pipeline without claiming measured CFD
+
 ## Validation
 
-- 37 built-in historical cases, all currently `SourceType::PublicReference`
+- 52 built-in historical cases, all currently `SourceType::PublicReference`
 - Explicit `Provenance { source_type, displacement_type, confidence, source,
   source_url, verifier, verification_date }` per case
 - Verified = official trial / model test only; traceable = citation + URL + verifier
@@ -94,4 +112,4 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 - Nested-LOOCV regime accuracy (`validate-regime`, `accuracy-target`) is the primary metric;
   in-sample fits are diagnostic only
 - `tests/accuracy_regression.rs` freezes overall/per-type LOOCV and holdout baselines
-- 83 unit tests + 7 accuracy-regression integration tests
+- 90 unit tests + 7 accuracy-regression integration tests

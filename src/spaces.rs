@@ -461,9 +461,14 @@ fn objective(volumes: &[f64; 6], centers: &[f64; 6], allocatable: f64, target_cg
 pub struct CompartmentPlacement {
     pub layout: CompartmentLayout,
     pub cg_vertical: f64,
+    pub cg_longitudinal: f64,
     pub magazine_longitudinal: f64,
     pub machinery_longitudinal: f64,
     pub centers: [f64; 6],
+    /// Longitudinal position of each compartment (fraction of length from stern).
+    pub longitudinal: [f64; 6],
+    /// Combined objective value of the constraint optimizer (lower is better).
+    pub objective: f64,
     pub checks: Vec<(String, bool)>,
 }
 
@@ -497,6 +502,45 @@ pub fn suggest_compartment_placement(ship: &ShipModel, target_cg: f64) -> Compar
     let continuity_ok = adjacency
         .iter()
         .all(|(i, j)| (centers[*i] - centers[*j]).abs() <= 0.26);
+
+    // --- Longitudinal placement (multi-constraint coordinate descent) ---
+    let vols = [
+        layout.machinery,
+        layout.magazine,
+        layout.accommodation,
+        layout.fuel,
+        layout.stores,
+        layout.void,
+    ];
+    let targets = [0.50, magazine_longitudinal, 0.58, 0.50, 0.58, 0.45];
+    let weights = [1.0, 2.5, 1.0, 0.5, 0.5, 0.4];
+    let mut x = targets;
+    let mut step = 0.08_f64;
+    let mut objective = longitudinal_objective(&x, &targets, &weights, magazine_longitudinal);
+    for _ in 0..120 {
+        for i in 0..6 {
+            for delta in [step, -step] {
+                let mut trial = x;
+                trial[i] = (trial[i] + delta).clamp(0.05, 0.95);
+                let value =
+                    longitudinal_objective(&trial, &targets, &weights, magazine_longitudinal);
+                if value < objective {
+                    x = trial;
+                    objective = value;
+                }
+            }
+        }
+        step *= 0.97;
+    }
+    let total_v: f64 = vols.iter().sum::<f64>().max(1e-9);
+    let cg_longitudinal = x
+        .iter()
+        .zip(vols.iter())
+        .map(|(xi, vi)| xi * vi)
+        .sum::<f64>()
+        / total_v;
+
+    let longitudinal_continuity_ok = adjacency.iter().all(|(i, j)| (x[*i] - x[*j]).abs() <= 0.40);
     let checks = vec![
         (
             "Accommodation above magazines".to_string(),
@@ -510,16 +554,62 @@ pub fn suggest_compartment_placement(ship: &ShipModel, target_cg: f64) -> Compar
             "Maintenance void >= 2% hull volume".to_string(),
             layout.void >= 0.02 * report.hull_volume_m3 - 1e-6,
         ),
-        ("Structural continuity".to_string(), continuity_ok),
+        (
+            "Structural continuity (vertical)".to_string(),
+            continuity_ok,
+        ),
+        (
+            "Magazine within +/-0.15 L of armament".to_string(),
+            (x[1] - magazine_longitudinal).abs() <= 0.15 + 1e-9,
+        ),
+        (
+            "Machinery within +/-0.20 L of amidships".to_string(),
+            (x[0] - 0.50).abs() <= 0.20 + 1e-9,
+        ),
+        (
+            "Structural continuity (longitudinal)".to_string(),
+            longitudinal_continuity_ok,
+        ),
     ];
     CompartmentPlacement {
         layout,
         cg_vertical: cg,
-        magazine_longitudinal,
-        machinery_longitudinal: 0.5,
+        cg_longitudinal,
+        magazine_longitudinal: x[1],
+        machinery_longitudinal: x[0],
         centers,
+        longitudinal: x,
+        objective,
         checks,
     }
+}
+
+/// Penalised longitudinal-placement objective.
+fn longitudinal_objective(
+    x: &[f64; 6],
+    targets: &[f64; 6],
+    weights: &[f64; 6],
+    armament: f64,
+) -> f64 {
+    let mut value = 0.0;
+    for i in 0..6 {
+        value += weights[i] * (x[i] - targets[i]).abs();
+    }
+    // Functional bounds and ordering constraints as penalties.
+    if (x[1] - armament).abs() > 0.15 {
+        value += 5.0 * ((x[1] - armament).abs() - 0.15);
+    }
+    if (x[0] - 0.50).abs() > 0.20 {
+        value += 5.0 * ((x[0] - 0.50).abs() - 0.20);
+    }
+    // Magazine forward of (larger x than) fuel and machinery, access-friendly.
+    if x[1] < x[3] {
+        value += 2.0 * (x[3] - x[1]);
+    }
+    if x[2] < x[1] {
+        value += 1.0 * (x[1] - x[2]);
+    }
+    value
 }
 
 /// Machine-readable general-arrangement summary (hand-rolled JSON, no deps).
@@ -539,11 +629,19 @@ pub fn compartment_placement_json(placement: &CompartmentPlacement) -> String {
         .map(|(name, ok)| format!("{{\"name\":\"{}\",\"ok\":{}}}", esc(name), ok))
         .collect();
     format!(
-        "{{\n  \"cg_vertical\": {:.4},\n  \"magazine_longitudinal\": {:.4},\n  \"machinery_longitudinal\": {:.4},\n  \"centers\": [{}],\n  \"volumes\": {{\"machinery\": {:.1}, \"magazine\": {:.1}, \"accommodation\": {:.1}, \"fuel\": {:.1}, \"stores\": {:.1}, \"void\": {:.1}, \"unallocated\": {:.1}}},\n  \"checks\": [{}]\n}}",
+        "{{\n  \"cg_vertical\": {:.4},\n  \"cg_longitudinal\": {:.4},\n  \"objective\": {:.4},\n  \"magazine_longitudinal\": {:.4},\n  \"machinery_longitudinal\": {:.4},\n  \"centers\": [{}],\n  \"longitudinal\": [{}],\n  \"volumes\": {{\"machinery\": {:.1}, \"magazine\": {:.1}, \"accommodation\": {:.1}, \"fuel\": {:.1}, \"stores\": {:.1}, \"void\": {:.1}, \"unallocated\": {:.1}}},\n  \"checks\": [{}]\n}}",
         placement.cg_vertical,
+        placement.cg_longitudinal,
+        placement.objective,
         placement.magazine_longitudinal,
         placement.machinery_longitudinal,
         centers.join(", "),
+        placement
+            .longitudinal
+            .iter()
+            .map(|x| format!("{x:.4}"))
+            .collect::<Vec<_>>()
+            .join(", "),
         l.machinery,
         l.magazine,
         l.accommodation,
@@ -581,8 +679,9 @@ pub fn compartment_placement_html(ship: &ShipModel, placement: &CompartmentPlace
     }
     html.push_str("</table>");
     html.push_str(&format!(
-        "<p>Achieved vertical CG ratio: <b>{:.3}</b><br>Magazine longitudinal: {:.3} L<br>Machinery longitudinal: {:.3} L</p>",
-        placement.cg_vertical, placement.magazine_longitudinal, placement.machinery_longitudinal
+        "<p>Achieved vertical CG ratio: <b>{:.3}</b><br>Longitudinal CG: {:.3} L<br>Magazine longitudinal: {:.3} L<br>Machinery longitudinal: {:.3} L<br>Objective: {:.4}</p>",
+        placement.cg_vertical, placement.cg_longitudinal, placement.magazine_longitudinal,
+        placement.machinery_longitudinal, placement.objective
     ));
     html.push_str("<h2>Constraint checks</h2><ul>");
     for (name, ok) in &placement.checks {

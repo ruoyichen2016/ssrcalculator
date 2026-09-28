@@ -23,11 +23,12 @@ use springsharp::{
     is_planing_eligible, load_from_file, parse_cfd_samples, parse_external_cases,
     planing_hp_estimate_calibrated, quality_gate_by_type, quality_gate_with_loocv, run_loocv,
     run_loocv_regime, run_loocv_weighted, run_loocv_with_external,
-    run_loocv_with_external_weighted, run_server, run_validation, save_to_file,
+    run_loocv_with_external_weighted, run_server, run_validation, save_to_file, savitsky_planing,
     segmented_calibration, select_cfd_ridge_lambda, select_lasso_lambda, select_ridge_lambda,
     small_fast_error_diagnostic, solve_max_speed, solve_range, suggest_compartment_placement,
     summarize_external_by_source, summarize_external_by_type, type_calibration_factors,
-    validate_external_cases, validation_by_type, CfdProxyConfig, ShipModel, CFD_MIN_USABLE_SAMPLES,
+    validate_external_cases, validate_planing_cases, validation_by_type, CfdProxyConfig,
+    PlaningInput, ShipModel,
 };
 
 fn print_help() {
@@ -72,6 +73,8 @@ COMMANDS:
   cfd-apply <csv> <design.ssr> [min_r2] [force]  Fit CFD proxy and write it to a design
 
   planing-calibrate <file>  Compute planing-hp calibration factor from external cases
+  planing-validate [csv...]  Validate Savitsky vs empirical on planing cases
+  savitsky-hp <L> <B> <lbs> <kt> [deadrise] [lcg] [eta]  Savitsky planing estimate
   planing-calibrate-all  Compute combined calibration from example files
   calibrate-external <file>  Fit models on built-in + external data
   external-report <file>  Generate HTML report for external CSV data
@@ -100,7 +103,7 @@ Grouped aliases (flat names still work):
   regime    <show|apply|validate>
   accuracy  target [mape]
   cfd       <status|proxy|fit|report|fit-ridge|select-lambda|apply>
-  planing   <hp|calibrate|calibrate-all>
+  planing   <hp|savitsky|validate|calibrate|calibrate-all>
 
 Run without a command to enter interactive mode.
 "
@@ -142,6 +145,8 @@ fn normalize_grouped_command(mut args: Vec<String>) -> Vec<String> {
         ("planing", "hp") => Some("planing-hp".to_string()),
         ("planing", "calibrate") => Some("planing-calibrate".to_string()),
         ("planing", "calibrate-all") => Some("planing-calibrate-all".to_string()),
+        ("planing", "validate") => Some("planing-validate".to_string()),
+        ("planing", "savitsky") => Some("savitsky-hp".to_string()),
         _ => None,
     };
     if let Some(c) = canonical {
@@ -594,11 +599,12 @@ fn main() {
                 || args.iter().any(|x| x == "--force");
             let text = std::fs::read_to_string(csv).expect("failed to read CSV");
             let samples = parse_cfd_samples(&text).expect("failed to parse CFD samples");
-            if samples.len() < CFD_MIN_USABLE_SAMPLES && !force {
+            let cfd = cfd_status(&samples);
+            if !cfd.usable_for_evidence && !force {
                 eprintln!(
-                    "Refusing to apply CFD proxy: only {} samples (< {} minimum for evidence). Use `force` to override.",
-                    samples.len(),
-                    CFD_MIN_USABLE_SAMPLES
+                    "Refusing to apply CFD proxy: {} measured CFD sample(s) (< {} minimum). \
+literature={}, analytic={}, synthetic={}. Use `force` to override.",
+                    cfd.measured_cfd, cfd.min_samples, cfd.literature, cfd.analytic, cfd.synthetic
                 );
                 std::process::exit(3);
             }
@@ -673,8 +679,15 @@ fn main() {
             let status = cfd_status(&samples);
             println!("CFD surrogate status for {path}:");
             println!("  samples: {}", status.samples);
-            println!("  minimum for evidence: {}", status.min_samples);
-            println!("  usable: {}", status.usable);
+            println!(
+                "  provenance: measured_cfd={}, literature={}, analytic={}, synthetic={}",
+                status.measured_cfd, status.literature, status.analytic, status.synthetic
+            );
+            println!(
+                "  minimum measured CFD for evidence: {}",
+                status.min_samples
+            );
+            println!("  usable_for_evidence: {}", status.usable_for_evidence);
             println!("  {}", status.message);
         }
         "cfd-fit" => {
@@ -1352,6 +1365,86 @@ fn main() {
                 .map(|s| s.parse().expect("port must be a number"))
                 .unwrap_or(8080);
             run_server(port).expect("web server failed");
+        }
+        "savitsky-hp" => {
+            let nums: Vec<f64> = args
+                .iter()
+                .skip(1)
+                .filter_map(|a| a.parse::<f64>().ok())
+                .collect();
+            if nums.len() < 4 {
+                eprintln!(
+                    "usage: springsharp savitsky-hp <length_ft> <beam_ft> <weight_lbs> <speed_kt> [deadrise_deg] [lcg_ft] [eta]"
+                );
+                std::process::exit(2);
+            }
+            let input = PlaningInput {
+                length_ft: nums[0],
+                beam_ft: nums[1],
+                weight_lb: nums[2],
+                speed_kt: nums[3],
+                deadrise_deg: nums.get(4).copied().unwrap_or(12.0),
+                lcg_ft: nums.get(5).copied().unwrap_or(0.42 * nums[0]),
+                propulsive_coefficient: nums.get(6).copied().unwrap_or(0.55),
+            };
+            match savitsky_planing(&input) {
+                Some(r) => {
+                    println!("Savitsky planing estimate:");
+                    println!("  trim: {:.2} deg", r.trim_deg);
+                    println!(
+                        "  wetted length: {:.1} ft (lambda={:.2})",
+                        r.wetted_length_ft, r.wetted_length_ratio
+                    );
+                    println!("  drag: {:.0} lbf", r.drag_lb);
+                    println!("  shaft power: {:.0} hp", r.shaft_hp);
+                }
+                None => {
+                    eprintln!("No planing equilibrium for the given inputs");
+                    std::process::exit(3);
+                }
+            }
+        }
+        "planing-validate" => {
+            let paths: Vec<String> = if args.len() > 1 {
+                args[1..].to_vec()
+            } else {
+                vec![
+                    "data/examples/planing_ships.csv".to_string(),
+                    "data/examples/more_planing.csv".to_string(),
+                ]
+            };
+            let mut cases = Vec::new();
+            for path in &paths {
+                let text = std::fs::read_to_string(path).expect("failed to read CSV");
+                cases.extend(parse_external_cases(&text).expect("failed to parse CSV"));
+            }
+            let v = validate_planing_cases(&cases);
+            println!(
+                "{:<22} {:>10} {:>12} {:>12}",
+                "Case", "Ref HP", "Savitsky", "Empirical"
+            );
+            for r in &v.rows {
+                println!(
+                    "{:<22} {:>10.0} {:>12.0} {:>12.0}",
+                    r.name, r.reference_hp, r.savitsky_hp, r.empirical_hp
+                );
+            }
+            println!("\nEligible planing cases: {}", v.cases);
+            println!(
+                "Savitsky : raw MAPE={:.1}%  factor={:.3}  calibrated MAPE={:.1}%",
+                v.savitsky_raw_mape * 100.0,
+                v.savitsky_factor,
+                v.savitsky_calibrated_mape * 100.0
+            );
+            println!(
+                "Empirical: raw MAPE={:.1}%  factor={:.3}  calibrated MAPE={:.1}%",
+                v.empirical_raw_mape * 100.0,
+                v.empirical_factor,
+                v.empirical_calibrated_mape * 100.0
+            );
+            println!(
+                "Note: public historical/approximate cases (not basin data); assumptions: deadrise 12-14 deg, LCG=0.42L, eta=0.55."
+            );
         }
         "interact" => {
             let mut ship = ShipModel::new();

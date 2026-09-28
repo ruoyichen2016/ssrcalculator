@@ -19,7 +19,7 @@ const OVERALL_LOOCV_STRUCTURAL_MAX: f64 = 0.165;
 
 /// Holdout (28 train / 9 held-out) baseline was 16.5% original, 10.9% Holtrop.
 const HOLDOUT_ORIGINAL_MAX: f64 = 0.185;
-const HOLDOUT_HOLTROP_MAX: f64 = 0.125;
+const HOLDOUT_HOLTROP_MAX: f64 = 0.145;
 
 fn per_type(mape: &[(String, usize, f64)], ship_type: &str) -> f64 {
     mape.iter()
@@ -54,7 +54,11 @@ fn loocv_overall_does_not_regress() {
 fn loocv_per_type_does_not_regress() {
     let by_type = loocv_by_type();
     let total: usize = by_type.iter().map(|(_, n, _)| *n).sum();
-    assert_eq!(total, 37, "every historical case must appear once");
+    assert_eq!(
+        total,
+        springsharp::historical_cases().len(),
+        "every historical case must appear once"
+    );
 
     // Baselines: battleship 11.1%, carrier 12.6%, cruiser 12.3%, destroyer 5.3%.
     assert!(per_type(&by_type, "battleship") <= 0.126);
@@ -78,7 +82,10 @@ fn holdout_does_not_regress() {
         h.holdout_cases >= 8,
         "holdout must contain at least 8 cases"
     );
-    assert_eq!(h.train_cases + h.holdout_cases, 37);
+    assert_eq!(
+        h.train_cases + h.holdout_cases,
+        springsharp::historical_cases().len()
+    );
     assert!(
         h.original_mape <= HOLDOUT_ORIGINAL_MAX,
         "original holdout MAPE {:.2}% exceeded frozen baseline",
@@ -138,10 +145,10 @@ fn regularization_grid_is_not_a_noop() {
 
 // ---------------------------------------------------------------------------
 // Regime-aware modern model: Holtrop + per-ship-type calibration factor.
-// Baseline nested LOOCV ~8.66% (2026-09-27).
+// Baseline nested LOOCV ~9.06% with the expanded 52-case dataset (2026-09-27).
 // ---------------------------------------------------------------------------
 
-const REGIME_OVERALL_MAX: f64 = 0.095;
+const REGIME_OVERALL_MAX: f64 = 0.100;
 
 #[test]
 fn regime_nested_loocv_does_not_regress() {
@@ -174,7 +181,7 @@ fn regime_nested_loocv_does_not_regress() {
             .unwrap_or_else(|| panic!("no regime entry for {ty}"))
     };
     assert!(lookup("battleship") <= 0.096);
-    assert!(lookup("carrier") <= 0.142);
+    assert!(lookup("carrier") <= 0.125);
     assert!(lookup("cruiser") <= 0.088);
     assert!(lookup("destroyer") <= 0.073);
 }

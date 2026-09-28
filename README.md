@@ -79,6 +79,9 @@ cargo run -- solve-range example.ssr 1500
 
 # CFD surrogate correction and compartment prototype
 cargo run -- cfd-status data/examples/cfd_samples.csv
+cargo run -- cfd-status data/examples/cfd_reference.csv
+cargo run -- planing-validate
+cargo run -- savitsky-hp 80 20 112000 40 12 33.6 0.55
 cargo run -- cfd-proxy 49132 0.3 0.1 0.2 0.25
 cargo run -- cfd-fit data/examples/cfd_samples.csv
 cargo run -- cfd-report data/examples/cfd_samples.csv
@@ -156,12 +159,14 @@ format.  `load_from_file()` automatically detects files beginning with
 
 ## Accuracy and calibration
 
-`accuracy.rs` includes 37 historical speed/power cases from battleships, fleet
+`accuracy.rs` includes 52 historical speed/power cases from battleships, fleet
 carriers, cruisers and destroyers (Dreadnought, Bismarck, Iowa, Fletcher,
 Yamato, Kongo, Essex, Atlanta, Tribal, South Dakota, KGV, Baltimore, Cleveland,
 Yorktown, Illustrious, North Carolina, Vanguard, Shokaku, Hood, Zara, Mogami,
 Kagero, Brooklyn, Dido, Somers, Benson, Independence, Bogue, Alaska, Gneisenau,
-Porter, Sims, Mahan, New Orleans, Kuma, Sendai, Admiral Hipper).
+Porter, Sims, Mahan, New Orleans, Kuma, Sendai, Admiral Hipper, plus 15 additional
+carriers (Lexington, Saratoga, Ranger, Wasp, Akagi, Kaga, Soryu, Hiryu, Ark Royal,
+Victorious, Graf Zeppelin, Taiho, Unryu, Casablanca, Commencement Bay).
 
 Every case carries explicit provenance (`Provenance { source_type,
 displacement_type, confidence, source, source_url, verifier,
@@ -188,7 +193,7 @@ Nested leave-one-out cross-validation (the factor is re-fitted on every training
 split) gives:
 
 ```text
-regime (Holtrop + per-type factor) : 8.66%
+regime (Holtrop + per-type factor) : 9.06%
 original + per-type factor         : 10.57%   <- comparison baseline
 Holtrop uncalibrated               : 19.42%
 ```
@@ -204,7 +209,7 @@ design's ship type.  The original SpringSharp model is retained as a comparison
 baseline.  In-sample fits are diagnostic only; use `validate-regime` for the
 out-of-sample number.
 
-Because all 37 cases are also used by the `calibrate-*` fits, the in-sample
+Because all 52 cases are also used by the `calibrate-*` fits, the in-sample
 numbers printed by `calibrate-stats` are optimistic.  `calibrate-stats` prints
 the LOOCV summary first and labels the in-sample fits as diagnostic only.
 
@@ -396,8 +401,10 @@ The `calibrate-stats` command also reports:
 - `calibrate-type` command applying per-ship-type power calibration
 - `data/README.md` documenting provenance and replacement workflow
 - `data/CHANGELOG.md` tracking database versions
-- built-in-v1.6: 37 cases, all `SourceType::PublicReference` (0/37 independently
-  verified, 0/37 traceable); `validate`, `data-score`, `data-target` report this honestly
+- built-in-v1.7: 52 cases, all `SourceType::PublicReference` (0/52 independently
+  verified, 0/52 traceable); `validate`, `data-score`, `data-target` report this honestly
+- 15 additional carrier cases (literature): carrier nested LOOCV improved 13.13% -> 10.94%
+- Fn-segmented per-type factors tested and rejected (worse than a single per-type factor)
 - explicit `Provenance { source_type, displacement_type, confidence, source, source_url, verifier, verification_date }` on every case
 - hardcoded `DATA_UPGRADES` / `case_source_confidence` removed; confidence is explicit provenance data
 - composite quality gate: `0.4*official + 0.2*traceable + 0.4*nested-regime-LOOCV accuracy`, with per-ship-type output
@@ -405,7 +412,14 @@ The `calibrate-stats` command also reports:
 - `tests/accuracy_regression.rs` freezes overall/per-type LOOCV and holdout baselines with regression thresholds
 - Ridge/Lasso structural fits standardize features and target, with a scale-aware lambda grid (`1e-4` .. `1e4`)
 - QPC shown only for the Holtrop model; original-model output states that no QPC applies
-- regime-aware modern model: Holtrop-Mennen + per-ship-type calibration factor (nested LOOCV 8.66%); original retained as comparison baseline
+- Savitsky (1964) planing solver and `planing-validate`: on 8 public planing cases the
+  calibrated Savitsky and empirical models tie at 23.3% MAPE, so empirical remains the default
+- provenance-aware CFD ingestion (`measured_cfd` / `literature` / `analytic` / `synthetic`);
+  `cfd-apply` requires >= 20 measured CFD samples. `data/examples/cfd_reference.csv` has 30
+  analytic rows (Savitsky vs empirical) to exercise the pipeline but is not evidence
+- compartment optimizer now optimizes longitudinal positions with multi-constraint checks
+  and reports an objective in JSON/HTML
+- regime-aware modern model: Holtrop-Mennen + per-ship-type calibration factor (nested LOOCV 9.06% over 52 cases); original retained as comparison baseline
 - `validate-regime`, `regime-table`, `calibrate-regime` and `accuracy-target` commands
 - grouped CLI aliases (`calibrate stats`, `validate holdout`, `data score`, `regime show`, `accuracy target`, `cfd fit`, ...) with flat names preserved
 - quality-report HTML test

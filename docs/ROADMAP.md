@@ -6,10 +6,10 @@
 - `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test` all clean
 - Honest provenance: `SourceType`/`Provenance` on every case; hardcoded `DATA_UPGRADES`
   and `case_source_confidence` removed
-- `data-targets` now measures official-trial/model-test coverage (currently 0/37, fails honestly)
+- `data-targets` now measures official-trial/model-test coverage (currently 0/52, fails honestly)
 - LOOCV promoted to the primary metric in `calibrate-stats`; in-sample fits labelled diagnostic
 - Deterministic holdout split + `validate-holdout` (calibration fitted on 28 train, scored on 9 held-out)
-- Docs synced with actual counts (37 cases; unit + integration tests green)
+- Docs synced with actual counts (unit + integration tests green)
 
 ## Phase 1 — validation credibility (completed 2026-09-27)
 
@@ -27,7 +27,7 @@
 ## Phase 2 — modern regime model + CLI groups (completed 2026-09-27)
 
 - Modern default: Holtrop-Mennen + per-ship-type calibration factor fitted to
-  the public historical dataset, validated by nested LOOCV (**8.66%** overall)
+  the public historical dataset, validated by nested LOOCV (**9.06%** over 52 cases)
 - `validate-regime` compares regime vs original+factor (10.57%) and uncalibrated
   Holtrop (19.42%); original kept as the comparison baseline
 - `calibrate-regime`, `regime-table`, `accuracy-target` commands
@@ -48,6 +48,18 @@
   LOOCV comparison, and a public-reference provenance warning
 - Example-dataset README documents the synthetic CFD placeholder
 
+## Phase 4 — carrier data, Savitsky, CFD provenance, GA optimizer (completed 2026-09-27)
+
+- Added 15 literature carrier cases; carrier nested LOOCV 13.13% -> 10.94%
+- Fn-segmented per-type factors tested and rejected (worse than single factor)
+- Savitsky (1964) planing solver + `savitsky-hp` / `planing-validate`; on 8 public
+  planing cases calibrated Savitsky and empirical tie at 23.3% MAPE
+- CFD ingestion is provenance-aware (`measured_cfd`/`literature`/`analytic`/
+  `synthetic`); `cfd-apply` requires >= 20 measured CFD samples; added
+  `data/examples/cfd_reference.csv` (30 analytic rows) to exercise the pipeline
+- Compartment optimizer extended to longitudinal positions with multi-constraint
+  checks and an objective in JSON/HTML
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model
@@ -62,8 +74,8 @@
 - Optional native egui/eframe GUI (`--features gui`)
 - CFD-surrogate correction framework + CSV fitting + R²/RMSE + LOOCV/holdout + Ridge/λ selection + `cfd-apply` + HTML report + propulsion breakdown in reports
 - Prototype compartment allocation + volume/vertical-center optimizer with placement bounds and magazine/armament coupling + calibre/rounds/mounts-scaled magazine volume + structural continuity + maintenance void constraints
-- 37 built-in historical cases + multiple example CSV datasets + replacement-priority + source-summary + quality-score + progress/target/tier + replacement-log + version + multi-target reports
-- 84 unit tests + 7 accuracy-regression integration tests
+- 52 built-in historical cases + multiple example CSV datasets + replacement-priority + source-summary + quality-score + progress/target/tier + replacement-log + version + multi-target reports
+- 90 unit tests + 7 accuracy-regression integration tests
 
 ## Remaining
 
@@ -71,8 +83,8 @@
 
 - Replace public-reference cases with official trial / model-basin data with
   citation + URL + verifier (needed to pass `data-target`); currently unavailable
-- Improve the carrier regime (13.1% nested) and add more literature cases
-- Replace the synthetic CFD placeholder with a real dataset (>20 samples)
+- Replace the analytic CFD placeholder with real measured CFD (>20 samples)
+- Add more cruiser/battleship literature points to reduce the regime weights
 - Replace the prototype compartment optimizer with a full general-arrangement optimizer
 
 ### P2/P3
