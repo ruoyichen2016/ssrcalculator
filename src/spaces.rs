@@ -218,7 +218,7 @@ pub fn suggest_compartment_layout(report: &InternalSpaceReport) -> CompartmentLa
 
 pub fn format_compartment_report(layout: &CompartmentLayout) -> String {
     format!(
-        "Prototype compartment allocation (m3)\n\
+        "General-arrangement allocation (m3)\n\
          Machinery:     {:.0}\n\
          Magazine:      {:.0}\n\
          Accommodation: {:.0}\n\
@@ -469,16 +469,503 @@ pub struct CompartmentPlacement {
     pub longitudinal: [f64; 6],
     /// Combined objective value of the constraint optimizer (lower is better).
     pub objective: f64,
+    /// GA generations and fitness evaluations performed.
+    pub generations: usize,
+    pub evaluations: usize,
     pub checks: Vec<(String, bool)>,
 }
 
-/// Optimize compartments and add simple longitudinal placement hints.
+/// Number of compartments.
+const N_COMP: usize = 6;
+/// GA population size and generation count (fixed for determinism).
+const GA_POP: usize = 60;
+const GA_GENS: usize = 150;
+/// Adjacent compartment pairs used by the continuity constraints.
+const GA_ADJACENCY: [(usize, usize); 9] = [
+    (0, 1),
+    (1, 4),
+    (0, 3),
+    (4, 5),
+    (2, 4),
+    (0, 2),
+    (1, 3),
+    (3, 4),
+    (2, 5),
+];
+
+/// Deterministic xorshift64* RNG so GA results are reproducible and testable.
+struct GaRng(u64);
+
+impl GaRng {
+    fn new(seed: u64) -> Self {
+        GaRng(seed | 1)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        let mut x = self.0;
+        x ^= x >> 12;
+        x ^= x << 25;
+        x ^= x >> 27;
+        self.0 = x;
+        x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+    }
+
+    fn unit(&mut self) -> f64 {
+        (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64
+    }
+
+    fn range(&mut self, lo: f64, hi: f64) -> f64 {
+        lo + (hi - lo) * self.unit()
+    }
+
+    fn normal(&mut self) -> f64 {
+        let u1 = self.unit().max(1e-12);
+        let u2 = self.unit();
+        (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos()
+    }
+}
+
+#[derive(Clone)]
+struct GaIndividual {
+    v: [f64; N_COMP],
+    z: [f64; N_COMP],
+    x: [f64; N_COMP],
+    fitness: f64,
+}
+
+struct GaBounds {
+    v_lo: [f64; N_COMP],
+    v_hi: [f64; N_COMP],
+    z_lo: [f64; N_COMP],
+    z_hi: [f64; N_COMP],
+    x_lo: [f64; N_COMP],
+    x_hi: [f64; N_COMP],
+    allocatable: f64,
+    void_min: f64,
+}
+
+/// Project a candidate back into the feasible set (volumes, vertical ordering
+/// and longitudinal position constraints).
+fn repair_individual(ind: &mut GaIndividual, b: &GaBounds, armament: f64) {
+    repair_volumes(&mut ind.v, b);
+    repair_centers(&mut ind.z, b);
+    repair_longitudinal(&mut ind.x, b, armament);
+}
+
+fn repair_volumes(v: &mut [f64; N_COMP], b: &GaBounds) {
+    for i in 0..N_COMP {
+        v[i] = v[i].clamp(b.v_lo[i], b.v_hi[i]);
+    }
+    // Guarantee the maintenance void, taking volume from the other compartments.
+    if v[5] < b.void_min {
+        let need = b.void_min - v[5];
+        let slack: f64 = (0..5).map(|i| (v[i] - b.v_lo[i]).max(0.0)).sum();
+        if slack > 1e-12 {
+            for i in 0..5 {
+                v[i] -= need * (v[i] - b.v_lo[i]).max(0.0) / slack;
+            }
+        }
+        v[5] = b.void_min;
+    }
+    for i in 0..N_COMP {
+        v[i] = v[i].max(b.v_lo[i]);
+    }
+    // Keep total volume within the allocatable envelope.
+    let total: f64 = v.iter().sum();
+    if total > b.allocatable {
+        let excess = total - b.allocatable;
+        let slack: f64 = (0..N_COMP).map(|i| (v[i] - b.v_lo[i]).max(0.0)).sum();
+        if slack > 1e-12 {
+            for i in 0..N_COMP {
+                v[i] -= excess * (v[i] - b.v_lo[i]).max(0.0) / slack;
+            }
+        }
+        for i in 0..N_COMP {
+            v[i] = v[i].max(b.v_lo[i]);
+        }
+    }
+}
+
+fn enforce_vertical_ordering(z: &mut [f64; N_COMP], b: &GaBounds) {
+    z[2] = (z[2].max(z[1] + 0.15)).min(b.z_hi[2]);
+    z[0] = (z[0].max(z[3] + 0.05)).min(b.z_hi[0]);
+}
+
+fn repair_centers(z: &mut [f64; N_COMP], b: &GaBounds) {
+    for i in 0..N_COMP {
+        z[i] = z[i].clamp(b.z_lo[i], b.z_hi[i]);
+    }
+    enforce_vertical_ordering(z, b);
+    for _ in 0..8 {
+        for (i, j) in GA_ADJACENCY {
+            let d = z[i] - z[j];
+            if d.abs() > 0.24 {
+                let half = (d.abs() - 0.24) * 0.5;
+                if d > 0.0 {
+                    z[i] -= half;
+                    z[j] += half;
+                } else {
+                    z[i] += half;
+                    z[j] -= half;
+                }
+            }
+        }
+        for i in 0..N_COMP {
+            z[i] = z[i].clamp(b.z_lo[i], b.z_hi[i]);
+        }
+        enforce_vertical_ordering(z, b);
+    }
+}
+
+fn repair_longitudinal(x: &mut [f64; N_COMP], b: &GaBounds, armament: f64) {
+    let mag_lo = (armament - 0.15).max(0.05);
+    let mag_hi = (armament + 0.15).min(0.95);
+    for i in 0..N_COMP {
+        x[i] = x[i].clamp(b.x_lo[i], b.x_hi[i]);
+    }
+    x[0] = x[0].clamp(0.30, 0.70);
+    x[1] = x[1].clamp(mag_lo, mag_hi);
+    x[1] = x[1].max(x[3]);
+    x[2] = x[2].max(x[1]);
+    for _ in 0..8 {
+        for (i, j) in GA_ADJACENCY {
+            let d = x[i] - x[j];
+            if d.abs() > 0.40 {
+                let half = (d.abs() - 0.40) * 0.5;
+                if d > 0.0 {
+                    x[i] -= half;
+                    x[j] += half;
+                } else {
+                    x[i] += half;
+                    x[j] -= half;
+                }
+            }
+        }
+        for i in 0..N_COMP {
+            x[i] = x[i].clamp(b.x_lo[i], b.x_hi[i]);
+        }
+        x[0] = x[0].clamp(0.30, 0.70);
+        x[1] = x[1].clamp(mag_lo, mag_hi);
+        x[1] = x[1].max(x[3]);
+        x[2] = x[2].max(x[1]);
+    }
+}
+
+/// Penalised objective over volumes, vertical centres and longitudinal positions.
+fn ga_objective(
+    v: &[f64; N_COMP],
+    z: &[f64; N_COMP],
+    x: &[f64; N_COMP],
+    b: &GaBounds,
+    target_cg: f64,
+    armament: f64,
+) -> f64 {
+    let total: f64 = v.iter().sum();
+    if total <= 1e-9 || !total.is_finite() {
+        return 1e6;
+    }
+    let cg_z = v.iter().zip(z.iter()).map(|(vi, zi)| vi * zi).sum::<f64>() / total;
+    let cg_x = v.iter().zip(x.iter()).map(|(vi, xi)| vi * xi).sum::<f64>() / total;
+    let unused = (b.allocatable - total).max(0.0) / b.allocatable.max(1e-9);
+    let mut f = (cg_z - target_cg).abs() + 0.5 * (cg_x - 0.5).abs() + 0.05 * unused;
+
+    // Hard-constraint penalties (near zero for repaired individuals).
+    f += 5.0 * ((b.void_min - v[5]).max(0.0) / b.void_min.max(1e-9));
+    f += 5.0 * (z[1] + 0.15 - z[2]).max(0.0);
+    f += 5.0 * (z[3] + 0.05 - z[0]).max(0.0);
+    f += 2.0 * ((x[1] - armament).abs() - 0.15).max(0.0);
+    f += 2.0 * ((x[0] - 0.5).abs() - 0.20).max(0.0);
+    for (i, j) in GA_ADJACENCY {
+        f += 1.0 * ((z[i] - z[j]).abs() - 0.26).max(0.0);
+        f += 1.0 * ((x[i] - x[j]).abs() - 0.45).max(0.0);
+    }
+    f
+}
+
+fn tournament(pop: &[GaIndividual], rng: &mut GaRng) -> GaIndividual {
+    let mut best = &pop[rng.next_u64() as usize % pop.len()];
+    for _ in 0..2 {
+        let challenger = &pop[rng.next_u64() as usize % pop.len()];
+        if challenger.fitness < best.fitness {
+            best = challenger;
+        }
+    }
+    best.clone()
+}
+
+fn crossover(a: &GaIndividual, b: &GaIndividual, rng: &mut GaRng) -> GaIndividual {
+    let mut child = a.clone();
+    let blend = 0.3;
+    for i in 0..N_COMP {
+        let (lo, hi) = (a.v[i].min(b.v[i]), a.v[i].max(b.v[i]));
+        let d = hi - lo;
+        child.v[i] = rng.range(lo - blend * d, hi + blend * d);
+        let (lo, hi) = (a.z[i].min(b.z[i]), a.z[i].max(b.z[i]));
+        let d = hi - lo;
+        child.z[i] = rng.range(lo - blend * d, hi + blend * d);
+        let (lo, hi) = (a.x[i].min(b.x[i]), a.x[i].max(b.x[i]));
+        let d = hi - lo;
+        child.x[i] = rng.range(lo - blend * d, hi + blend * d);
+    }
+    child
+}
+
+fn mutate(ind: &mut GaIndividual, rng: &mut GaRng, generation: usize, b: &GaBounds) {
+    let sigma = 0.15 * (1.0 - generation as f64 / GA_GENS as f64) + 0.01;
+    for i in 0..N_COMP {
+        if rng.unit() < 0.12 {
+            let span = (b.v_hi[i] - b.v_lo[i]).max(1e-9);
+            ind.v[i] += rng.normal() * sigma * span;
+        }
+        if rng.unit() < 0.12 {
+            let span = (b.z_hi[i] - b.z_lo[i]).max(1e-9);
+            ind.z[i] += rng.normal() * sigma * span;
+        }
+        if rng.unit() < 0.12 {
+            ind.x[i] += rng.normal() * sigma;
+        }
+    }
+}
+
+fn placement_checks(
+    v: &[f64; N_COMP],
+    z: &[f64; N_COMP],
+    x: &[f64; N_COMP],
+    void_min: f64,
+) -> Vec<(String, bool)> {
+    vec![
+        (
+            "Accommodation above magazines".to_string(),
+            z[2] >= z[1] + 0.15 - 1e-6,
+        ),
+        (
+            "Machinery above fuel".to_string(),
+            z[0] >= z[3] + 0.05 - 1e-6,
+        ),
+        (
+            "Maintenance void >= 2% hull volume".to_string(),
+            v[5] >= void_min - 1e-6,
+        ),
+        (
+            "Structural continuity (vertical)".to_string(),
+            GA_ADJACENCY
+                .iter()
+                .all(|(i, j)| (z[*i] - z[*j]).abs() <= 0.26 + 1e-6),
+        ),
+        (
+            "Magazine within +/-0.15 L of armament".to_string(),
+            (x[1] - 0.0).abs().is_finite() && (x[1] - x_mag_check(x)).abs() <= 1e-9,
+        ),
+        (
+            "Machinery within +/-0.20 L of amidships".to_string(),
+            (x[0] - 0.5).abs() <= 0.20 + 1e-6,
+        ),
+        (
+            "Structural continuity (longitudinal)".to_string(),
+            GA_ADJACENCY
+                .iter()
+                .all(|(i, j)| (x[*i] - x[*j]).abs() <= 0.45 + 1e-6),
+        ),
+    ]
+}
+
+/// Placeholder used by `placement_checks`; the magazine check is refined by the
+/// caller, which knows the armament position.
+fn x_mag_check(x: &[f64; N_COMP]) -> f64 {
+    x[1]
+}
+
+fn build_placement(
+    v: [f64; N_COMP],
+    z: [f64; N_COMP],
+    x: [f64; N_COMP],
+    b: &GaBounds,
+    target_cg: f64,
+    armament: f64,
+    generations: usize,
+    evaluations: usize,
+) -> CompartmentPlacement {
+    let total: f64 = v.iter().sum();
+    let cg_z = v.iter().zip(z.iter()).map(|(vi, zi)| vi * zi).sum::<f64>() / total.max(1e-9);
+    let cg_x = v.iter().zip(x.iter()).map(|(vi, xi)| vi * xi).sum::<f64>() / total.max(1e-9);
+    let layout = CompartmentLayout {
+        machinery: v[0],
+        magazine: v[1],
+        accommodation: v[2],
+        fuel: v[3],
+        stores: v[4],
+        void: v[5],
+        unallocated: (b.allocatable - total).max(0.0),
+    };
+    let mut checks = placement_checks(&v, &z, &x, b.void_min);
+    // Replace the magazine placeholder check with the real armament position.
+    if let Some(entry) = checks.get_mut(4) {
+        entry.1 = (x[1] - armament).abs() <= 0.15 + 1e-6;
+    }
+    let objective = ga_objective(&v, &z, &x, b, target_cg, armament);
+    CompartmentPlacement {
+        layout,
+        cg_vertical: cg_z,
+        cg_longitudinal: cg_x,
+        magazine_longitudinal: x[1],
+        machinery_longitudinal: x[0],
+        centers: z,
+        longitudinal: x,
+        objective,
+        generations,
+        evaluations,
+        checks,
+    }
+}
+
+fn ga_bounds(report: &InternalSpaceReport, seed: &CompartmentLayout) -> GaBounds {
+    let void_min = 0.02 * report.hull_volume_m3;
+    let allocatable = (0.90 * report.hull_volume_m3).max(1e-9);
+    let seed_v = [
+        seed.machinery,
+        seed.magazine,
+        seed.accommodation,
+        seed.fuel,
+        seed.stores,
+        seed.void,
+    ];
+    let mut v_lo = [0.0_f64; N_COMP];
+    let mut v_hi = [0.0_f64; N_COMP];
+    for i in 0..N_COMP {
+        v_lo[i] = (seed_v[i] * 0.85).max(0.0);
+        v_hi[i] = (seed_v[i] * 1.60).max(v_lo[i] + 1e-9);
+    }
+    v_lo[5] = v_lo[5].max(void_min);
+    v_hi[5] = v_hi[5].max(v_lo[5] + 1e-9);
+    GaBounds {
+        v_lo,
+        v_hi,
+        z_lo: [0.30, 0.20, 0.55, 0.15, 0.30, 0.10],
+        z_hi: [0.50, 0.40, 0.85, 0.45, 0.55, 0.40],
+        x_lo: [0.05; N_COMP],
+        x_hi: [0.95; N_COMP],
+        allocatable,
+        void_min,
+    }
+}
+
+/// Global genetic-algorithm optimizer for the general arrangement.
+///
+/// Optimises compartment volumes, vertical centres and longitudinal positions
+/// against the vertical CG target and longitudinal placement constraints
+/// (magazine near the armament, machinery near amidships, ordering and
+/// continuity).  Every candidate is projected back into the feasible set, so
+/// the returned arrangement satisfies all constraint checks by construction.
+pub fn optimize_general_arrangement_ga(
+    report: &InternalSpaceReport,
+    target_cg: f64,
+    armament: f64,
+) -> CompartmentPlacement {
+    let (seed_layout, _seed_cg, seed_centers) = optimize_compartment_layout(report, target_cg);
+    let b = ga_bounds(report, &seed_layout);
+    let seed_v = [
+        seed_layout.machinery,
+        seed_layout.magazine,
+        seed_layout.accommodation,
+        seed_layout.fuel,
+        seed_layout.stores,
+        seed_layout.void,
+    ];
+    let mut seed = GaIndividual {
+        v: seed_v,
+        z: seed_centers,
+        x: [0.50, armament, 0.58, 0.50, 0.58, 0.45],
+        fitness: f64::INFINITY,
+    };
+    repair_individual(&mut seed, &b, armament);
+    seed.fitness = ga_objective(&seed.v, &seed.z, &seed.x, &b, target_cg, armament);
+
+    let mut rng = GaRng::new(0x9E37_79B9_7F4A_7C15);
+    let mut pop: Vec<GaIndividual> = Vec::with_capacity(GA_POP);
+    pop.push(seed.clone());
+    for _ in 1..GA_POP {
+        let mut ind = GaIndividual {
+            v: [0.0; N_COMP],
+            z: [0.0; N_COMP],
+            x: [0.0; N_COMP],
+            fitness: f64::INFINITY,
+        };
+        for i in 0..N_COMP {
+            ind.v[i] = rng.range(b.v_lo[i], b.v_hi[i]);
+            ind.z[i] = rng.range(b.z_lo[i], b.z_hi[i]);
+            ind.x[i] = rng.range(b.x_lo[i], b.x_hi[i]);
+        }
+        repair_individual(&mut ind, &b, armament);
+        pop.push(ind);
+    }
+
+    let mut best = seed.clone();
+    for generation in 0..GA_GENS {
+        for ind in &mut pop {
+            ind.fitness = ga_objective(&ind.v, &ind.z, &ind.x, &b, target_cg, armament);
+            if ind.fitness < best.fitness {
+                best = ind.clone();
+            }
+        }
+        pop.sort_by(|a, c| {
+            a.fitness
+                .partial_cmp(&c.fitness)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let mut next = Vec::with_capacity(GA_POP);
+        next.push(pop[0].clone());
+        next.push(pop[1].clone());
+        while next.len() < GA_POP {
+            let p1 = tournament(&pop, &mut rng);
+            let p2 = tournament(&pop, &mut rng);
+            let mut child = crossover(&p1, &p2, &mut rng);
+            mutate(&mut child, &mut rng, generation, &b);
+            repair_individual(&mut child, &b, armament);
+            next.push(child);
+        }
+        pop = next;
+    }
+    for ind in &mut pop {
+        ind.fitness = ga_objective(&ind.v, &ind.z, &ind.x, &b, target_cg, armament);
+        if ind.fitness < best.fitness {
+            best = ind.clone();
+        }
+    }
+
+    // Safety net: if the GA result somehow fails a check, fall back to the
+    // known-feasible seed individual.
+    let candidate = build_placement(
+        best.v,
+        best.z,
+        best.x,
+        &b,
+        target_cg,
+        armament,
+        GA_GENS,
+        GA_POP * GA_GENS,
+    );
+    if candidate.checks.iter().all(|(_, ok)| *ok) {
+        candidate
+    } else {
+        build_placement(
+            seed.v,
+            seed.z,
+            seed.x,
+            &b,
+            target_cg,
+            armament,
+            GA_GENS,
+            GA_POP * GA_GENS,
+        )
+    }
+}
+
+/// Optimize compartments and add longitudinal placement hints.
 ///
 /// The magazine longitudinal position follows the average main-battery
-/// position; machinery is assumed amidships.
+/// position; machinery is placed near amidships by the GA.
 pub fn suggest_compartment_placement(ship: &ShipModel, target_cg: f64) -> CompartmentPlacement {
     let report = calculate_internal_spaces(ship);
-    let (layout, cg, centers) = optimize_compartment_layout(&report, target_cg);
     let g = &ship.guns.batteries[0];
     let pos_g1 = layout_longitudinal_position(ship, g.layout_g1);
     let pos_g2 = layout_longitudinal_position(ship, g.layout_g2);
@@ -488,128 +975,7 @@ pub fn suggest_compartment_placement(ship: &ShipModel, target_cg: f64) -> Compar
     } else {
         pos_g1
     };
-    let adjacency = [
-        (0, 1),
-        (1, 4),
-        (0, 3),
-        (4, 5),
-        (2, 4),
-        (0, 2),
-        (1, 3),
-        (3, 4),
-        (2, 5),
-    ];
-    let continuity_ok = adjacency
-        .iter()
-        .all(|(i, j)| (centers[*i] - centers[*j]).abs() <= 0.26);
-
-    // --- Longitudinal placement (multi-constraint coordinate descent) ---
-    let vols = [
-        layout.machinery,
-        layout.magazine,
-        layout.accommodation,
-        layout.fuel,
-        layout.stores,
-        layout.void,
-    ];
-    let targets = [0.50, magazine_longitudinal, 0.58, 0.50, 0.58, 0.45];
-    let weights = [1.0, 2.5, 1.0, 0.5, 0.5, 0.4];
-    let mut x = targets;
-    let mut step = 0.08_f64;
-    let mut objective = longitudinal_objective(&x, &targets, &weights, magazine_longitudinal);
-    for _ in 0..120 {
-        for i in 0..6 {
-            for delta in [step, -step] {
-                let mut trial = x;
-                trial[i] = (trial[i] + delta).clamp(0.05, 0.95);
-                let value =
-                    longitudinal_objective(&trial, &targets, &weights, magazine_longitudinal);
-                if value < objective {
-                    x = trial;
-                    objective = value;
-                }
-            }
-        }
-        step *= 0.97;
-    }
-    let total_v: f64 = vols.iter().sum::<f64>().max(1e-9);
-    let cg_longitudinal = x
-        .iter()
-        .zip(vols.iter())
-        .map(|(xi, vi)| xi * vi)
-        .sum::<f64>()
-        / total_v;
-
-    let longitudinal_continuity_ok = adjacency.iter().all(|(i, j)| (x[*i] - x[*j]).abs() <= 0.40);
-    let checks = vec![
-        (
-            "Accommodation above magazines".to_string(),
-            centers[2] >= centers[1] + 0.15 - 1e-6,
-        ),
-        (
-            "Machinery above fuel".to_string(),
-            centers[0] >= centers[3] + 0.05 - 1e-6,
-        ),
-        (
-            "Maintenance void >= 2% hull volume".to_string(),
-            layout.void >= 0.02 * report.hull_volume_m3 - 1e-6,
-        ),
-        (
-            "Structural continuity (vertical)".to_string(),
-            continuity_ok,
-        ),
-        (
-            "Magazine within +/-0.15 L of armament".to_string(),
-            (x[1] - magazine_longitudinal).abs() <= 0.15 + 1e-9,
-        ),
-        (
-            "Machinery within +/-0.20 L of amidships".to_string(),
-            (x[0] - 0.50).abs() <= 0.20 + 1e-9,
-        ),
-        (
-            "Structural continuity (longitudinal)".to_string(),
-            longitudinal_continuity_ok,
-        ),
-    ];
-    CompartmentPlacement {
-        layout,
-        cg_vertical: cg,
-        cg_longitudinal,
-        magazine_longitudinal: x[1],
-        machinery_longitudinal: x[0],
-        centers,
-        longitudinal: x,
-        objective,
-        checks,
-    }
-}
-
-/// Penalised longitudinal-placement objective.
-fn longitudinal_objective(
-    x: &[f64; 6],
-    targets: &[f64; 6],
-    weights: &[f64; 6],
-    armament: f64,
-) -> f64 {
-    let mut value = 0.0;
-    for i in 0..6 {
-        value += weights[i] * (x[i] - targets[i]).abs();
-    }
-    // Functional bounds and ordering constraints as penalties.
-    if (x[1] - armament).abs() > 0.15 {
-        value += 5.0 * ((x[1] - armament).abs() - 0.15);
-    }
-    if (x[0] - 0.50).abs() > 0.20 {
-        value += 5.0 * ((x[0] - 0.50).abs() - 0.20);
-    }
-    // Magazine forward of (larger x than) fuel and machinery, access-friendly.
-    if x[1] < x[3] {
-        value += 2.0 * (x[3] - x[1]);
-    }
-    if x[2] < x[1] {
-        value += 1.0 * (x[1] - x[2]);
-    }
-    value
+    optimize_general_arrangement_ga(&report, target_cg, magazine_longitudinal)
 }
 
 /// Machine-readable general-arrangement summary (hand-rolled JSON, no deps).
@@ -623,25 +989,27 @@ pub fn compartment_placement_json(placement: &CompartmentPlacement) -> String {
         .iter()
         .map(|c| format!("{c:.4}"))
         .collect();
+    let longitudinal: Vec<String> = placement
+        .longitudinal
+        .iter()
+        .map(|x| format!("{x:.4}"))
+        .collect();
     let checks: Vec<String> = placement
         .checks
         .iter()
         .map(|(name, ok)| format!("{{\"name\":\"{}\",\"ok\":{}}}", esc(name), ok))
         .collect();
     format!(
-        "{{\n  \"cg_vertical\": {:.4},\n  \"cg_longitudinal\": {:.4},\n  \"objective\": {:.4},\n  \"magazine_longitudinal\": {:.4},\n  \"machinery_longitudinal\": {:.4},\n  \"centers\": [{}],\n  \"longitudinal\": [{}],\n  \"volumes\": {{\"machinery\": {:.1}, \"magazine\": {:.1}, \"accommodation\": {:.1}, \"fuel\": {:.1}, \"stores\": {:.1}, \"void\": {:.1}, \"unallocated\": {:.1}}},\n  \"checks\": [{}]\n}}",
+        "{{\n  \"cg_vertical\": {:.4},\n  \"cg_longitudinal\": {:.4},\n  \"objective\": {:.4},\n  \"generations\": {},\n  \"evaluations\": {},\n  \"magazine_longitudinal\": {:.4},\n  \"machinery_longitudinal\": {:.4},\n  \"centers\": [{}],\n  \"longitudinal\": [{}],\n  \"volumes\": {{\"machinery\": {:.1}, \"magazine\": {:.1}, \"accommodation\": {:.1}, \"fuel\": {:.1}, \"stores\": {:.1}, \"void\": {:.1}, \"unallocated\": {:.1}}},\n  \"checks\": [{}]\n}}",
         placement.cg_vertical,
         placement.cg_longitudinal,
         placement.objective,
+        placement.generations,
+        placement.evaluations,
         placement.magazine_longitudinal,
         placement.machinery_longitudinal,
         centers.join(", "),
-        placement
-            .longitudinal
-            .iter()
-            .map(|x| format!("{x:.4}"))
-            .collect::<Vec<_>>()
-            .join(", "),
+        longitudinal.join(", "),
         l.machinery,
         l.magazine,
         l.accommodation,
@@ -660,28 +1028,77 @@ pub fn compartment_placement_html(ship: &ShipModel, placement: &CompartmentPlace
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>General Arrangement</title></head><body>",
     );
     html.push_str(&format!(
-        "<h1>General arrangement prototype</h1><p>Ship: <b>{}</b> ({})</p>",
+        "<h1>General arrangement (GA optimizer)</h1><p>Ship: <b>{}</b> ({})</p>",
         ship.name, ship.ship_type
     ));
-    html.push_str("<p>Prototype constraint-aware allocation. Volumes in m&sup3; positions as fraction of length.</p>");
+    html.push_str("<p>Global genetic-algorithm allocation with feasibility repair. Volumes in m&sup3;; positions as fraction of length.</p>");
     html.push_str("<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\">");
-    html.push_str("<tr><th>Compartment</th><th>Volume (m3)</th></tr>");
-    for (name, v) in [
-        ("Machinery", l.machinery),
-        ("Magazine", l.magazine),
-        ("Accommodation", l.accommodation),
-        ("Fuel", l.fuel),
-        ("Stores", l.stores),
-        ("Void / maintenance", l.void),
-        ("Unallocated", l.unallocated),
+    html.push_str("<tr><th>Compartment</th><th>Volume (m3)</th><th>Vertical centre</th><th>Longitudinal</th></tr>");
+    for (name, v, z, x) in [
+        (
+            "Machinery",
+            l.machinery,
+            placement.centers[0],
+            placement.longitudinal[0],
+        ),
+        (
+            "Magazine",
+            l.magazine,
+            placement.centers[1],
+            placement.longitudinal[1],
+        ),
+        (
+            "Accommodation",
+            l.accommodation,
+            placement.centers[2],
+            placement.longitudinal[2],
+        ),
+        (
+            "Fuel",
+            l.fuel,
+            placement.centers[3],
+            placement.longitudinal[3],
+        ),
+        (
+            "Stores",
+            l.stores,
+            placement.centers[4],
+            placement.longitudinal[4],
+        ),
+        (
+            "Void / maintenance",
+            l.void,
+            placement.centers[5],
+            placement.longitudinal[5],
+        ),
+        ("Unallocated", l.unallocated, f64::NAN, f64::NAN),
     ] {
-        html.push_str(&format!("<tr><td>{name}</td><td>{v:.0}</td></tr>"));
+        if v.is_finite() {
+            let zs = if z.is_finite() {
+                format!("{z:.3}")
+            } else {
+                "-".to_string()
+            };
+            let xs = if x.is_finite() {
+                format!("{x:.3}")
+            } else {
+                "-".to_string()
+            };
+            html.push_str(&format!(
+                "<tr><td>{name}</td><td>{v:.0}</td><td>{zs}</td><td>{xs}</td></tr>"
+            ));
+        }
     }
     html.push_str("</table>");
     html.push_str(&format!(
-        "<p>Achieved vertical CG ratio: <b>{:.3}</b><br>Longitudinal CG: {:.3} L<br>Magazine longitudinal: {:.3} L<br>Machinery longitudinal: {:.3} L<br>Objective: {:.4}</p>",
-        placement.cg_vertical, placement.cg_longitudinal, placement.magazine_longitudinal,
-        placement.machinery_longitudinal, placement.objective
+        "<p>Achieved vertical CG ratio: <b>{:.3}</b><br>Longitudinal CG: {:.3} L<br>Magazine longitudinal: {:.3} L<br>Machinery longitudinal: {:.3} L<br>Objective: {:.4}<br>GA: {} generations, {} evaluations</p>",
+        placement.cg_vertical,
+        placement.cg_longitudinal,
+        placement.magazine_longitudinal,
+        placement.machinery_longitudinal,
+        placement.objective,
+        placement.generations,
+        placement.evaluations
     ));
     html.push_str("<h2>Constraint checks</h2><ul>");
     for (name, ok) in &placement.checks {
@@ -755,6 +1172,103 @@ mod tests {
         assert!(placement.cg_vertical > 0.0);
     }
 
+    fn ga_test_ship() -> ShipModel {
+        let mut ship = ShipModel::new();
+        ship.hull.length = 600.0;
+        ship.hull.beam = 90.0;
+        ship.hull.beam_bulges = 90.0;
+        ship.hull.draught = 28.0;
+        ship.hull.block = 0.55;
+        ship.hull.date_hull = 1915;
+        ship.hull.date_engine = 1915;
+        ship.free.free_fd_for = 18.0;
+        ship.free.free_fd_aft = 14.0;
+        ship.free.free_ad_for = 14.0;
+        ship.free.free_ad_aft = 12.0;
+        ship.engine.fuel[0] = true;
+        ship.engine.engine_types[1] = true;
+        ship.engine.drive[0] = true;
+        ship.engine.screws = 4;
+        ship.engine.speed_max = 24.0;
+        ship.engine.speed_cruise = 12.0;
+        ship.engine.range = 7000.0;
+        ship.calculate();
+        ship
+    }
+
+    #[test]
+    fn compartment_ga_is_deterministic_and_feasible() {
+        let ship = ga_test_ship();
+        let report = calculate_internal_spaces(&ship);
+        let a = optimize_general_arrangement_ga(&report, 0.45, 0.5);
+        let b = optimize_general_arrangement_ga(&report, 0.45, 0.5);
+        assert!(a.generations > 0 && a.evaluations >= a.generations);
+        assert_eq!(a.generations, b.generations);
+        assert_eq!(a.evaluations, b.evaluations);
+        assert!((a.objective - b.objective).abs() < 1e-12);
+        for i in 0..6 {
+            assert!((a.centers[i] - b.centers[i]).abs() < 1e-12);
+            assert!((a.longitudinal[i] - b.longitudinal[i]).abs() < 1e-12);
+        }
+        assert!(a.objective.is_finite());
+        for (name, ok) in &a.checks {
+            assert!(*ok, "GA constraint failed: {name}");
+        }
+        // Volumes must stay within the allocatable envelope.
+        let total = a.layout.machinery
+            + a.layout.magazine
+            + a.layout.accommodation
+            + a.layout.fuel
+            + a.layout.stores
+            + a.layout.void;
+        assert!(total <= 0.90 * report.hull_volume_m3 + 1e-6);
+        assert!(a.layout.void >= 0.02 * report.hull_volume_m3 - 1e-6);
+    }
+
+    #[test]
+    fn compartment_ga_is_no_worse_than_its_seed() {
+        let ship = ga_test_ship();
+        let report = calculate_internal_spaces(&ship);
+        let armament = 0.5;
+        let (seed_layout, _cg, seed_centers) = optimize_compartment_layout(&report, 0.45);
+        let b = ga_bounds(&report, &seed_layout);
+        let seed_v = [
+            seed_layout.machinery,
+            seed_layout.magazine,
+            seed_layout.accommodation,
+            seed_layout.fuel,
+            seed_layout.stores,
+            seed_layout.void,
+        ];
+        let mut seed = GaIndividual {
+            v: seed_v,
+            z: seed_centers,
+            x: [0.50, armament, 0.58, 0.50, 0.58, 0.45],
+            fitness: f64::INFINITY,
+        };
+        repair_individual(&mut seed, &b, armament);
+        let seed_obj = ga_objective(&seed.v, &seed.z, &seed.x, &b, 0.45, armament);
+        let ga = optimize_general_arrangement_ga(&report, 0.45, armament);
+        assert!(
+            ga.objective <= seed_obj + 1e-9,
+            "GA objective {} should not exceed seed {}",
+            ga.objective,
+            seed_obj
+        );
+    }
+
+    #[test]
+    fn compartment_ga_respects_armament_position() {
+        let ship = ga_test_ship();
+        let report = calculate_internal_spaces(&ship);
+        for armament in [0.35, 0.50, 0.65] {
+            let p = optimize_general_arrangement_ga(&report, 0.45, armament);
+            assert!((p.magazine_longitudinal - armament).abs() <= 0.15 + 1e-6);
+            assert!((p.machinery_longitudinal - 0.50).abs() <= 0.20 + 1e-6);
+            assert!(p.checks.iter().all(|(_, ok)| *ok));
+        }
+    }
+
     #[test]
     fn compartment_json_and_html_are_well_formed() {
         let mut ship = ShipModel::new();
@@ -770,8 +1284,11 @@ mod tests {
         let placement = suggest_compartment_placement(&ship, 0.45);
         let json = compartment_placement_json(&placement);
         assert!(json.contains("\"cg_vertical\""));
+        assert!(json.contains("\"cg_longitudinal\""));
         assert!(json.contains("\"volumes\""));
         assert!(json.contains("\"checks\""));
+        assert!(json.contains("\"generations\""));
+        assert!(json.contains("\"evaluations\""));
         assert!(json.ends_with('}'));
         let html = compartment_placement_html(&ship, &placement);
         assert!(html.contains("General arrangement"));

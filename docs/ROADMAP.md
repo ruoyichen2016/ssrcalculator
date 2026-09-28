@@ -48,7 +48,7 @@
   LOOCV comparison, and a public-reference provenance warning
 - Example-dataset README documents the synthetic CFD placeholder
 
-## Phase 4 — carrier data, Savitsky, CFD provenance, GA optimizer (completed 2026-09-27)
+## Phase 4 — carrier data, Savitsky, CFD provenance, longitudinal placement (completed 2026-09-27)
 
 - Added 15 literature carrier cases; carrier nested LOOCV 13.13% -> 10.94%
 - Fn-segmented per-type factors tested and rejected (worse than single factor)
@@ -59,6 +59,17 @@
   `data/examples/cfd_reference.csv` (30 analytic rows) to exercise the pipeline
 - Compartment optimizer extended to longitudinal positions with multi-constraint
   checks and an objective in JSON/HTML
+
+## Phase 5 — global GA general-arrangement optimizer (completed 2026-09-27)
+
+- Deterministic genetic algorithm over 18 variables (6 volumes, 6 vertical
+  centres, 6 longitudinal positions); fixed seed for reproducible results
+- Feasibility repair keeps every candidate within volume, void, vertical-ordering,
+  armament-position and continuity constraints; safety fallback to the
+  known-feasible seed
+- Objective mixes vertical CG error, longitudinal CG and unused volume, with
+  constraint penalties; JSON/HTML/CLI report objective, generations, evaluations
+- New unit tests: determinism/feasibility and armament-position adherence
 
 ## Completed
 
@@ -73,9 +84,9 @@
 - Web console with design/external/planing endpoints
 - Optional native egui/eframe GUI (`--features gui`)
 - CFD-surrogate correction framework + CSV fitting + R²/RMSE + LOOCV/holdout + Ridge/λ selection + `cfd-apply` + HTML report + propulsion breakdown in reports
-- Prototype compartment allocation + volume/vertical-center optimizer with placement bounds and magazine/armament coupling + calibre/rounds/mounts-scaled magazine volume + structural continuity + maintenance void constraints
+- Global GA general-arrangement optimizer + calibre/rounds/mounts-scaled magazine volume + structural continuity + maintenance void constraints
 - 52 built-in historical cases + multiple example CSV datasets + replacement-priority + source-summary + quality-score + progress/target/tier + replacement-log + version + multi-target reports
-- 90 unit tests + 7 accuracy-regression integration tests
+- 93 unit tests + 7 accuracy-regression integration tests
 
 ## Remaining
 
@@ -85,7 +96,7 @@
   citation + URL + verifier (needed to pass `data-target`); currently unavailable
 - Replace the analytic CFD placeholder with real measured CFD (>20 samples)
 - Add more cruiser/battleship literature points to reduce the regime weights
-- Replace the prototype compartment optimizer with a full general-arrangement optimizer
+- Extend the GA with a structural/access-network model and multi-deck compartments
 
 ### P2/P3
 

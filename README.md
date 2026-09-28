@@ -370,12 +370,12 @@ The `calibrate-stats` command also reports:
 - CFD Ridge lambda selection by LOOCV (`cfd-select-lambda`)
 - Apply fitted CFD proxy into `.ssr` (`cfd-apply`) with LOOCV R² threshold check
 - `cfd-status` command and a 20-sample minimum guard: the bundled `cfd_samples.csv` is synthetic (9 rows) and `cfd-apply` refuses it unless `force` is given
-- prototype compartment allocation (`compartments` command)
+- global genetic-algorithm general-arrangement optimizer (`compartments` / `optimize-compartments`)
 - `compartments` includes magazine/machinery longitudinal hints
 - `compartments --json` machine-readable output and `compartments-report` general-arrangement HTML report
 - `optimize-compartments` prints constraint check results (placement, void, continuity)
 - constraint-satisfaction unit test for the compartment optimizer
-- constraint-aware compartment optimizer prototype (`optimize-compartments` command)
+- GA optimizes volumes, vertical centres and longitudinal positions with feasibility repair
   - optimizes both compartment volumes and vertical centers
   - enforces magazine/accommodation/machinery vertical placement bounds
   - adds access/void and fuel/machinery placement penalties
@@ -417,8 +417,8 @@ The `calibrate-stats` command also reports:
 - provenance-aware CFD ingestion (`measured_cfd` / `literature` / `analytic` / `synthetic`);
   `cfd-apply` requires >= 20 measured CFD samples. `data/examples/cfd_reference.csv` has 30
   analytic rows (Savitsky vs empirical) to exercise the pipeline but is not evidence
-- compartment optimizer now optimizes longitudinal positions with multi-constraint checks
-  and reports an objective in JSON/HTML
+- compartment optimizer upgraded to a deterministic global GA (18 variables) with feasibility
+  repair; reports objective, generations and evaluations in JSON/HTML
 - regime-aware modern model: Holtrop-Mennen + per-ship-type calibration factor (nested LOOCV 9.06% over 52 cases); original retained as comparison baseline
 - `validate-regime`, `regime-table`, `calibrate-regime` and `accuracy-target` commands
 - grouped CLI aliases (`calibrate stats`, `validate holdout`, `data score`, `regime show`, `accuracy target`, `cfd fit`, ...) with flat names preserved

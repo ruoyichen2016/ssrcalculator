@@ -72,7 +72,8 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 - Stores volume by range
 - Void volume
 - Override fields in `.ssr` / Web form
-- Constraint-aware prototype optimizer with JSON output and an HTML general-arrangement report
+- Global genetic-algorithm general-arrangement optimizer (6 volumes + 6 vertical centres +
+  6 longitudinal positions = 18 variables) with a feasibility repair operator; JSON and HTML reports
 
 ## Reporting / GUI
 

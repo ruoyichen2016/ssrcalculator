@@ -57,8 +57,8 @@ COMMANDS:
   calibrate-type <file>  Apply per-ship-type power calibration
   calibrate <file>     Apply historical power calibration to a design
   spaces <file>        Show improved internal-space volume model
-  compartments <file> [--json]  Show prototype compartment allocation
-  optimize-compartments <file> [target_cg] [--json]  Run prototype constraint optimizer
+  compartments <file> [--json]  Show GA general-arrangement allocation
+  optimize-compartments <file> [target_cg] [--json]  Run global GA general-arrangement optimizer
   compartments-report <file> [target_cg]  Print HTML general-arrangement report
   calibrate-stats      Show reduced-form and structural-form calibration fits
   import-data <file>   Validate a user-supplied CSV of ship cases
@@ -1091,6 +1091,14 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                     "Machinery longitudinal position: {:.3} L (amidships)",
                     placement.machinery_longitudinal
                 );
+                println!(
+                    "Vertical CG: {:.3}  Longitudinal CG: {:.3}  Objective: {:.5}",
+                    placement.cg_vertical, placement.cg_longitudinal, placement.objective
+                );
+                println!(
+                    "GA: {} generations, {} evaluations",
+                    placement.generations, placement.evaluations
+                );
                 for (name, ok) in &placement.checks {
                     println!("  [{}] {name}", if *ok { "ok" } else { "FAIL" });
                 }
@@ -1134,6 +1142,14 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
             println!(
                 "Machinery longitudinal position: {:.3} L (amidships)",
                 placement.machinery_longitudinal
+            );
+            println!(
+                "Vertical CG: {:.3}  Longitudinal CG: {:.3}  Objective: {:.5}  GA: {} gen / {} eval",
+                placement.cg_vertical,
+                placement.cg_longitudinal,
+                placement.objective,
+                placement.generations,
+                placement.evaluations
             );
             for (name, ok) in &placement.checks {
                 println!("  [{}] {name}", if *ok { "ok" } else { "FAIL" });
