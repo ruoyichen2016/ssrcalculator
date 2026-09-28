@@ -10,7 +10,7 @@ use springsharp::{
     cfd_holdout_stability, cfd_loocv_report, cfd_report_html, compare_qr_svd,
     compute_planing_calibration, compute_planing_calibration_from_files, data_quality_report_html,
     data_quality_score, data_quality_summary, data_replacement_log, data_replacement_priority,
-    data_replacement_progress, data_source_summary, data_target_matrix, data_tier_summary,
+    data_replacement_progress, data_source_summary, data_target_matrix_for, data_tier_summary,
     data_version, demo_ship, deserialize, detect_duplicate_external_cases, external_report_html,
     fit_cfd_proxy_report, fit_cfd_proxy_ridge, fit_ensemble, fit_ensemble_cv, fit_reduced_form,
     fit_reduced_form_by_type, fit_reduced_form_interaction, fit_reduced_form_weighted,
@@ -19,9 +19,10 @@ use springsharp::{
     fit_structural_form_segmented_weighted, fit_structural_form_weighted,
     fit_structural_form_with_external, format_compartment_report, format_space_report,
     froude_number, generate_html_report, generate_report, holdout_validation, is_planing_eligible,
-    load_from_file, parse_cfd_samples, parse_external_cases, planing_hp_estimate_calibrated,
-    run_loocv, run_loocv_weighted, run_loocv_with_external, run_loocv_with_external_weighted,
-    run_server, run_validation, save_to_file, segmented_calibration, select_cfd_ridge_lambda,
+    load_from_file, loocv_by_type, parse_cfd_samples, parse_external_cases,
+    planing_hp_estimate_calibrated, quality_gate_by_type, quality_gate_with_loocv, run_loocv,
+    run_loocv_weighted, run_loocv_with_external, run_loocv_with_external_weighted, run_server,
+    run_validation, save_to_file, segmented_calibration, select_cfd_ridge_lambda,
     select_lasso_lambda, select_ridge_lambda, small_fast_error_diagnostic, solve_max_speed,
     solve_range, suggest_compartment_placement, summarize_external_by_source,
     summarize_external_by_type, type_calibration_factors, validate_external_cases,
@@ -71,12 +72,12 @@ COMMANDS:
   data-priority        List built-in cases by replacement priority
   data-sources         Summarize built-in data by source
   data-score           Show overall built-in data quality score
-  data-progress        Show built-in data replacement progress
+  data-progress        Show verified/public-reference counts and traceability
   data-tiers           Show built-in data quality tier counts
   data-replace-log     Show suggested replacement actions per case
   data-version         Show built-in data version tag
-  data-targets         Check multiple data-quality targets
-  data-target [frac]   Check built-in data target (default 0.8)
+  data-targets         Check multiple composite-quality targets
+  data-target [frac]   Check composite quality gate + per-type (default 0.8)
   apply-ensemble-external <file> <csv>  Apply external-data ensemble weights to a design
   apply-ensemble <file>  Write LOOCV-optimized ensemble weights into a design
   calibrate-ridge <file>  Apply LOOCV-selected Ridge regularized structural fit
@@ -298,28 +299,52 @@ fn main() {
                 .get(1)
                 .map(|x| x.parse().expect("target must be a number"))
                 .unwrap_or(0.8);
-            let p = data_replacement_progress();
+            let loocv = run_loocv();
+            let gate = quality_gate_with_loocv(loocv.ensemble_mape);
+            println!("Composite data-quality gate (target {target:.2}):");
+            println!("  composite             : {:.3}", gate.composite);
             println!(
-                "Independently verified fraction {:.3} vs target {:.3} ({}/{} official-trial or model-test; provenance coverage {:.1}%)",
-                p.progress,
-                target,
-                p.verified,
-                p.total,
-                p.provenance_coverage * 100.0
+                "  official/model-test   : {:.1}%",
+                gate.official_model_fraction * 100.0
             );
-            if p.progress < target {
+            println!(
+                "  provenance traceable  : {:.1}%",
+                gate.traceability_fraction * 100.0
+            );
+            println!(
+                "  LOOCV ensemble MAPE   : {:.1}%  -> accuracy score {:.3}",
+                gate.loocv_mape * 100.0,
+                gate.loocv_accuracy_score
+            );
+            println!("  (composite = 0.4*official + 0.2*traceable + 0.4*accuracy)");
+            println!("\nPer ship type:");
+            println!(
+                "{:<12} {:>4} {:>10} {:>12} {:>9} {:>10}",
+                "Type", "N", "Official%", "Traceable%", "LOOCV%", "Composite"
+            );
+            for g in quality_gate_by_type(&loocv_by_type()) {
+                println!(
+                    "{:<12} {:>4} {:>9.1}% {:>11.1}% {:>8.1}% {:>10.3}",
+                    g.ship_type,
+                    g.count,
+                    g.official_model_fraction * 100.0,
+                    g.traceability_fraction * 100.0,
+                    g.loocv_mape * 100.0,
+                    g.composite
+                );
+            }
+            if gate.composite < target {
                 eprintln!(
-                    "Data target not met: {}/{} independently verified, {:.1}% shortfall. \
-Current data is public-reference only; add official trial or model-test cases.",
-                    p.verified,
-                    p.total,
-                    (target - p.progress) * 100.0
+                    "Composite quality target not met: {:.3} < {:.3}. Add official trial/model-test data with citation + URL + verifier.",
+                    gate.composite, target
                 );
                 std::process::exit(4);
             }
         }
         "data-targets" => {
-            for (target, met) in data_target_matrix() {
+            let loocv = run_loocv();
+            let gate = quality_gate_with_loocv(loocv.ensemble_mape);
+            for (target, met) in data_target_matrix_for(gate.composite) {
                 println!(
                     "target {:.1}: {}",
                     target,
@@ -327,7 +352,8 @@ Current data is public-reference only; add official trial or model-test cases.",
                 );
             }
             println!(
-                "Note: targets measure official-trial/model-test coverage, not self-declared confidence."
+                "Note: composite = 0.4*official-model + 0.2*traceable + 0.4*LOOCV-accuracy; current composite={:.3}.",
+                gate.composite
             );
         }
         "data-version" => {
@@ -349,11 +375,17 @@ Current data is public-reference only; add official trial or model-test cases.",
         "data-progress" => {
             let p = data_replacement_progress();
             println!(
-                "Built-in data: {}/{} independently verified (official trial or model test, {:.1}%), {} public-reference/approximate; provenance coverage {:.1}%",
+                "Built-in data: {}/{} independently verified (official trial or model test, {:.1}%), {} public-reference/approximate",
                 p.verified,
                 p.total,
                 p.progress * 100.0,
-                p.approximate,
+                p.approximate
+            );
+            println!(
+                "  traceable (citation + URL + verifier): {}/{} ({:.1}%); provenance coverage {:.1}%",
+                p.traceable,
+                p.total,
+                p.traceability * 100.0,
                 p.provenance_coverage * 100.0
             );
         }
@@ -366,6 +398,16 @@ Current data is public-reference only; add official trial or model-test cases.",
                 score.verified_cases,
                 score.total_cases,
                 score.verified_fraction * 100.0
+            );
+            let loocv = run_loocv();
+            let gate = quality_gate_with_loocv(loocv.ensemble_mape);
+            println!(
+                "Composite quality gate: {:.3} (official {:.1}%, traceable {:.1}%, LOOCV {:.1}% -> accuracy {:.3})",
+                gate.composite,
+                gate.official_model_fraction * 100.0,
+                gate.traceability_fraction * 100.0,
+                gate.loocv_mape * 100.0,
+                gate.loocv_accuracy_score
             );
         }
         "data-sources" => {
@@ -868,10 +910,10 @@ Current data is public-reference only; add official trial or model-test cases.",
             let ridge_sel = select_ridge_lambda();
             println!("\nRidge lambda selection (LOOCV):");
             for (lambda, mape) in &ridge_sel.results {
-                println!("  lambda={lambda:<6.3} MAPE={:.1}%", mape * 100.0);
+                println!("  lambda={lambda:<8} MAPE={:.1}%", mape * 100.0);
             }
             println!(
-                "  best lambda={:.3} MAPE={:.1}%",
+                "  best lambda={:.4} MAPE={:.1}%",
                 ridge_sel.best_lambda,
                 ridge_sel.best_loocv_mape * 100.0
             );
@@ -879,10 +921,10 @@ Current data is public-reference only; add official trial or model-test cases.",
             let lasso_sel = select_lasso_lambda();
             println!("\nLasso lambda selection (LOOCV):");
             for (lambda, mape) in &lasso_sel.results {
-                println!("  lambda={lambda:<6.3} MAPE={:.1}%", mape * 100.0);
+                println!("  lambda={lambda:<8} MAPE={:.1}%", mape * 100.0);
             }
             println!(
-                "  best lambda={:.3} MAPE={:.1}%",
+                "  best lambda={:.4} MAPE={:.1}%",
                 lasso_sel.best_lambda,
                 lasso_sel.best_loocv_mape * 100.0
             );
@@ -1025,6 +1067,9 @@ Current data is public-reference only; add official trial or model-test cases.",
                     g.mean_holtrop_error * 100.0
                 );
             }
+            println!(
+                "Note: these are in-sample comparisons. For out-of-sample error use `validate-holdout` or the LOOCV block in `calibrate-stats`."
+            );
         }
         "validate-holdout" => {
             let r = holdout_validation();

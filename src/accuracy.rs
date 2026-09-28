@@ -53,29 +53,69 @@ impl SourceType {
 /// Citation shared by all current built-in cases.
 pub const PUBLIC_REFERENCE_SOURCE: &str = "Public historical references (Conway's/Jane's/class trial summaries); displacement and power are approximate";
 
+/// Which displacement convention a reference power figure refers to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DisplacementType {
+    Normal,
+    Standard,
+    FullLoad,
+    Trial,
+    Deep,
+    Unspecified,
+}
+
+impl DisplacementType {
+    pub const fn label(self) -> &'static str {
+        match self {
+            DisplacementType::Normal => "normal",
+            DisplacementType::Standard => "standard",
+            DisplacementType::FullLoad => "full load",
+            DisplacementType::Trial => "trial",
+            DisplacementType::Deep => "deep",
+            DisplacementType::Unspecified => "unspecified",
+        }
+    }
+}
+
 /// Provenance attached to every built-in historical case.
+///
+/// A case is **traceable** only when it has a citation, a URL and a named
+/// verifier.  This is deliberately stricter than having a `source` string, so
+/// that the quality gate reflects real evidence rather than labels.
 #[derive(Clone, Copy, Debug)]
 pub struct Provenance {
     pub source_type: SourceType,
+    pub displacement_type: DisplacementType,
     pub confidence: f64,
     pub source: &'static str,
+    pub source_url: &'static str,
+    pub verifier: &'static str,
     pub verification_date: &'static str,
 }
 
 impl Provenance {
     /// Default provenance for the current built-in database: public
-    /// references, *not* independently verified.
+    /// references, *not* independently verified and not yet traceable to a
+    /// specific URL/verifier.
     pub const fn public_reference() -> Self {
         Provenance {
             source_type: SourceType::PublicReference,
+            displacement_type: DisplacementType::Normal,
             confidence: 0.6,
             source: PUBLIC_REFERENCE_SOURCE,
+            source_url: "",
+            verifier: "",
             verification_date: "2026-09-27",
         }
     }
 
     pub const fn is_verified(self) -> bool {
         self.source_type.is_verified()
+    }
+
+    /// A case is traceable only with citation + URL + named verifier.
+    pub const fn is_traceable(self) -> bool {
+        !self.source.is_empty() && !self.source_url.is_empty() && !self.verifier.is_empty()
     }
 }
 
@@ -683,7 +723,12 @@ pub struct DataQualityEntry {
     pub name: &'static str,
     pub confidence: f64,
     pub source: &'static str,
+    pub source_url: &'static str,
+    pub verifier: &'static str,
+    pub verification_date: &'static str,
     pub source_type: SourceType,
+    pub displacement_type: DisplacementType,
+    pub traceable: bool,
 }
 
 /// Return data-quality entries sorted by replacement priority (lowest
@@ -816,10 +861,14 @@ pub struct DataReplacementProgress {
     /// Cases that are only public-reference / approximate.
     pub approximate: usize,
     pub total: usize,
+    /// Cases with citation + URL + named verifier.
+    pub traceable: usize,
     /// Fraction independently verified (`verified / total`).
     pub progress: f64,
     /// Fraction of cases carrying an explicit source citation.
     pub provenance_coverage: f64,
+    /// Fraction of cases that are fully traceable (`traceable / total`).
+    pub traceability: f64,
 }
 
 pub fn data_replacement_progress() -> DataReplacementProgress {
@@ -831,33 +880,151 @@ pub fn data_replacement_progress() -> DataReplacementProgress {
         .count();
     let approximate = total - verified;
     let with_source = entries.iter().filter(|e| !e.source.is_empty()).count();
+    let traceable = entries.iter().filter(|e| e.traceable).count();
+    let frac = |n: usize| {
+        if total > 0 {
+            n as f64 / total as f64
+        } else {
+            0.0
+        }
+    };
     DataReplacementProgress {
         verified,
         approximate,
         total,
-        progress: if total > 0 {
-            verified as f64 / total as f64
-        } else {
-            0.0
-        },
-        provenance_coverage: if total > 0 {
-            with_source as f64 / total as f64
-        } else {
-            0.0
-        },
+        traceable,
+        progress: frac(verified),
+        provenance_coverage: frac(with_source),
+        traceability: frac(traceable),
     }
 }
 
-/// Check several independently-verified-fraction targets at once.
+/// Composite quality gate.
 ///
-/// This measures provenance, not self-declared confidence.  The current
-/// public-reference-only database is expected to fail every target until real
-/// trial or model-test data is added.
-pub fn data_target_matrix() -> Vec<(f64, bool)> {
+/// `composite = 0.4 * official_model_fraction
+///            + 0.2 * traceability_fraction
+///            + 0.4 * loocv_accuracy_score`
+///
+/// This replaces the old "verified fraction from self-declared confidence"
+/// gate: it cannot be satisfied without real official/model-test data, fully
+/// traceable sources and a competitive out-of-sample error.
+pub const QUALITY_OFFICIAL_WEIGHT: f64 = 0.4;
+pub const QUALITY_TRACEABILITY_WEIGHT: f64 = 0.2;
+pub const QUALITY_ACCURACY_WEIGHT: f64 = 0.4;
+/// LOOCV MAPE at which the accuracy component saturates at 1.0.
+pub const LOOCV_MAPE_BEST: f64 = 0.10;
+/// LOOCV MAPE at which the accuracy component reaches 0.0.
+pub const LOOCV_MAPE_WORST: f64 = 0.30;
+
+/// Map an out-of-sample MAPE to a 0..1 accuracy score (linear between the
+/// best/worst thresholds).
+pub fn loocv_accuracy_score(loocv_mape: f64) -> f64 {
+    if !loocv_mape.is_finite() {
+        return 0.0;
+    }
+    if loocv_mape <= LOOCV_MAPE_BEST {
+        return 1.0;
+    }
+    if loocv_mape >= LOOCV_MAPE_WORST {
+        return 0.0;
+    }
+    (LOOCV_MAPE_WORST - loocv_mape) / (LOOCV_MAPE_WORST - LOOCV_MAPE_BEST)
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct QualityGate {
+    pub official_model_fraction: f64,
+    pub traceability_fraction: f64,
+    pub loocv_mape: f64,
+    pub loocv_accuracy_score: f64,
+    pub composite: f64,
+    pub total_cases: usize,
+}
+
+pub fn quality_gate_with_loocv(loocv_mape: f64) -> QualityGate {
     let p = data_replacement_progress();
+    let accuracy = loocv_accuracy_score(loocv_mape);
+    let composite = QUALITY_OFFICIAL_WEIGHT * p.progress
+        + QUALITY_TRACEABILITY_WEIGHT * p.traceability
+        + QUALITY_ACCURACY_WEIGHT * accuracy;
+    QualityGate {
+        official_model_fraction: p.progress,
+        traceability_fraction: p.traceability,
+        loocv_mape,
+        loocv_accuracy_score: accuracy,
+        composite,
+        total_cases: p.total,
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TypeQualityGate {
+    pub ship_type: &'static str,
+    pub count: usize,
+    pub official_model_fraction: f64,
+    pub traceability_fraction: f64,
+    pub loocv_mape: f64,
+    pub composite: f64,
+}
+
+/// Per-ship-type quality gate.  `loocv_by_type` is
+/// `(ship_type, count, loocv_mape)` as returned by the calibration module.
+pub fn quality_gate_by_type(loocv_by_type: &[(String, usize, f64)]) -> Vec<TypeQualityGate> {
+    let entries = data_quality_summary();
+    let cases = historical_cases();
+    let mut types: Vec<&'static str> = cases.iter().map(|c| c.ship_type).collect();
+    types.sort_unstable();
+    types.dedup();
+    let mut out = Vec::new();
+    for ty in types {
+        let idx: Vec<usize> = cases
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.ship_type == ty)
+            .map(|(i, _)| i)
+            .collect();
+        let n = idx.len();
+        if n == 0 {
+            continue;
+        }
+        let verified = idx
+            .iter()
+            .filter(|&&i| entries[i].source_type.is_verified())
+            .count();
+        let traceable = idx.iter().filter(|&&i| entries[i].traceable).count();
+        let official = verified as f64 / n as f64;
+        let traceability = traceable as f64 / n as f64;
+        let mape = loocv_by_type
+            .iter()
+            .find(|(t, _, _)| t == ty)
+            .map(|(_, _, m)| *m)
+            .unwrap_or(f64::NAN);
+        let accuracy = loocv_accuracy_score(mape);
+        let composite = QUALITY_OFFICIAL_WEIGHT * official
+            + QUALITY_TRACEABILITY_WEIGHT * traceability
+            + QUALITY_ACCURACY_WEIGHT * accuracy;
+        out.push(TypeQualityGate {
+            ship_type: ty,
+            count: n,
+            official_model_fraction: official,
+            traceability_fraction: traceability,
+            loocv_mape: mape,
+            composite,
+        });
+    }
+    out.sort_by(|a, b| {
+        a.composite
+            .partial_cmp(&b.composite)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    out
+}
+
+/// Check several composite-quality targets at once.
+pub fn data_target_matrix_for(composite: f64) -> Vec<(f64, bool)> {
     [0.6, 0.7, 0.8, 0.9]
         .iter()
-        .map(|t| (*t, p.progress >= *t))
+        .map(|t| (*t, composite >= *t))
         .collect()
 }
 
@@ -886,9 +1053,11 @@ pub fn data_replacement_log() -> Vec<(String, f64, &'static str)> {
 pub fn data_version() -> String {
     let p = data_replacement_progress();
     format!(
-        "built-in-v1.5 ({} model-test verified, {} public-reference; provenance coverage {:.0}%)",
+        "built-in-v1.6 ({} model-test verified, {} public-reference; traceable {}/{}; provenance coverage {:.0}%)",
         p.verified,
         p.approximate,
+        p.traceable,
+        p.total,
         p.provenance_coverage * 100.0
     )
 }
@@ -901,18 +1070,21 @@ pub fn data_quality_report_html() -> String {
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>Data Quality Report</title></head><body>",
     );
     html.push_str("<h1>Built-in Data Quality Report</h1>");
-    html.push_str("<p>Verified = official trial or model test. Public reference is <b>not</b> independently verified.</p>");
+    html.push_str("<p>Verified = official trial or model test. Traceable = citation + URL + named verifier. Public reference is <b>not</b> independently verified.</p>");
     html.push_str("<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\">");
     html.push_str(
-        "<tr><th>Ship</th><th>Type</th><th>Confidence</th><th>Source type</th><th>Source</th></tr>",
+        "<tr><th>Ship</th><th>Type</th><th>Confidence</th><th>Source type</th><th>Displacement</th><th>Traceable</th><th>Verifier</th><th>Source</th></tr>",
     );
     for (case, q) in cases.iter().zip(quality.iter()) {
         html.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td><td>{:.2}</td><td>{}</td><td>{}</td></tr>",
+            "<tr><td>{}</td><td>{}</td><td>{:.2}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
             case.name,
             case.ship_type,
             q.confidence,
             q.source_type.label(),
+            q.displacement_type.label(),
+            if q.traceable { "yes" } else { "no" },
+            q.verifier,
             q.source
         ));
     }
@@ -938,7 +1110,12 @@ pub fn data_quality_summary() -> Vec<DataQualityEntry> {
             name: c.name,
             confidence: c.provenance.confidence,
             source: c.provenance.source,
+            source_url: c.provenance.source_url,
+            verifier: c.provenance.verifier,
+            verification_date: c.provenance.verification_date,
             source_type: c.provenance.source_type,
+            displacement_type: c.provenance.displacement_type,
+            traceable: c.provenance.is_traceable(),
         })
         .collect()
 }
@@ -1416,11 +1593,9 @@ fn example_csv_files_all_parse() {
 
 #[test]
 fn data_target_matrix_is_consistent() {
-    let matrix = data_target_matrix();
+    let matrix = data_target_matrix_for(0.75);
     assert_eq!(matrix.len(), 4);
-    for (_, met) in matrix {
-        let _ = met;
-    }
+    assert!(matrix[0].1 && matrix[1].1 && !matrix[2].1 && !matrix[3].1);
 }
 
 #[test]
@@ -1457,9 +1632,19 @@ fn built_in_cases_carry_honest_provenance() {
     );
     let p = data_replacement_progress();
     assert_eq!(p.verified, 0);
+    assert_eq!(p.traceable, 0);
     assert_eq!(p.provenance_coverage, 1.0);
-    let m = data_target_matrix();
-    assert!(m.iter().all(|(_, met)| !met));
+    assert_eq!(p.traceability, 0.0);
+    // The composite gate must be well below the default 0.8 target.
+    let gate = quality_gate_with_loocv(0.105);
+    assert!(gate.composite < 0.8);
+    assert!((gate.official_model_fraction - 0.0).abs() < 1e-12);
+    assert!((gate.traceability_fraction - 0.0).abs() < 1e-12);
+    assert!((gate.loocv_accuracy_score - 0.975).abs() < 1e-9);
+    assert!((gate.composite - 0.4 * 0.975).abs() < 1e-9);
+    assert!(data_target_matrix_for(gate.composite)
+        .iter()
+        .all(|(_, met)| !met));
 }
 
 #[test]

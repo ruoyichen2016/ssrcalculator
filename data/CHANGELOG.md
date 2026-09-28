@@ -1,5 +1,24 @@
 # Data changelog
 
+## built-in-v1.6 (2026-09-27) — provenance schema + composite quality gate
+
+- `Provenance` now carries `displacement_type`, `source_url` and `verifier`.
+  A case is *traceable* only with citation + URL + named verifier.
+- `data-target` is now a composite gate:
+  `0.4*official/model-test + 0.2*traceable + 0.4*LOOCV-accuracy`, printed with a
+  per-ship-type breakdown.  Current composite: **0.390** (fails 0.8).
+- Added per-type LOOCV (`loocv_by_type`) to feed the per-type gate.
+- Ridge/Lasso structural fits now normalize features *and* target and use a
+  scale-aware lambda grid `1e-4 .. 1e4`; a regression test asserts the grid is
+  not a no-op.
+- QPC is marked applicable to the Holtrop model only; original-model output now
+  states that no QPC applies instead of showing a misleading Holtrop-style value.
+- Added `tests/accuracy_regression.rs` freezing overall/per-type LOOCV and
+  holdout baselines.
+- Status unchanged: **0/37 independently verified, 0/37 traceable**, all
+  `PublicReference`.
+
+
 ## built-in-v1.5 (2026-09-27) — provenance honesty fix
 
 - All 37 built-in cases are now explicitly `SourceType::PublicReference`.

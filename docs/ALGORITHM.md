@@ -31,13 +31,19 @@
 - Shaft efficiency
 - QPC
 
+The breakdown (and QPC) applies to the **Holtrop-Mennen** model only.  The
+original SpringSharp empirical fit outputs shaft power directly and has no
+explicit propulsive coefficient; summaries/reports state that no QPC applies and
+`EngineValues::qpc_applicable` records which model the breakdown belongs to.
+
 ## Calibration
 
 - Reduced form: `P = exp(b0) * Disp^b1 * V^b2 * L^b3`
 - Structural form: Holtrop component multipliers
 - Froude-number segmented calibration
 - Confidence-weighted variants
-- Ridge / Lasso regularized structural fits
+- Ridge / Lasso regularized structural fits (features and target normalized to
+  unit RMS; lambda grid `1e-4` .. `1e4`, selected by LOOCV)
 - QR / SVD cross-check
 - LOOCV report
 - Ensemble prediction with LOOCV-optimized weights
@@ -65,8 +71,13 @@
 ## Validation
 
 - 37 built-in historical cases, all currently `SourceType::PublicReference`
-- Explicit `Provenance { source_type, confidence, source, verification_date }` per case
-- External CSV support
+- Explicit `Provenance { source_type, displacement_type, confidence, source,
+  source_url, verifier, verification_date }` per case
+- Verified = official trial / model test only; traceable = citation + URL + verifier
+- Composite quality gate (`data-target`): `0.4*official + 0.2*traceable +
+  0.4*LOOCV-accuracy`, with per-ship-type breakdown
 - `validate-holdout`: calibration fitted on 28 training cases, scored on 9 held-out cases
+- Per-type LOOCV (`loocv_by_type`) feeds the per-type quality gate
 - LOOCV is the primary metric in `calibrate-stats`; in-sample fits are diagnostic only
-- 77 unit tests
+- `tests/accuracy_regression.rs` freezes overall/per-type LOOCV and holdout baselines
+- 80 unit tests + 5 accuracy-regression integration tests

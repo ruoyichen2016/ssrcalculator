@@ -1185,6 +1185,11 @@ pub struct EngineValues {
     pub relative_rotative_efficiency: f64,
     pub shaft_efficiency: f64,
     pub qpc: f64,
+    /// True only when the QPC/efficiency fields participate in the power
+    /// calculation (Holtrop-Mennen).  The original SpringSharp empirical fit
+    /// has no explicit propulsive coefficient, so the breakdown does not
+    /// apply to it.
+    pub qpc_applicable: bool,
 
     // derived machinery
     pub engine: f64,
@@ -1274,14 +1279,28 @@ impl EngineValues {
         };
         self.hp_max = self.speed_hp_calc(self.speed_max, hull);
         self.hp_cruise = self.speed_hp_calc(self.speed_cruise.min(self.speed_max), hull);
-        let pe = crate::resistance::estimate_propulsion_efficiency(hull, self.speed_max);
-        self.wake_fraction = pe.wake_fraction;
-        self.thrust_deduction = pe.thrust_deduction;
-        self.hull_efficiency = pe.hull_efficiency;
-        self.open_water_efficiency = pe.open_water_efficiency;
-        self.relative_rotative_efficiency = pe.relative_rotative_efficiency;
-        self.shaft_efficiency = pe.shaft_efficiency;
-        self.qpc = pe.quasi_propulsive_coefficient;
+        // The propulsion-efficiency breakdown belongs to the Holtrop-Mennen
+        // model.  The original empirical fit outputs shaft power directly and
+        // does not use a QPC, so we must not display one for it.
+        self.qpc_applicable = self.resistance_model == ResistanceModel::HoltropMennen;
+        if self.qpc_applicable {
+            let pe = crate::resistance::estimate_propulsion_efficiency(hull, self.speed_max);
+            self.wake_fraction = pe.wake_fraction;
+            self.thrust_deduction = pe.thrust_deduction;
+            self.hull_efficiency = pe.hull_efficiency;
+            self.open_water_efficiency = pe.open_water_efficiency;
+            self.relative_rotative_efficiency = pe.relative_rotative_efficiency;
+            self.shaft_efficiency = pe.shaft_efficiency;
+            self.qpc = pe.quasi_propulsive_coefficient;
+        } else {
+            self.wake_fraction = 0.0;
+            self.thrust_deduction = 0.0;
+            self.hull_efficiency = 0.0;
+            self.open_water_efficiency = 0.0;
+            self.relative_rotative_efficiency = 0.0;
+            self.shaft_efficiency = 0.0;
+            self.qpc = 0.0;
+        }
     }
 
     pub fn engine_calc(
@@ -1999,10 +2018,15 @@ impl ShipModel {
                 "Power: max {:.0} hp, cruise {:.0} hp",
                 e.hp_max, e.hp_cruise
             ),
-            format!(
-                "Propulsion: QPC={:.3} (wake={:.3}, thrust deduction={:.3})",
-                e.qpc, e.wake_fraction, e.thrust_deduction
-            ),
+            if e.qpc_applicable {
+                format!(
+                    "Propulsion: QPC={:.3} (wake={:.3}, thrust deduction={:.3}); used in power calculation",
+                    e.qpc, e.wake_fraction, e.thrust_deduction
+                )
+            } else {
+                "Propulsion: original empirical shaft-power fit; no explicit QPC (the Holtrop-style efficiency breakdown is not used)."
+                    .to_string()
+            },
             match self.engine.resistance_model {
                 ResistanceModel::Original => {
                     "Note: power uses the original SpringSharp empirical model (reconstructed, unimproved)."
@@ -2139,6 +2163,30 @@ mod tests {
         };
         let weight = battery.shell_weight_calc();
         assert!((weight - 15.0_f64.powi(3) / 1.9830943211886).abs() < 0.01);
+    }
+
+    #[test]
+    fn qpc_is_marked_applicable_only_for_holtrop() {
+        let mut ship = ShipModel::new();
+        ship.hull.length = 600.0;
+        ship.hull.beam = 90.0;
+        ship.hull.beam_bulges = 90.0;
+        ship.hull.draught = 28.0;
+        ship.hull.block = 0.55;
+        ship.hull.date_hull = 1940;
+        ship.hull.date_engine = 1940;
+        ship.engine.screws = 4;
+        ship.engine.speed_max = 24.0;
+        ship.engine.resistance_model = ResistanceModel::Original;
+        ship.calculate();
+        assert!(!ship.engine.qpc_applicable);
+        assert_eq!(ship.engine.qpc, 0.0);
+
+        ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+        ship.calculate();
+        assert!(ship.engine.qpc_applicable);
+        assert!(ship.engine.qpc > 0.0);
+        assert!(ship.engine.hull_efficiency > 0.0);
     }
 
     #[test]

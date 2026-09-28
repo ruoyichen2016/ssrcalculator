@@ -845,6 +845,36 @@ pub fn run_loocv() -> LoocvReport {
     }
 }
 
+/// Per-ship-type LOOCV MAPE using the globally LOOCV-optimised ensemble
+/// weight.  This is the out-of-sample accuracy input for the per-type quality
+/// gate.
+pub fn loocv_by_type() -> Vec<(String, usize, f64)> {
+    let report = run_loocv();
+    let w = report.optimal_reduced_weight;
+    let cases = historical_cases();
+    let mut out: Vec<(String, usize, f64)> = Vec::new();
+    for fold in &report.folds {
+        let ty = cases
+            .iter()
+            .find(|c| c.name == fold.name)
+            .map(|c| c.ship_type)
+            .unwrap_or("unknown");
+        let pred = w * fold.reduced_hp + (1.0 - w) * fold.structural_hp;
+        let err = ((pred - fold.reference_hp) / fold.reference_hp).abs();
+        if let Some(g) = out.iter_mut().find(|g| g.0 == ty) {
+            g.1 += 1;
+            g.2 += err;
+        } else {
+            out.push((ty.to_string(), 1, err));
+        }
+    }
+    for g in &mut out {
+        g.2 /= g.1 as f64;
+    }
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
+}
+
 /// Confidence-weighted leave-one-out cross-validation report.
 pub fn run_loocv_weighted() -> LoocvReport {
     let cases = historical_cases();
@@ -1086,6 +1116,65 @@ pub fn fit_structural_form_segmented_lasso(lambda: f64) -> Vec<StructuralSegment
     fit_structural_form_segmented_regularized(0.0, lambda)
 }
 
+/// Scale each column to unit RMS before regularisation.
+///
+/// Returns `(scaled_rows, scale)` such that `raw = beta / scale`.
+fn standardize_two_columns(rows: &[Vec<f64>]) -> (Vec<Vec<f64>>, [f64; 2]) {
+    let n = rows.len().max(1) as f64;
+    let mut scale = [1.0_f64; 2];
+    for j in 0..2 {
+        let ss: f64 = rows.iter().map(|r| r[j] * r[j]).sum();
+        let rms = (ss / n).sqrt();
+        if rms > 1e-12 {
+            scale[j] = rms;
+        }
+    }
+    let z = rows
+        .iter()
+        .map(|r| vec![r[0] / scale[0], r[1] / scale[1]])
+        .collect();
+    (z, scale)
+}
+
+/// Fit `a_v * f + a_w * w = y`, optionally with ridge or lasso regularisation.
+///
+/// Features are scaled to unit RMS first, so the same lambda grid is
+/// meaningful whether the components are in kW or hp.  Coefficients are
+/// converted back to the original units.
+fn fit_two_component_regularized(
+    rows: &[Vec<f64>],
+    targets: &[f64],
+    ridge: f64,
+    lasso: f64,
+) -> Vec<f64> {
+    if rows.is_empty() {
+        return vec![1.0, 1.0];
+    }
+    let (z, scale) = standardize_two_columns(rows);
+    // Normalising the target as well keeps the regularisation strength
+    // dimensionless: without it, lambda would be swamped by the kW/hp scale of
+    // the power components and the grid would be a no-op.
+    let y_rms = (targets.iter().map(|y| y * y).sum::<f64>() / targets.len().max(1) as f64).sqrt();
+    let y_scale = if y_rms > 1e-12 { y_rms } else { 1.0 };
+    let y_norm: Vec<f64> = targets.iter().map(|y| y / y_scale).collect();
+    let beta = if lasso > 0.0 {
+        lasso_coordinate_descent(&z, &y_norm, lasso)
+    } else if ridge > 0.0 {
+        let mut ar = z.clone();
+        let mut br = y_norm.clone();
+        for j in 0..2 {
+            let mut row = vec![0.0; 2];
+            row[j] = ridge.max(0.0).sqrt();
+            ar.push(row);
+            br.push(0.0);
+        }
+        solve_qr(&ar, &br).unwrap_or_else(|| vec![1.0, 1.0])
+    } else {
+        solve_qr(&z, &y_norm).unwrap_or_else(|| vec![1.0, 1.0])
+    };
+    vec![beta[0] * y_scale / scale[0], beta[1] * y_scale / scale[1]]
+}
+
 fn fit_structural_form_segmented_regularized(ridge: f64, lasso: f64) -> Vec<StructuralSegment> {
     let bands: [(&'static str, f64, f64); 3] = [
         ("low Fn (<=0.18)", f64::NEG_INFINITY, 0.18),
@@ -1125,21 +1214,7 @@ fn fit_structural_form_segmented_regularized(ridge: f64, lasso: f64) -> Vec<Stru
                 rows.push(vec![f, w]);
                 targets.push(case.reference_hp * 0.7456999 - c);
             }
-            let coef = if lasso > 0.0 {
-                lasso_coordinate_descent(&rows, &targets, lasso)
-            } else if ridge > 0.0 {
-                let mut ar = rows.clone();
-                let mut br = targets.clone();
-                for j in 0..2 {
-                    let mut row = vec![0.0; 2];
-                    row[j] = ridge.max(0.0).sqrt();
-                    ar.push(row);
-                    br.push(0.0);
-                }
-                solve_qr(&ar, &br).unwrap_or_else(|| vec![1.0, 1.0])
-            } else {
-                solve_qr(&rows, &targets).unwrap_or_else(|| vec![1.0, 1.0])
-            };
+            let coef = fit_two_component_regularized(&rows, &targets, ridge, lasso);
 
             let mut errs = Vec::new();
             for (i, case) in subset.iter().enumerate() {
@@ -1204,9 +1279,10 @@ pub struct LambdaSelection {
     pub results: Vec<(f64, f64)>,
 }
 
-fn structural_form_fit_from_cases_ridge(
+fn structural_form_fit_from_cases_regularized(
     cases: &[crate::accuracy::HistoricalCase],
-    lambda: f64,
+    ridge: f64,
+    lasso: f64,
 ) -> StructuralFormFit {
     let mut rows = Vec::new();
     let mut targets = Vec::new();
@@ -1218,46 +1294,46 @@ fn structural_form_fit_from_cases_ridge(
         rows.push(vec![f, w]);
         targets.push(case.reference_hp * 0.7456999 - c);
     }
-    let mut ar = rows.clone();
-    let mut br = targets.clone();
-    for j in 0..2 {
-        let mut row = vec![0.0; 2];
-        row[j] = lambda.max(0.0).sqrt();
-        ar.push(row);
-        br.push(0.0);
+    let coef = fit_two_component_regularized(&rows, &targets, ridge, lasso);
+    // Real in-sample error, not a hardcoded placeholder.
+    let mut signed = Vec::new();
+    let mut abs_sum = 0.0_f64;
+    for (i, case) in cases.iter().enumerate() {
+        let target = case.reference_hp * 0.7456999;
+        let pred = coef[0] * rows[i][0] + coef[1] * rows[i][1] + (target - targets[i]);
+        if target > 0.0 {
+            let rel = (pred - target) / target;
+            signed.push(rel);
+            abs_sum += rel.abs();
+        }
     }
-    let coef = solve_qr(&ar, &br).unwrap_or_else(|| vec![1.0, 1.0]);
+    let mape = if signed.is_empty() {
+        f64::INFINITY
+    } else {
+        abs_sum / signed.len() as f64
+    };
+    let (_mean, sd) = mean_sd(&signed);
     StructuralFormFit {
         viscous_factor: coef[0],
         wave_factor: coef[1],
         correlation_factor: 1.0,
-        mean_abs_pct_error: 0.0,
-        sigma_abs_pct_error: 0.0,
+        mean_abs_pct_error: mape,
+        sigma_abs_pct_error: sd,
     }
+}
+
+fn structural_form_fit_from_cases_ridge(
+    cases: &[crate::accuracy::HistoricalCase],
+    lambda: f64,
+) -> StructuralFormFit {
+    structural_form_fit_from_cases_regularized(cases, lambda, 0.0)
 }
 
 fn structural_form_fit_from_cases_lasso(
     cases: &[crate::accuracy::HistoricalCase],
     lambda: f64,
 ) -> StructuralFormFit {
-    let mut rows = Vec::new();
-    let mut targets = Vec::new();
-    for case in cases {
-        let ship = simulate_case_with_model(case, ResistanceModel::HoltropMennen);
-        let input = input_from_hull(&ship.hull, case.speed_kt);
-        let res = holtrop_resistance(&input);
-        let (f, w, c) = structural_kw(case, &res);
-        rows.push(vec![f, w]);
-        targets.push(case.reference_hp * 0.7456999 - c);
-    }
-    let coef = lasso_coordinate_descent(&rows, &targets, lambda);
-    StructuralFormFit {
-        viscous_factor: coef[0],
-        wave_factor: coef[1],
-        correlation_factor: 1.0,
-        mean_abs_pct_error: 0.0,
-        sigma_abs_pct_error: 0.0,
-    }
+    structural_form_fit_from_cases_regularized(cases, 0.0, lambda)
 }
 
 fn loocv_structural_mape(
@@ -1294,11 +1370,16 @@ fn loocv_structural_mape(
     }
 }
 
+/// Lambda grid for regularised structural fits.  Features are standardized to
+/// unit RMS, so this range spans "essentially unregularised" to
+/// "coefficients driven to zero".
+const LAMBDA_CANDIDATES: [f64; 9] = [1e-4, 1e-3, 1e-2, 1e-1, 1.0, 1e1, 1e2, 1e3, 1e4];
+
 /// Select Ridge lambda by structural-form LOOCV.
 pub fn select_ridge_lambda() -> LambdaSelection {
     let cases = historical_cases();
-    let candidates = [0.0, 0.001, 0.01, 0.1, 1.0, 10.0];
-    let mut best = (0.0_f64, f64::INFINITY);
+    let candidates = LAMBDA_CANDIDATES;
+    let mut best = (f64::INFINITY, f64::INFINITY);
     let mut results = Vec::new();
     for lambda in candidates {
         let mape = loocv_structural_mape(&cases, "ridge", lambda);
@@ -1317,8 +1398,8 @@ pub fn select_ridge_lambda() -> LambdaSelection {
 /// Select Lasso lambda by structural-form LOOCV.
 pub fn select_lasso_lambda() -> LambdaSelection {
     let cases = historical_cases();
-    let candidates = [0.0, 0.001, 0.01, 0.1, 1.0, 10.0];
-    let mut best = (0.0_f64, f64::INFINITY);
+    let candidates = LAMBDA_CANDIDATES;
+    let mut best = (f64::INFINITY, f64::INFINITY);
     let mut results = Vec::new();
     for lambda in candidates {
         let mape = loocv_structural_mape(&cases, "lasso", lambda);
@@ -1737,8 +1818,11 @@ fn external_to_historical(case: &ExternalCase) -> crate::accuracy::HistoricalCas
             // External CSV data is treated as public-reference unless it is
             // later upgraded through explicit provenance metadata.
             source_type: crate::accuracy::SourceType::PublicReference,
+            displacement_type: crate::accuracy::DisplacementType::Unspecified,
             confidence: case.confidence,
             source: leak(&case.source),
+            source_url: "",
+            verifier: "",
             verification_date: "unknown",
         },
     }
@@ -2119,6 +2203,58 @@ mod tests {
         assert!(sf.mean_abs_pct_error.is_finite());
         let loocv = run_loocv_with_external_weighted(&cases);
         assert!(loocv.ensemble_mape.is_finite());
+    }
+
+    #[test]
+    fn regularization_lambda_changes_coefficients() {
+        let cases = historical_cases();
+        let weak = structural_form_fit_from_cases_ridge(&cases, 1e-4);
+        let strong = structural_form_fit_from_cases_ridge(&cases, 1e4);
+        assert!(weak.mean_abs_pct_error.is_finite());
+        assert!(strong.mean_abs_pct_error.is_finite());
+        let weak_scale = weak.viscous_factor.abs().max(1.0);
+        assert!(
+            (weak.viscous_factor - strong.viscous_factor).abs() > 1e-3 * weak_scale,
+            "ridge lambda grid is a no-op: weak={} strong={}",
+            weak.viscous_factor,
+            strong.viscous_factor
+        );
+        let weak_l = structural_form_fit_from_cases_lasso(&cases, 1e-4);
+        let strong_l = structural_form_fit_from_cases_lasso(&cases, 1e4);
+        assert!(
+            (weak_l.viscous_factor - strong_l.viscous_factor).abs()
+                > 1e-3 * weak_l.viscous_factor.abs().max(1.0),
+            "lasso lambda grid is a no-op: weak={} strong={}",
+            weak_l.viscous_factor,
+            strong_l.viscous_factor
+        );
+        // The selected lambda must not be a tie: the grid has to actually vary.
+        let ridge_sel = select_ridge_lambda();
+        let distinct: std::collections::BTreeSet<i64> = ridge_sel
+            .results
+            .iter()
+            .map(|(_, m)| (m * 1e6).round() as i64)
+            .collect();
+        assert!(
+            distinct.len() > 1,
+            "ridge lambda selection is degenerate: {:?}",
+            ridge_sel.results
+        );
+    }
+
+    #[test]
+    fn loocv_by_type_covers_all_types_out_of_sample() {
+        let global = run_loocv();
+        let by_type = loocv_by_type();
+        assert!(!by_type.is_empty());
+        let total: usize = by_type.iter().map(|(_, n, _)| *n).sum();
+        assert_eq!(total, historical_cases().len());
+        for (ty, n, mape) in &by_type {
+            assert!(*n >= 2, "{ty} has too few cases");
+            assert!(mape.is_finite() && *mape >= 0.0);
+        }
+        // The ensemble weight used is the global LOOCV optimum.
+        assert!(global.optimal_reduced_weight >= 0.0 && global.optimal_reduced_weight <= 1.0);
     }
 
     #[test]

@@ -434,10 +434,14 @@ pub fn generate_report(ship: &ShipModel) -> String {
         e.bunker,
         e.bunker * 1.8
     ));
-    r.push_str(&format!(
-        "\tPropulsion: QPC={:.3}, hull={:.3}, open-water={:.3}, shaft={:.3}\n",
-        e.qpc, e.hull_efficiency, e.open_water_efficiency, e.shaft_efficiency
-    ));
+    if e.qpc_applicable {
+        r.push_str(&format!(
+            "\tPropulsion: QPC={:.3} (used in power calculation), hull={:.3}, open-water={:.3}, shaft={:.3}\n",
+            e.qpc, e.hull_efficiency, e.open_water_efficiency, e.shaft_efficiency
+        ));
+    } else {
+        r.push_str("\tPropulsion: original empirical shaft-power fit; no explicit QPC applies.\n");
+    }
     r.push_str(&format!(
         "\tScrews: {}; range: {:.0} nm\n",
         e.screws, e.range

@@ -189,9 +189,16 @@ recalculates the design.  The value is also exposed in the web form and saved in
 `.ssr` files.
 
 `resistance::holtrop_power_hp()` provides a Holtrop-Mennen style alternative
-with an estimated propulsion-efficiency model (wake fraction, thrust deduction,
-hull/open-water/rotative/shaft efficiencies) instead of a fixed 0.70 QPC.
-Switch a design to it by setting:
+with an explicit propulsion-efficiency breakdown (wake fraction, thrust
+deduction, hull/open-water/rotative/shaft efficiencies) and a derived QPC.
+
+The **original** SpringSharp model is an empirical shaft-power fit and has no
+explicit propulsive coefficient.  Summaries and reports therefore show the QPC
+(and state that it is used in the power calculation) only for the Holtrop model;
+for the original model they state that no QPC applies.  Earlier versions
+incorrectly displayed a Holtrop-style QPC next to original-model results.
+
+Switch a design to Holtrop by setting:
 
 ```text
 engine.resistance_model=holtrop
@@ -345,8 +352,8 @@ The `calibrate-stats` command also reports:
 - `data-priority` command listing low-confidence cases first
 - `data-sources` command summarizing built-in data by source
 - `data-score` command showing overall data-quality score
-- `data-progress` command tracking official-trial/model-test vs public-reference counts
-- `data-target` command checking the independently-verified data fraction target
+- `data-progress` command tracking official-trial/model-test vs public-reference counts and traceability
+- `data-target` command checking a composite gate (official/model-test + traceability + LOOCV accuracy) with per-ship-type breakdown
 - `data-tiers` command summarizing high/medium/low confidence tiers
 - `data-replace-log` command listing per-case replacement actions
 - `data-version` command showing built-in database version tag
@@ -355,10 +362,15 @@ The `calibrate-stats` command also reports:
 - `calibrate-type` command applying per-ship-type power calibration
 - `data/README.md` documenting provenance and replacement workflow
 - `data/CHANGELOG.md` tracking database versions
-- built-in-v1.5: 37 cases, all `SourceType::PublicReference` (0/37 independently
-  verified); `validate`, `data-score`, `data-targets` now report the shortfall honestly
-- deterministic holdout split (`validate-holdout`) so calibration is scored out-of-sample
+- built-in-v1.6: 37 cases, all `SourceType::PublicReference` (0/37 independently
+  verified, 0/37 traceable); `validate`, `data-score`, `data-target` report this honestly
+- explicit `Provenance { source_type, displacement_type, confidence, source, source_url, verifier, verification_date }` on every case
 - hardcoded `DATA_UPGRADES` / `case_source_confidence` removed; confidence is explicit provenance data
+- composite quality gate: `0.4*official + 0.2*traceable + 0.4*LOOCV-accuracy`, with per-ship-type output
+- deterministic holdout split (`validate-holdout`): calibration fit on 28 train, scored on 9 held-out cases
+- `tests/accuracy_regression.rs` freezes overall/per-type LOOCV and holdout baselines with regression thresholds
+- Ridge/Lasso structural fits standardize features and target, with a scale-aware lambda grid (`1e-4` .. `1e4`)
+- QPC shown only for the Holtrop model; original-model output states that no QPC applies
 - quality-report HTML test
 - `external-report` command for HTML external data reports
 - `apply-ensemble-external` command writes external-data ensemble weights into `.ssr`
@@ -383,8 +395,9 @@ The `calibrate-stats` command also reports:
 > Note: the built-in database is approximate public historical data, not
 > independent verification.  Segmented structural fits can be
 > over-parameterized; LOOCV and `validate-holdout` give more honest estimates of
-> predictive error than in-sample MAPE.  `data-targets` measures
-> official-trial/model-test coverage, so it currently fails honestly.
+> predictive error than in-sample MAPE.  `data-target` is a composite gate
+> (official/model-test coverage + traceability + out-of-sample accuracy), so it
+> currently fails honestly.  See `docs/VALIDATION.md` for the frozen baselines.
 
 ## Algorithmic improvements (CLRS-inspired)
 
@@ -424,7 +437,8 @@ Metric conversions (`Conversion` / `metric_calc`) are provided for reports.
 ## Documentation
 
 - `docs/ALGORITHM.md` describes the current algorithm chain.
-- `docs/ROADMAP.md` lists completed work and remaining P2/P3 items.
+- `docs/VALIDATION.md` defines provenance, LOOCV/holdout baselines and the composite quality gate.
+- `docs/ROADMAP.md` lists completed work and remaining items.
 - Native GUI uses eframe/egui behind the optional `gui` feature:
   `cargo run --features gui --bin springsharp-gui`. The GUI builds headless but
   needs a display/GL environment at runtime.
