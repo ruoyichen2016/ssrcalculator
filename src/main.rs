@@ -8,12 +8,12 @@ use springsharp::{
     bootstrap_uncertainty_with_external, bootstrap_uncertainty_with_external_weighted,
     calculate_internal_spaces, calibration_factor, calibration_factor_holtrop, cfd_holdout_report,
     cfd_holdout_stability, cfd_loocv_report, cfd_report_html, cfd_status, compare_qr_svd,
-    compartment_placement_html, compartment_placement_json, compute_planing_calibration,
-    compute_planing_calibration_from_files, data_consistency_audit, data_outlier_audit,
-    data_quality_report_html, data_quality_score, data_quality_summary, data_replacement_log,
-    data_replacement_priority, data_replacement_progress, data_source_summary,
-    data_target_matrix_for, data_tier_summary, data_version, demo_ship, deserialize,
-    detect_duplicate_external_cases, external_report_html, fit_cfd_proxy_report,
+    compare_regime_vs_original, compartment_placement_html, compartment_placement_json,
+    compute_planing_calibration, compute_planing_calibration_from_files, data_consistency_audit,
+    data_outlier_audit, data_quality_report_html, data_quality_score, data_quality_summary,
+    data_replacement_log, data_replacement_priority, data_replacement_progress,
+    data_source_summary, data_target_matrix_for, data_tier_summary, data_version, demo_ship,
+    deserialize, detect_duplicate_external_cases, external_report_html, fit_cfd_proxy_report,
     fit_cfd_proxy_ridge, fit_ensemble, fit_ensemble_cv, fit_reduced_form, fit_reduced_form_by_type,
     fit_reduced_form_interaction, fit_reduced_form_weighted, fit_reduced_form_with_external,
     fit_regime_calibration, fit_structural_form, fit_structural_form_segmented,
@@ -54,6 +54,7 @@ COMMANDS:
   validate-holdout     Out-of-sample check (calibration fit on training split only)
   validate-regime      Nested-LOOCV comparison of regime model vs original baseline
   regime-residuals     Per-case nested-LOOCV residuals (historical speed/power)
+  regime-compare       Paired comparison: regime vs original SpringSharp baseline
   validation-audit     Historical data coverage by model family
   historical-compare <file> [n]  Show historical cases closest to a design
   accuracy-target [m]  Check nested regime LOOCV against a MAPE target (default 0.10)
@@ -107,7 +108,7 @@ Grouped aliases (flat names still work):
   calibrate <stats|regime|type|ridge|lasso|structural|external> ...
   validate  <types|holdout|regime|audit>
   data      <score|progress|target|targets|tiers|priority|sources|replace-log|version|consistency|outliers>
-  regime    <show|apply|validate|residuals>
+  regime    <show|apply|validate|residuals|compare>
   accuracy  target [mape]
   cfd       <status|proxy|fit|report|fit-ridge|select-lambda|apply>
   planing   <hp|savitsky|validate|calibrate|calibrate-all>
@@ -147,6 +148,7 @@ fn normalize_grouped_command(mut args: Vec<String>) -> Vec<String> {
         ("regime", "apply") => Some("calibrate-regime".to_string()),
         ("regime", "validate") => Some("validate-regime".to_string()),
         ("regime", "residuals") => Some("regime-residuals".to_string()),
+        ("regime", "compare") => Some("regime-compare".to_string()),
         (
             "cfd",
             s @ ("status" | "proxy" | "fit" | "report" | "fit-ridge" | "select-lambda" | "apply"),
@@ -1569,6 +1571,52 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
             println!(
                 "Note: public historical/approximate cases (not basin data); assumptions: deadrise 12-14 deg, LCG=0.42L, eta=0.55."
             );
+        }
+        "regime-compare" => {
+            let c = compare_regime_vs_original();
+            println!("Baseline comparison (nested, {} cases):", c.n);
+            println!("  {:<26} {:>8} {:>12}", "Model", "MAPE", "median |err|");
+            for (name, mape, median) in [
+                ("regime (Holtrop + factor)", c.regime_mape, c.regime_median),
+                (
+                    "original (uncalibrated)",
+                    c.original_mape,
+                    c.original_median,
+                ),
+                (
+                    "original + per-type factor",
+                    c.original_calibrated_mape,
+                    f64::NAN,
+                ),
+                ("Holtrop (uncalibrated)", c.holtrop_mape, f64::NAN),
+            ] {
+                if median.is_finite() {
+                    println!(
+                        "  {name:<26} {:>7.2}% {:>11.2}%",
+                        mape * 100.0,
+                        median * 100.0
+                    );
+                } else {
+                    println!("  {name:<26} {:>7.2}% {:>12}", mape * 100.0, "-");
+                }
+            }
+            println!(
+                "\nPaired (regime vs original): {} wins / {} losses / {} ties",
+                c.regime_wins, c.original_wins, c.ties
+            );
+            println!("  two-sided sign-test p = {:.2e}", c.sign_test_p);
+            println!("\nPer ship type (regime MAPE vs original MAPE, wins/n):");
+            for (ty, n, rm, om, w) in &c.per_type {
+                println!(
+                    "  {:<12} n={:<3} {:>6.2}% vs {:>6.2}%   wins {}/{}",
+                    ty,
+                    n,
+                    rm * 100.0,
+                    om * 100.0,
+                    w,
+                    n
+                );
+            }
         }
         "regime-residuals" => {
             let r = run_loocv_regime();

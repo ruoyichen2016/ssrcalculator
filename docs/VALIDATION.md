@@ -52,6 +52,28 @@ speed range.  Data verification corrected two carrier beam entries (Wasp,
 Shokaku), the Sendai length and nine consistency-flagged approximate cases; see
 `docs/DATA_REVIEW.md`.
 
+### Comparison against the original baseline (`regime-compare`)
+
+Nested, paired over all 123 cases:
+
+| Model | MAPE | median abs error |
+|---|---|---|
+| **regime (Holtrop + per-type factor)** | **10.57%** | **8.10%** |
+| original (uncalibrated) | 21.11% | 15.30% |
+| original + per-type factor | 11.08% | - |
+| Holtrop uncalibrated | 20.89% | - |
+
+- Paired regime vs original: **84 wins / 39 losses / 0 ties**, two-sided sign-test
+  **p = 6.1e-5**.
+- Per type (regime vs original, wins/n): battleship 9.65% vs 17.42% (24/32);
+  destroyer 11.14% vs 41.06% (23/25); carrier 11.24% vs 21.49% (20/32);
+  **cruiser 10.39% vs 9.57% (17/34)**.
+
+So the modern model is clearly better overall and for three of the four types,
+but the original SpringSharp model is still better for cruisers.  A type-aware
+choice (original for cruisers) would improve the aggregate further, but it must
+be validated by nested cross-validation before being adopted.
+
 ### Frozen baseline (2026-09-27)
 
 | Metric | Baseline (123 cases) | Regression threshold |

@@ -162,6 +162,12 @@ pub struct RegimeResidual {
     pub ship_type: &'static str,
     pub reference_hp: f64,
     pub predicted_hp: f64,
+    /// Original SpringSharp model with no calibration factor.
+    pub original_hp: f64,
+    /// Original SpringSharp + per-type factor (nested) prediction.
+    pub original_calibrated_hp: f64,
+    /// Holtrop-Mennen with no calibration factor.
+    pub holtrop_hp: f64,
     pub error_pct: f64,
     /// Declared data confidence (0.7 curated core, 0.5 approximate bulk).
     pub confidence: f64,
@@ -187,6 +193,121 @@ pub struct RegimeLoocv {
     pub curated_cases: usize,
     /// Nested-LOOCV MAPE over the curated core only.
     pub curated_mape: f64,
+}
+
+/// Paired comparison of the modern regime model against baselines.
+#[derive(Clone, Debug)]
+pub struct BaselineComparison {
+    pub n: usize,
+    pub regime_mape: f64,
+    pub original_mape: f64,
+    pub original_calibrated_mape: f64,
+    pub holtrop_mape: f64,
+    pub regime_median: f64,
+    pub original_median: f64,
+    /// Cases where the regime error is strictly smaller than the original.
+    pub regime_wins: usize,
+    pub original_wins: usize,
+    pub ties: usize,
+    /// Two-sided sign-test p-value (regime vs original raw).
+    pub sign_test_p: f64,
+    /// (ship type, n, regime MAPE, original MAPE, regime wins)
+    pub per_type: Vec<(String, usize, f64, f64, usize)>,
+}
+
+fn paired_median(mut v: Vec<f64>) -> f64 {
+    if v.is_empty() {
+        return f64::NAN;
+    }
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = v.len();
+    if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        0.5 * (v[n / 2 - 1] + v[n / 2])
+    }
+}
+
+/// Two-sided sign-test p-value for `k` successes in `n` trials (p = 0.5).
+pub fn sign_test_p(k: usize, n: usize) -> f64 {
+    if n == 0 {
+        return 1.0;
+    }
+    let mut probs = vec![0.0_f64; n + 1];
+    probs[0] = 0.5_f64.powi(n as i32);
+    for i in 0..n {
+        probs[i + 1] = probs[i] * (n - i) as f64 / (i + 1) as f64;
+    }
+    let low: f64 = probs[..=k.min(n)].iter().sum();
+    let high: f64 = probs[k.min(n)..].iter().sum();
+    (2.0 * low.min(high)).min(1.0)
+}
+
+/// Compare the nested regime predictions with the original SpringSharp model
+/// (raw and per-type calibrated) and uncalibrated Holtrop, case by case.
+pub fn compare_regime_vs_original() -> BaselineComparison {
+    let report = run_loocv_regime();
+    let mut regime_abs = Vec::new();
+    let mut original_abs = Vec::new();
+    let mut original_cal_abs = Vec::new();
+    let mut holtrop_abs = Vec::new();
+    let mut wins = 0_usize;
+    let mut losses = 0_usize;
+    let mut ties = 0_usize;
+    let mut per_type: Vec<(String, Vec<f64>, Vec<f64>, usize)> = Vec::new();
+    for row in &report.residuals {
+        let ref_hp = row.reference_hp.max(1e-9);
+        let re = (row.predicted_hp - row.reference_hp).abs() / ref_hp;
+        let oe = (row.original_hp - row.reference_hp).abs() / ref_hp;
+        let oce = (row.original_calibrated_hp - row.reference_hp).abs() / ref_hp;
+        let he = (row.holtrop_hp - row.reference_hp).abs() / ref_hp;
+        if re + 1e-12 < oe {
+            wins += 1;
+        } else if oe + 1e-12 < re {
+            losses += 1;
+        } else {
+            ties += 1;
+        }
+        regime_abs.push(re);
+        original_abs.push(oe);
+        original_cal_abs.push(oce);
+        holtrop_abs.push(he);
+        let ty = row.ship_type.to_string();
+        if let Some(e) = per_type.iter_mut().find(|e| e.0 == ty) {
+            e.1.push(re);
+            e.2.push(oe);
+            if re + 1e-12 < oe {
+                e.3 += 1;
+            }
+        } else {
+            per_type.push((ty, vec![re], vec![oe], usize::from(re + 1e-12 < oe)));
+        }
+    }
+    let mean = |v: &[f64]| {
+        if v.is_empty() {
+            f64::NAN
+        } else {
+            v.iter().sum::<f64>() / v.len() as f64
+        }
+    };
+    let per_type = per_type
+        .into_iter()
+        .map(|(ty, re, oe, w)| (ty, re.len(), mean(&re), mean(&oe), w))
+        .collect();
+    BaselineComparison {
+        n: report.residuals.len(),
+        regime_mape: mean(&regime_abs),
+        original_mape: mean(&original_abs),
+        original_calibrated_mape: mean(&original_cal_abs),
+        holtrop_mape: mean(&holtrop_abs),
+        regime_median: paired_median(regime_abs),
+        original_median: paired_median(original_abs),
+        regime_wins: wins,
+        original_wins: losses,
+        ties,
+        sign_test_p: sign_test_p(wins, wins + losses),
+        per_type,
+    }
 }
 
 /// Nested leave-one-out evaluation.
@@ -239,6 +360,9 @@ pub fn run_loocv_regime() -> RegimeLoocv {
             ship_type: test.ship_type,
             reference_hp: test.reference_hp,
             predicted_hp: pred_h,
+            original_hp: raw_o[i],
+            original_calibrated_hp: pred_o,
+            holtrop_hp: raw_h[i],
             error_pct: (pred_h - test.reference_hp) / test.reference_hp.max(1e-9) * 100.0,
             confidence: case_confidence(test.name),
         });
@@ -318,6 +442,36 @@ mod tests {
             r.curated_mape,
             r.overall_mape
         );
+    }
+
+    #[test]
+    fn sign_test_is_sane() {
+        assert!((sign_test_p(0, 0) - 1.0).abs() < 1e-12);
+        assert!(sign_test_p(50, 100) > 0.9);
+        assert!(sign_test_p(84, 123) < 1e-3);
+    }
+
+    #[test]
+    fn regime_beats_original_overall() {
+        let c = compare_regime_vs_original();
+        assert_eq!(c.n, historical_cases().len());
+        assert!(
+            c.regime_mape < c.original_mape,
+            "regime {:.3} should beat original {:.3}",
+            c.regime_mape,
+            c.original_mape
+        );
+        assert!(c.regime_mape < c.original_calibrated_mape);
+        assert!(c.regime_median < c.original_median);
+        assert!(c.regime_wins > c.original_wins);
+        assert!(c.sign_test_p < 0.01, "p={}", c.sign_test_p);
+        // Honest caveat: the original remains competitive for cruisers.
+        let cruiser = c
+            .per_type
+            .iter()
+            .find(|e| e.0 == "cruiser")
+            .expect("cruiser group");
+        assert!(cruiser.2 < 0.12 && cruiser.3 < 0.12);
     }
 
     #[test]

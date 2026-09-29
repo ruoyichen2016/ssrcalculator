@@ -188,6 +188,7 @@ explicitly approximate.
 
 ```bash
 cargo run -- validate-regime   # primary: nested-LOOCV regime vs baselines
+cargo run -- regime-compare    # paired regime vs original SpringSharp baseline
 cargo run -- regime-residuals  # per-case historical speed/power residuals
 cargo run -- validation-audit  # which model families have historical references
 cargo run -- accuracy-target   # check nested regime LOOCV (default <= 10%)
@@ -222,6 +223,11 @@ This sets `engine.resistance_model=holtrop` and `engine.power_factor` for the
 design's ship type.  The original SpringSharp model is retained as a comparison
 baseline.  In-sample fits are diagnostic only; use `validate-regime` for the
 out-of-sample number.
+
+Against the original SpringSharp model the regime model wins **84/123** paired
+cases (sign-test p = 6.1e-5) and roughly halves the MAPE (10.57% vs 21.11%);
+the one exception is cruisers, where the original is still better (9.57% vs
+10.39%).
 
 Because all 123 cases are also used by the `calibrate-*` fits, the in-sample
 numbers printed by `calibrate-stats` are optimistic.  `calibrate-stats` prints

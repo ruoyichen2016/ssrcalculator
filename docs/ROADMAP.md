@@ -282,6 +282,18 @@
   10.41% -> 10.57%; the corrected data is retained as the more consistent base.
 - Details in `docs/DATA_REVIEW.md`; data changelog v1.14.
 
+## Phase 24 — baseline comparison report (completed 2026-09-27)
+
+- Added `regime-compare`: paired, nested comparison of the regime model against
+  the original SpringSharp model (raw and per-type calibrated) and uncalibrated
+  Holtrop, with per-type breakdown and a two-sided sign test.
+- Result over 123 cases: regime 10.57% MAPE (median 8.10%) vs original 21.11%
+  (15.30%), original+factor 11.08%, Holtrop 20.89%; 84 wins / 39 losses
+  (p = 6.1e-5).
+- Per type the regime model is better for battleships, destroyers and carriers,
+  but the original is still better for cruisers (9.57% vs 10.39%).
+- Documented in `docs/VALIDATION.md` and the README.
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model
