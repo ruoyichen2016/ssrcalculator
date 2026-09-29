@@ -1,5 +1,18 @@
 # Data changelog
 
+## built-in-v1.9 (2026-09-27) — sample expanded to 101 cases
+
+- Added 24 public-reference ships: 6 battleships (Fuso, New Mexico, Tennessee,
+  Nevada, Iron Duke, Conte di Cavour), 6 carriers (Zuikaku, Junyo, Ryujo,
+  Furious, Eagle, Hermes), 6 cruisers (Pensacola, Portland, San Francisco,
+  Furutaka, Suzuya, Algerie) and 6 destroyers (Gridley, Sumner, Gearing,
+  Fubuki, Asashio, Z1 Leberecht Maass).
+- Overall regime nested LOOCV held at 10.21% (macro 10.35% -> 10.21%);
+  per type: battleship 9.31%, carrier 11.60%, cruiser 9.79%, destroyer 10.16%.
+- Original SpringSharp baseline 21.70%; original+factor 11.51%.
+- Status: **0/101 independently verified, 0/101 traceable**.
+
+
 ## built-in-v1.8 (2026-09-27) — expanded sample to 77 cases
 
 - Added 25 public-reference ships: 10 battleships (Nelson, Rodney, Queen

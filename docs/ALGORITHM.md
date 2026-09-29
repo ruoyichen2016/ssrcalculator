@@ -58,9 +58,9 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
   battleship 0.760, carrier 0.778, cruiser 0.922, destroyer 1.053
 - The original SpringSharp empirical model is retained as a comparison baseline
 - Validated by **nested** LOOCV: the factor is re-fitted on each training split
-  - regime (Holtrop + factor): 10.21% case-weighted / 10.35% type-averaged (77 cases)
-  - original (uncalibrated): 21.58%; with per-type factor: 12.33%
-  - Holtrop uncalibrated: 21.91%
+  - regime (Holtrop + factor): 10.21% case-weighted / 10.21% type-averaged (101 cases)
+  - original (uncalibrated): 21.70%; with per-type factor: 11.51%
+  - Holtrop uncalibrated: 19.66%
 - Applied to a design via `calibrate-regime` (sets `resistance_model` + `power_factor`)
 
 ## Internal Space Model
@@ -125,7 +125,7 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 
 ## Validation
 
-- 77 built-in historical cases, all currently `SourceType::PublicReference`
+- 101 built-in historical cases, all currently `SourceType::PublicReference`
 - Explicit `Provenance { source_type, displacement_type, confidence, source,
   source_url, verifier, verification_date }` per case
 - Verified = official trial / model test only; traceable = citation + URL + verifier

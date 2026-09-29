@@ -145,7 +145,7 @@ fn regularization_grid_is_not_a_noop() {
 
 // ---------------------------------------------------------------------------
 // Regime-aware modern model: Holtrop + per-ship-type calibration factor.
-// Baseline nested LOOCV ~10.2% with the expanded 77-case dataset (2026-09-27).
+// Baseline nested LOOCV ~10.2% with the expanded 101-case dataset (2026-09-27).
 // ---------------------------------------------------------------------------
 
 const REGIME_OVERALL_MAX: f64 = 0.115;
