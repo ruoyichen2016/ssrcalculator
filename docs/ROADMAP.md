@@ -6,7 +6,7 @@
 - `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test` all clean
 - Honest provenance: `SourceType`/`Provenance` on every case; hardcoded `DATA_UPGRADES`
   and `case_source_confidence` removed
-- `data-targets` now measures official-trial/model-test coverage (currently 0/101, fails honestly)
+- `data-targets` now measures official-trial/model-test coverage (currently 0/123, fails honestly)
 - LOOCV promoted to the primary metric in `calibrate-stats`; in-sample fits labelled diagnostic
 - Deterministic holdout split + `validate-holdout` (calibration fitted on 28 train, scored on 9 held-out)
 - Docs synced with actual counts (unit + integration tests green)
@@ -27,7 +27,7 @@
 ## Phase 2 — modern regime model + CLI groups (completed 2026-09-27)
 
 - Modern default: Holtrop-Mennen + per-ship-type calibration factor fitted to
-  the public historical dataset, validated by nested LOOCV (**10.21%** over 101 cases)
+  the public historical dataset, validated by nested LOOCV (**10.71%** over 123 cases)
 - `validate-regime` compares regime vs original+factor (10.57%) and uncalibrated
   Holtrop (19.42%); original kept as the comparison baseline
 - `calibrate-regime`, `regime-table`, `accuracy-target` commands
@@ -155,6 +155,21 @@
 - Original SpringSharp baseline 21.70%; original+factor 11.51%; Holtrop
   uncalibrated 19.66%
 - Holdout re-frozen at 76 train / 25 held-out (original 15.1%, Holtrop 13.1%)
+
+## Phase 14 — fourth sample expansion + repo cleanup (completed 2026-09-27)
+
+- Removed the scratch `examples/segment_experiment.rs`; only the documented
+  `examples/generate_cfd_reference.rs` remains.
+- Added 22 more public-reference ships: 5 battleship/battlecruiser (Bretagne,
+  Courbet, Andrea Doria, Ise, Renown), 5 carriers (Hiyo, Ryuho, Implacable,
+  Sangamon, Long Island), 6 cruisers (Nachi, Chikuma, Trento, Duquesne, Emden,
+  Fiji) and 6 destroyers (Jervis, Shiratsuyu, Matsu, Z23, Soldati, Mogador);
+  dataset 101 -> 123
+- Regime nested LOOCV 10.21% -> 10.71% case-weighted (macro 10.21% -> 10.75%);
+  per type: battleship 9.84%, carrier 12.23%, cruiser 9.71%, destroyer 11.23%
+- Original SpringSharp baseline 21.28%; original+factor 11.34%; Holtrop
+  uncalibrated 19.56%
+- Holdout re-frozen at 93 train / 30 held-out (original 13.9%, Holtrop 12.6%)
 
 ## Completed
 

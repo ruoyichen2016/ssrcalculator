@@ -159,7 +159,7 @@ format.  `load_from_file()` automatically detects files beginning with
 
 ## Accuracy and calibration
 
-`accuracy.rs` includes 101 historical speed/power cases from battleships, fleet
+`accuracy.rs` includes 123 historical speed/power cases from battleships, fleet
 carriers, cruisers and destroyers (Dreadnought, Bismarck, Iowa, Fletcher,
 Yamato, Kongo, Essex, Atlanta, Tribal, South Dakota, KGV, Baltimore, Cleveland,
 Yorktown, Illustrious, North Carolina, Vanguard, Shokaku, Hood, Zara, Mogami,
@@ -195,10 +195,10 @@ Nested leave-one-out cross-validation (the factor is re-fitted on every training
 split) gives:
 
 ```text
-regime (Holtrop + per-type factor) : 10.21% case-weighted, 10.21% type-averaged
-original (uncalibrated)            : 21.70%   <- original SpringSharp baseline
-original + per-type factor         : 11.51%
-Holtrop uncalibrated               : 19.66%
+regime (Holtrop + per-type factor) : 10.71% case-weighted, 10.75% type-averaged
+original (uncalibrated)            : 21.28%   <- original SpringSharp baseline
+original + per-type factor         : 11.34%
+Holtrop uncalibrated               : 19.56%
 ```
 
 Apply it to a design with:
@@ -212,7 +212,7 @@ design's ship type.  The original SpringSharp model is retained as a comparison
 baseline.  In-sample fits are diagnostic only; use `validate-regime` for the
 out-of-sample number.
 
-Because all 101 cases are also used by the `calibrate-*` fits, the in-sample
+Because all 123 cases are also used by the `calibrate-*` fits, the in-sample
 numbers printed by `calibrate-stats` are optimistic.  `calibrate-stats` prints
 the LOOCV summary first and labels the in-sample fits as diagnostic only.
 
@@ -404,10 +404,10 @@ The `calibrate-stats` command also reports:
 - `calibrate-type` command applying per-ship-type power calibration
 - `data/README.md` documenting provenance and replacement workflow
 - `data/CHANGELOG.md` tracking database versions
-- built-in-v1.9: 101 cases, all `SourceType::PublicReference` (0/101 independently
-  verified, 0/101 traceable); `validate`, `data-score`, `data-target` report this honestly
-- 64 additional cases added in three batches (15 carriers, 25 + 24 battleship/cruiser/destroyer);
-  the wider sample exposes extreme-Froude weaknesses (regime 8.92% -> 10.21%)
+- built-in-v1.10: 123 cases, all `SourceType::PublicReference` (0/123 independently
+  verified, 0/123 traceable); `validate`, `data-score`, `data-target` report this honestly
+- 86 additional cases added in four batches (carriers, battleship/cruiser/destroyer);
+  the wider sample exposes extreme-Froude weaknesses (regime 8.92% -> 10.71%)
 - Fn-segmented per-type factors and per-type Fn slopes tested and rejected (overfit: 9.06% -> 11.7%+); a 15% trimmed-mean factor is used instead
 - explicit `Provenance { source_type, displacement_type, confidence, source, source_url, verifier, verification_date }` on every case
 - hardcoded `DATA_UPGRADES` / `case_source_confidence` removed; confidence is explicit provenance data
@@ -428,7 +428,7 @@ The `calibrate-stats` command also reports:
   **rule-style scantling module** (plate bending + buckling + corrosion, stiffener section modulus,
   deflection); JSON/HTML report occupancy, evacuation/mustering times, congestion, density, escape
   metres, scantling utilisation, structure weight and objective (23 checks)
-- regime-aware modern model: Holtrop-Mennen + per-ship-type 15% trimmed-mean factor (nested LOOCV 10.21% case-weighted / 10.21% type-averaged over 101 cases, vs original 21.70%); original retained as baseline
+- regime-aware modern model: Holtrop-Mennen + per-ship-type 15% trimmed-mean factor (nested LOOCV 10.71% case-weighted / 10.75% type-averaged over 123 cases, vs original 21.28%); original retained as baseline
 - `validate-regime`, `regime-table`, `calibrate-regime` and `accuracy-target` commands
 - grouped CLI aliases (`calibrate stats`, `validate holdout|audit`, `data score`, `regime show|residuals`, `accuracy target`, `cfd fit`, ...) with flat names preserved
 - quality-report HTML test

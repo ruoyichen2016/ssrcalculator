@@ -1,5 +1,17 @@
 # Data changelog
 
+## built-in-v1.10 (2026-09-27) — sample expanded to 123 cases
+
+- Added 22 public-reference ships: 5 battleship/battlecruiser (Bretagne,
+  Courbet, Andrea Doria, Ise, Renown), 5 carriers (Hiyo, Ryuho, Implacable,
+  Sangamon, Long Island), 6 cruisers (Nachi, Chikuma, Trento, Duquesne, Emden,
+  Fiji) and 6 destroyers (Jervis, Shiratsuyu, Matsu, Z23, Soldati, Mogador).
+- Regime nested LOOCV 10.21% -> 10.71% case-weighted (macro 10.21% -> 10.75%);
+  per type: battleship 9.84%, carrier 12.23%, cruiser 9.71%, destroyer 11.23%.
+- Original SpringSharp baseline 21.28%; original+factor 11.34%.
+- Status: **0/123 independently verified, 0/123 traceable**.
+
+
 ## built-in-v1.9 (2026-09-27) — sample expanded to 101 cases
 
 - Added 24 public-reference ships: 6 battleships (Fuso, New Mexico, Tennessee,
