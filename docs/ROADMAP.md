@@ -271,6 +271,17 @@
   8.09% -> 8.14%): the corrected data is slightly harder for the model, which is
   the honest direction.
 
+## Phase 23 — approximate-bulk review (11 flagged cases) (completed 2026-09-27)
+
+- Reviewed the 11 consistency-flagged approximate cases; 9 corrected (Tone and
+  Chikuma length + Cb, Chikuma renamed, Wichita length + Cb, Revenge and Queen
+  Elizabeth length + Cb, Takao/Nagato/Tennessee/New Mexico Cb).
+- `data-consistency` now reports 2/123 out-of-band (Commencement Bay and Wasp,
+  both standard-vs-full-load convention).
+- Accuracy: curated core 8.14% -> 8.04%, battleship 9.92% -> 9.65%, full set
+  10.41% -> 10.57%; the corrected data is retained as the more consistent base.
+- Details in `docs/DATA_REVIEW.md`; data changelog v1.14.
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model

@@ -205,11 +205,11 @@ Nested leave-one-out cross-validation (the factor is re-fitted on every training
 split) gives:
 
 ```text
-regime (Holtrop + per-type factor) : 10.41% case-weighted, 10.47% type-averaged
-curated core (37 cases)            : 8.14%
-original (uncalibrated)            : 21.05%   <- original SpringSharp baseline
-original + per-type factor         : 11.16%
-Holtrop uncalibrated               : 19.31%
+regime (Holtrop + per-type factor) : 10.57% case-weighted, 10.60% type-averaged
+curated core (37 cases)            : 8.04%
+original (uncalibrated)            : 21.11%   <- original SpringSharp baseline
+original + per-type factor         : 11.08%
+Holtrop uncalibrated               : 20.89%
 ```
 
 Apply it to a design with:

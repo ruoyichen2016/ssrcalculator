@@ -1,5 +1,21 @@
 # Data changelog
 
+## built-in-v1.14 (2026-09-27) — approximate-bulk review (11 flagged cases)
+
+- Reviewed the 11 consistency-flagged approximate cases; details in
+  `docs/DATA_REVIEW.md`.
+- 9 corrected: Tone/Chikuma length 620 -> 661 ft (oa) and Cb 0.50 -> 0.54;
+  Chikuma renamed (it is a Tone-class ship); Wichita length 600 -> 608 ft and
+  Cb 0.50 -> 0.53; Revenge length 620 -> 624 ft, Cb 0.58 -> 0.66; Queen
+  Elizabeth length 643 -> 645 ft, Cb 0.58 -> 0.66; Takao Cb 0.50 -> 0.56;
+  Nagato Cb 0.58 -> 0.65; Tennessee/New Mexico Cb 0.58 -> 0.61.
+- 2 unchanged (Commencement Bay, Wasp) as standard-vs-full-load convention.
+- Consistency check now reports 2/123 out-of-band (was 11/123).
+- Accuracy: curated core 8.14% -> 8.04%, battleship 9.92% -> 9.65%, full set
+  10.41% -> 10.57% (the model had partly compensated for inconsistent inputs).
+- Status: **0/123 independently verified, 0/123 traceable**.
+
+
 ## built-in-v1.13 (2026-09-27) — curated-core review
 
 - Line-by-line review of the 37 curated cases; details in

@@ -77,3 +77,28 @@ Summary
   others overall (Independence, Bogue).  Consistent within a case, but mixed
   across the set.
 
+## Approximate-bulk review (the 11 consistency-flagged cases)
+
+`data-consistency` flagged 11 of the 86 approximate cases.  Each was reviewed
+against documented figures:
+
+| Case | Documented notes | Action |
+|---|---|---|
+| Tone class CA (1940) | Tone class: 661 ft oa, 11,213 t std / 15,200 full, 35 kt, 152,000 shp | corrected: L 620 -> 661 (oa), Cb 0.50 -> 0.54 |
+| Chikuma class CA (1939) | Chikuma is a Tone-class ship, not its own class | corrected: renamed "Chikuma CA (1939)", L 620 -> 661, Cb 0.50 -> 0.54 |
+| Wichita CA (1939) | 608 ft oa, 10,589 std / 13,015 full | corrected: L 600 -> 608, Cb 0.50 -> 0.53 |
+| Revenge class BB (1916) | 624 ft oa, 29,150 normal | corrected: L 620 -> 624, Cb 0.58 -> 0.66 |
+| Queen Elizabeth class BB (1915) | 645 ft oa, 27,500 std / 33,000 deep | corrected: L 643 -> 645, Cb 0.58 -> 0.66 |
+| Takao class CA (1932) | 668 ft oa, 11,350 std / 15,490 full | corrected: Cb 0.50 -> 0.56 |
+| Nagato class BB (1920) | 738 ft oa, 39,000 full | corrected: Cb 0.58 -> 0.65 |
+| Tennessee class BB (1920) | 624 ft oa, 32,300 std | corrected: Cb 0.58 -> 0.61 |
+| New Mexico class BB (1918) | 624 ft oa, 32,000 std | corrected: Cb 0.58 -> 0.61 |
+| Commencement Bay CVE (1944) | 557 ft oa, 10,900 std; the widely cited 24,100 t full load is inconsistent with these dimensions | convention only, unchanged |
+| Wasp CV (1940) | 741 ft oa / 688 wl, 80 ft hull beam, 14,700 std / ~17,600 full | convention only, unchanged |
+
+Result: 9 corrected, 2 kept as standard-vs-full-load convention examples.
+After the corrections the consistency check reports **2/123** out-of-band (both
+carriers).  Effect on accuracy: curated-core LOOCV 8.14% -> **8.04%**, battleship
+9.92% -> **9.65%**, but the full set 10.41% -> **10.57%** (the regime factor had
+partly compensated for the inconsistent inputs).  The corrected data is kept as
+the more physically consistent baseline.

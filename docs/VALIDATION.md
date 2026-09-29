@@ -45,29 +45,30 @@ Secondary metrics:
 `Holtrop-Mennen + per-ship-type calibration factor`, fitted on the public
 historical dataset (the default when a design is run through
 `calibrate-regime`).  Factors (ref/sim, 15% trimmed mean) at 123 cases:
-battleship 0.781, carrier 0.803, cruiser 0.920, destroyer 1.017.  The wider
+battleship 0.767, carrier 0.803, cruiser 0.911, destroyer 1.017.  The wider
 sample (four expansion batches) moved the overall nested LOOCV from 8.92% to
-10.41% (curated core 8.14%) by exposing extreme-Froude cases across the whole
+10.57% (curated core 8.04%) by exposing extreme-Froude cases across the whole
 speed range.  Data verification corrected two carrier beam entries (Wasp,
-Shokaku) and the Sendai length; see `docs/DATA_REVIEW.md`.
+Shokaku), the Sendai length and nine consistency-flagged approximate cases; see
+`docs/DATA_REVIEW.md`.
 
 ### Frozen baseline (2026-09-27)
 
 | Metric | Baseline (123 cases) | Regression threshold |
 |---|---|---|
-| **Regime nested LOOCV, case-weighted** | **~10.41%** | **<= 11.5%** |
-| Regime nested, type-averaged (macro) | ~10.47% | <= 11.5% |
-| **Curated core (37 cases)** | **~8.14%** | <= 9.5% |
-| Regime nested, battleship | ~9.92% | <= 12.0% |
+| **Regime nested LOOCV, case-weighted** | **~10.57%** | **<= 11.5%** |
+| Regime nested, type-averaged (macro) | ~10.60% | <= 11.5% |
+| **Curated core (37 cases)** | **~8.04%** | <= 9.5% |
+| Regime nested, battleship | ~9.65% | <= 12.0% |
 | Regime nested, carrier | ~11.24% | <= 13.0% |
-| Regime nested, cruiser | ~9.57% | <= 10.5% |
+| Regime nested, cruiser | ~10.39% | <= 10.5% |
 | Regime nested, destroyer | ~11.14% | <= 13.0% |
-| Original uncalibrated (original model) | ~21.05% | (comparison) |
-| Original + per-type factor | ~11.16% | (must be beaten) |
-| Holtrop uncalibrated | ~19.31% | (must be beaten) |
-| 2-way ensemble, reported (optimistic) | ~9.96% | <= 12.0% |
-| Holdout MAPE, original | ~13.9% | <= 18.5% |
-| Holdout MAPE, Holtrop | ~12.6% | <= 15.0% |
+| Original uncalibrated (original model) | ~21.11% | (comparison) |
+| Original + per-type factor | ~11.08% | (must be beaten) |
+| Holtrop uncalibrated | ~20.89% | (must be beaten) |
+| 2-way ensemble, reported (optimistic) | ~10.3% | <= 12.0% |
+| Holdout MAPE, original | ~13.8% | <= 18.5% |
+| Holdout MAPE, Holtrop | ~13.1% | <= 15.0% |
 
 These are enforced by `tests/accuracy_regression.rs`.  If a change is a
 deliberate improvement, update the baseline here and the constants in that file
@@ -122,7 +123,7 @@ the built-in historical data:
 
 | Model family | Historical references | Status |
 |---|---|---|
-| Speed/power (regime) | 123 cases (37 curated) | validated; nested LOOCV 10.40% case-weighted, curated core 8.09% |
+| Speed/power (regime) | 123 cases (37 curated) | validated; nested LOOCV 10.57% case-weighted, curated core 8.04% |
 | Planing (Savitsky vs empirical) | 8 public planing cases | validated; both 23.3% calibrated |
 | Structural weight | 0 | **cannot be validated** with the current dataset |
 | Internal spaces (machinery/magazine/accommodation) | 0 | **cannot be validated** |
@@ -165,7 +166,7 @@ loocv_accuracy_score = 1.0                       if MAPE <= 10%
                      = linear interpolation      in between
 ```
 
-Baseline composite (123 public-reference cases, nested regime LOOCV 10.40%):
+Baseline composite (123 public-reference cases, nested regime LOOCV 10.57%):
 **0.400**.  `data-target 0.8` (and all `data-targets` thresholds) therefore fail
 honestly until official trial / model-basin data with citations, URLs and named
 verifiers is added.
