@@ -201,6 +201,15 @@
 - Remaining consistency flags are standard-vs-full-load convention differences,
   not errors; the outlier screen found no further clear data errors.
 
+## Phase 17 — engineering wrap-up: CI + docs (completed 2026-09-27)
+
+- Added `.github/workflows/ci.yml`: a core job (fmt, clippy `-D warnings`,
+  `cargo test --all-targets`) and a GUI job (installs the X11/xkbcommon/Wayland
+  dev packages and builds `--features gui --bin springsharp-gui`).
+- Moved the ~130-bullet implementation log out of `README.md` into
+  `docs/CHANGELOG.md`; README is now ~400 lines and points to the log.
+- Documented the CI in the README design notes and the documentation index.
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model
