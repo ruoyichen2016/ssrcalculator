@@ -74,6 +74,37 @@ but the original SpringSharp model is still better for cruisers.  A type-aware
 choice (original for cruisers) would improve the aggregate further, but it must
 be validated by nested cross-validation before being adopted.
 
+### Why the original model still wins on cruisers
+
+Diagnosis (from `regime-residuals` plus a feature-correlation study):
+
+- The regime model is `Holtrop x per-type constant factor`, so it can correct
+  the average cruiser bias but not any trend *within* the type.
+- For cruisers, `|regime error|` correlates with `ln(displacement)` (+0.45):
+  the larger/faster ships are the problem (Takao 40%, Wichita 30%, Graf Spee 21%,
+  Alaska 18%, Pensacola 17%).  Holtrop-Mennen was regressed mostly on slower,
+  fuller hulls; its wave-resistance term is weaker for fine, fast cruiser hulls
+  (Cb ~0.5, Fn ~0.4), where the original SpringSharp V^4 fit happens to match the
+  documented trials better.
+
+Candidate extra parameters (nested LOOCV, 123 cases):
+
+| model | overall | macro | curated | cruiser | worst cruiser |
+|---|---|---|---|---|---|
+| per-type constant (current) | 10.57% | 10.60% | 8.04% | 10.39% | 40% |
+| + Fn slope (shrink 4 / 8) | 10.52 / 10.51% | 10.57 / 10.56% | 8.32 / 8.29% | 10.09% | 41% |
+| + displacement slope (4 / 8) | 10.88 / 10.84% | 10.93 / 10.90% | 8.23 / 8.20% | 9.92% | 36% |
+| two-band displacement split | 10.60% | 10.68% | 8.51% | 9.08% | 32% |
+| two-band Froude split | 10.73% | 10.78% | 8.39% | 10.35% | 39% |
+
+No candidate improves the overall, macro and curated metrics at the same time:
+each extra parameter trades one group for another.  With 123 public-reference
+cases, adding features mainly risks overfitting rather than improving the model.
+
+Conclusion: the cruiser gap is a model-form/data limitation.  The robust options
+are (a) keep the current per-type model, or (b) validate a type-aware blend
+(original for cruisers) by nested CV before adopting it.
+
 ### Frozen baseline (2026-09-27)
 
 | Metric | Baseline (123 cases) | Regression threshold |

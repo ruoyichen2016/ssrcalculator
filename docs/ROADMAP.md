@@ -294,6 +294,19 @@
   but the original is still better for cruisers (9.57% vs 10.39%).
 - Documented in `docs/VALIDATION.md` and the README.
 
+## Phase 25 — cruiser diagnosis and feature study (completed 2026-09-27)
+
+- Diagnosed why the original model still beats the regime model on cruisers:
+  the per-type constant factor cannot capture the within-type trend, and
+  `|regime error|` correlates with displacement (+0.45) — large/fast cruisers
+  are where Holtrop's wave-resistance term is weakest.
+- Tested extra parameters (per-type Fn slope, displacement slope, two-band
+  displacement/Froude splits) under nested LOOCV; recorded in
+  `docs/VALIDATION.md`.
+- No candidate improves overall + macro + curated together; each trades one
+  group for another, so the current model is kept.  A type-aware blend remains a
+  candidate only with nested validation.
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model
