@@ -55,5 +55,11 @@ jobs:
             libxinerama-dev libxkbcommon-dev libxkbcommon-x11-dev libudev-dev \
             libwayland-dev libgl1-mesa-dev libegl1-mesa-dev
 
+      - name: Format GUI
+        run: cargo fmt --manifest-path gui/Cargo.toml -- --check
+
+      - name: Clippy GUI
+        run: cargo clippy --manifest-path gui/Cargo.toml --all-targets -- -D warnings
+
       - name: Build GUI binary
-        run: cargo build --features gui --bin springsharp-gui
+        run: cargo build --manifest-path gui/Cargo.toml

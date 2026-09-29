@@ -205,19 +205,36 @@
 
 - Added `.github/workflows/ci.yml`: a core job (fmt, clippy `-D warnings`,
   `cargo test --all-targets`) and a GUI job (installs the X11/xkbcommon/Wayland
-  dev packages and builds `--features gui --bin springsharp-gui`).
+  dev packages and builds `--manifest-path gui/Cargo.toml`).
 - Moved the ~130-bullet implementation log out of `README.md` into
   `docs/CHANGELOG.md`; README is now ~400 lines and points to the log.
 - Documented the CI in the README design notes and the documentation index.
 
 ## Phase 18 — isolate the GUI build (completed 2026-09-27)
 
-- `scripts/build-gui.sh` builds the optional GUI with `CARGO_TARGET_DIR=target-gui`,
-  so the eframe/egui dependency tree (~130 crates) never shares the core target.
-- `[profile.dev.package."*"] debug = false` drops debug symbols from dependency
-  artifacts (the GUI tree is the only dependency tree), shrinking the cache.
-- `target-gui/` ignored by git and removable independently (`rm -rf target-gui`).
-- Core builds/tests remain dependency-free and fast.
+- Split the GUI into a **separate workspace** (`gui/`, excluded from the core
+  workspace) with `default-members`-style isolation: the core `cargo build`
+  never even resolves eframe.  Verified by building the core with an empty
+  cargo cache (no registry index) — it succeeds.
+- `scripts/build-gui.sh` builds the GUI with `CARGO_TARGET_DIR=target-gui` so
+  the eframe/egui tree (~130 crates) never shares the core `target/`.
+- `[profile.dev.package."*"] debug = false` in `gui/Cargo.toml` drops debug
+  symbols from the GUI dependency artifacts.
+- Core `Cargo.lock` is now 7 lines (zero dependencies); the GUI has its own
+  `gui/Cargo.lock`.  `target-gui/` and `gui/target/` are ignored and removable.
+
+## Phase 19 — GUI as a separate workspace crate (completed 2026-09-27)
+
+- Moved the GUI out of the core package into `gui/` (`springsharp-gui`), a
+  **separate workspace** excluded from the core workspace.  The core
+  `cargo build`/`test`/`clippy` never resolves eframe — verified by building the
+  core with an empty cargo cache (no registry index), which succeeds.
+- Core `Cargo.lock` is now 7 lines (zero dependencies); the GUI has its own
+  `gui/Cargo.lock` with the eframe/egui tree.
+- Commands: `scripts/build-gui.sh` or
+  `cargo build --manifest-path gui/Cargo.toml` (also `cargo run --manifest-path
+  gui/Cargo.toml`).  CI runs fmt + clippy + build for the GUI crate.
+- `gui/src/app.rs` is the former `src/gui.rs` (paths updated to `springsharp::`).
 
 ## Completed
 
@@ -230,7 +247,7 @@
 - LOOCV with per-sample residuals
 - Ensemble weights optimized by LOOCV
 - Web console with design/external/planing endpoints
-- Optional native egui/eframe GUI (`--features gui`)
+- Optional native egui/eframe GUI as a separate `gui/` workspace crate
 - CFD-surrogate correction framework + CSV fitting + R²/RMSE + LOOCV/holdout + Ridge/λ selection + `cfd-apply` + HTML report + propulsion breakdown in reports
 - Global GA general-arrangement optimizer + calibre/rounds/mounts-scaled magazine volume + structural continuity + maintenance void constraints
 - 52 built-in historical cases + multiple example CSV datasets + replacement-priority + source-summary + quality-score + progress/target/tier + replacement-log + version + multi-target reports

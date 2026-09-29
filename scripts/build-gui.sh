@@ -12,4 +12,4 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-gui}"
-exec cargo build --features gui --bin springsharp-gui "$@"
+exec cargo build --manifest-path gui/Cargo.toml "$@"

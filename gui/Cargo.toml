@@ -1,0 +1,24 @@
+# Separate workspace: keeps eframe's dependency graph out of the core workspace
+# entirely (the core `cargo build` does not even resolve it).
+[workspace]
+
+[package]
+name = "springsharp-gui"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Optional egui/eframe GUI for the SpringSharp Rust engine"
+license = "MIT"
+
+[[bin]]
+name = "springsharp-gui"
+path = "src/main.rs"
+
+[dependencies]
+springsharp = { path = ".." }
+eframe = { version = "0.36", default-features = false, features = ["glow", "default_fonts", "x11", "wayland"] }
+
+# The eframe/egui dependency tree does not need debug symbols; this keeps the
+# isolated GUI cache much smaller (profiles are per-workspace).
+[profile.dev.package."*"]
+debug = false

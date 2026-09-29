@@ -29,23 +29,28 @@ zero-dependency local web console are provided as working front-ends.
 ## Project layout
 
 ```
-springsharp/
-├── Cargo.toml
-├── README.md
-└── src/
-    ├── lib.rs        # library entry point
-    ├── main.rs       # CLI + interactive terminal session
-    ├── model.rs      # all calculation structures and formulas
-    ├── io.rs         # save/load support
-    ├── features.rs   # report generation and iterative solvers
-    ├── accuracy.rs   # historical validation / segmented power calibration
-    ├── resistance.rs # Holtrop-Mennen style resistance/power prediction
-    ├── spaces.rs     # internal space + compartment prototype
-    ├── cfd_proxy.rs  # optional CFD-surrogate correction framework
-    ├── calibration.rs # reduced-form and structural-form statistical calibration
-    ├── web.rs        # zero-dependency local web console
-    └── bin/
-        └── gui.rs    # optional native egui GUI
+springsharp/            # core crate: zero dependencies
+├── Cargo.toml          # core workspace (members = ["."], excludes gui/)
+├── src/
+│   ├── lib.rs
+│   ├── main.rs         # CLI + interactive terminal session
+│   ├── model.rs        # calculation structures and formulas
+│   ├── io.rs           # save/load support
+│   ├── features.rs     # reports and iterative solvers
+│   ├── accuracy.rs     # historical cases, validation, provenance audits
+│   ├── resistance.rs   # Holtrop-Mennen style resistance/power
+│   ├── regime.rs       # modern regime model (Holtrop + per-type factor)
+│   ├── calibration.rs  # reduced/structural-form calibration
+│   ├── spaces.rs       # internal spaces + general-arrangement GA
+│   ├── scantling.rs    # rule-style plate/stiffener checks
+│   ├── planing.rs      # experimental planing model
+│   ├── savitsky.rs     # Savitsky planing solver
+│   ├── cfd_proxy.rs    # CFD-surrogate framework
+│   └── web.rs          # zero-dependency local web console
+├── docs/               # ALGORITHM / VALIDATION / ROADMAP / CHANGELOG
+└── gui/                # separate workspace crate (springsharp-gui)
+    ├── Cargo.toml      # depends on `springsharp` + eframe
+    └── src/{main.rs,app.rs}
 ```
 
 ## Usage
@@ -71,7 +76,7 @@ cargo run -- html example.ssr > example.html
 # scripts/build-gui.sh builds it into a separate target-gui/ directory so the
 # eframe dependency tree never competes with the core target/.
 scripts/build-gui.sh
-CARGO_TARGET_DIR=target-gui cargo run --features gui --bin springsharp-gui
+CARGO_TARGET_DIR=target-gui cargo run --manifest-path gui/Cargo.toml
 
 # Web console (browser GUI with form inputs)
 cargo run -- web 8080
@@ -381,12 +386,15 @@ Metric conversions (`Conversion` / `metric_calc`) are provided for reports.
 - `docs/ROADMAP.md` lists completed work and remaining items.
 - `docs/CHANGELOG.md` is the cumulative implementation log.
 - Native GUI uses eframe/egui behind the optional `gui` feature:
-  `scripts/build-gui.sh` (or `cargo run --features gui --bin springsharp-gui`).
-  It builds headless but needs a display/GL environment at runtime.  The helper
-  script uses `target-gui/` so the ~130-crate GUI dependency tree stays out of
-  the core `target/`, and `[profile.dev.package."*"] debug = false` keeps those
-  dependency artifacts smaller.  Measured: core `target/` ~60-200 MB with a ~15 s
-  rebuild, GUI `target-gui/` ~770 MB and independently removable.
+  `scripts/build-gui.sh` (or `cargo run --manifest-path gui/Cargo.toml`).
+  It builds headless but needs a display/GL environment at runtime.  Because the
+  GUI is a **separate workspace** (`gui/` is excluded from the core workspace),
+  the core `cargo build`/`test` never resolves eframe at all — verified by
+  building with an empty cargo cache.  `scripts/build-gui.sh` puts the GUI in
+  `target-gui/`, and `[profile.dev.package."*"] debug = false` (in `gui/Cargo.toml`)
+  keeps those artifacts smaller.  Measured: core `target/` ~250 MB (or ~60 MB
+  after `cargo clean -p springsharp`) with a ~2-15 s rebuild; GUI `target-gui/`
+  ~740 MB and removable with `rm -rf target-gui`.
 
 ## Design notes
 

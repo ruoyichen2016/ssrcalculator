@@ -6,6 +6,15 @@ default-run = "springsharp"
 description = "A Rust reimplementation of the SpringSharp naval design calculation engine"
 license = "MIT"
 
+# The core is its own workspace with no dependencies, so `cargo build`/`test`
+# here never resolves eframe.  The GUI lives in `gui/` as a *separate* workspace
+# that depends on this crate by path; build it with `scripts/build-gui.sh` or
+# `cargo build --manifest-path gui/Cargo.toml`.
+[workspace]
+members = ["."]
+exclude = ["gui"]
+resolver = "2"
+
 [lib]
 name = "springsharp"
 path = "src/lib.rs"
@@ -13,17 +22,6 @@ path = "src/lib.rs"
 [[bin]]
 name = "springsharp"
 path = "src/main.rs"
-
-[[bin]]
-name = "springsharp-gui"
-path = "src/bin/gui.rs"
-required-features = ["gui"]
-
-[features]
-gui = ["dep:eframe"]
-
-[dependencies]
-eframe = { version = "0.36", optional = true, default-features = false, features = ["glow", "default_fonts", "x11", "wayland"] }
 
 # Dependencies (notably the optional eframe/egui GUI tree) do not need debug
 # symbols; this keeps the dependency artifacts much smaller.  The crate itself

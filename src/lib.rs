@@ -11,8 +11,6 @@ pub mod accuracy;
 pub mod calibration;
 pub mod cfd_proxy;
 pub mod features;
-#[cfg(feature = "gui")]
-pub mod gui;
 pub mod io;
 pub mod model;
 pub mod planing;

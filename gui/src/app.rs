@@ -1,13 +1,14 @@
 //! Native egui/eframe GUI for the SpringSharp Rust engine.
 //!
-//! This is an optional feature (`--features gui`).  It exposes the most
-//! important ship-design inputs and a report/calculate page.
+//! Built as the separate `springsharp-gui` workspace crate so the core crate
+//! never resolves the eframe dependency tree.  It exposes the most important
+//! ship-design inputs, a calibration page and a report/calculate page.
 
 use eframe::egui;
 
-use crate::features::demo_ship;
-use crate::io::{load_from_file, save_to_file};
-use crate::model::{ResistanceModel, ShipModel};
+use springsharp::features::demo_ship;
+use springsharp::io::{load_from_file, save_to_file};
+use springsharp::model::{ResistanceModel, ShipModel};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -34,8 +35,8 @@ impl SpringSharpApp {
     pub fn new() -> Self {
         let mut ship = demo_ship();
         ship.calculate();
-        let report = crate::features::generate_report(&ship);
-        let regime = crate::regime::run_loocv_regime();
+        let report = springsharp::features::generate_report(&ship);
+        let regime = springsharp::regime::run_loocv_regime();
         let mut regime_summary = format!(
             "regime (Holtrop + per-type factor): {:.2}%\noriginal + per-type factor:        {:.2}%\nHoltrop uncalibrated:              {:.2}%\n\nper ship type (nested LOOCV):\n",
             regime.overall_mape * 100.0,
@@ -58,7 +59,7 @@ impl SpringSharpApp {
 
     fn recalculate(&mut self) {
         self.ship.calculate();
-        self.report = crate::features::generate_report(&self.ship);
+        self.report = springsharp::features::generate_report(&self.ship);
         self.status = "Calculated".to_string();
     }
 
@@ -517,7 +518,7 @@ impl SpringSharpApp {
         );
         ui.separator();
         ui.label(format!("Ship type: {}", self.ship.ship_type));
-        match crate::regime::regime_for_ship_type(&self.ship.ship_type) {
+        match springsharp::regime::regime_for_ship_type(&self.ship.ship_type) {
             Some(r) => {
                 ui.label(format!(
                     "Recommended: {}  factor {:.3}  (in-sample MAPE {:.1}%)",
@@ -526,7 +527,9 @@ impl SpringSharpApp {
                     r.train_mape * 100.0
                 ));
                 if ui.button("Apply regime model").clicked() {
-                    if let Some(applied) = crate::regime::apply_regime_calibration(&mut self.ship) {
+                    if let Some(applied) =
+                        springsharp::regime::apply_regime_calibration(&mut self.ship)
+                    {
                         self.recalculate();
                         self.status = format!(
                             "Applied regime: {} factor {:.3}",
