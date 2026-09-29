@@ -3148,6 +3148,12 @@ pub const REFERENCES: &[&str] = &[
     "Liu, S. et al. (2019). A study on the statistical calibration of the Holtrop and Mennen approximate power prediction method for full hull form, low Froude number vessels. Journal of Ship Production and Design.",
     "Kim, S. et al. (2014). On the prediction of wave-added resistance with empirical methods. Journal of Ship Production and Design, 30(4).",
     "OMAE2021-62395 (2021). Benchmark study of supervised machine learning methods for a ship speed-power prediction at sea.",
+    // High-speed slender/displacement hull data and methods (pointers only:
+    // the regressions were not implemented because the source coefficients
+    // could not be obtained offline and must not be invented).
+    "Yeh, H.Y.H. (1965). Series 64 resistance experiments on high-speed displacement forms. DTMB Report 1672.",
+    "Savitsky, M. (1964). Hydrodynamic design of planing hulls. Marine Technology, 1(1), 71-95.",
+    "Molland, A.F., Turnock, S.R. & Hudson, D.A. (2017). Ship Resistance and Propulsion: Practical Estimation of Ship Propulsive Power, 2nd ed. Cambridge University Press.",
 ];
 
 #[test]
