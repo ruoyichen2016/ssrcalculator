@@ -409,3 +409,7 @@ CI runs `fmt`, `clippy -D warnings`, `test` and the optional GUI build (see
 - The graphical WinForms code is left out; the terminal CLI and web console are the
   current front-ends. The web console now uses structured form inputs instead of
   a raw `.ssr` textarea, while an optional raw editor could be added later.
+
+## License
+
+MIT.  See [LICENSE](LICENSE).

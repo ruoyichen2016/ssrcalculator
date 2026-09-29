@@ -45,9 +45,11 @@ Secondary metrics:
 `Holtrop-Mennen + per-ship-type calibration factor`, fitted on the public
 historical dataset (the default when a design is run through
 `calibrate-regime`).  Factors (ref/sim, 15% trimmed mean) at 123 cases:
-battleship 0.791, carrier 0.812, cruiser 0.923, destroyer 0.993.  The wider
+battleship 0.781, carrier 0.803, cruiser 0.920, destroyer 1.017.  The wider
 sample (four expansion batches) moved the overall nested LOOCV from 8.92% to
-10.71% by exposing extreme-Froude cases across the whole speed range.
+10.40% (curated core 8.09%) by exposing extreme-Froude cases across the whole
+speed range.  Data verification later corrected two carrier beam entries
+(Wasp, Shokaku).
 
 ### Frozen baseline (2026-09-27)
 

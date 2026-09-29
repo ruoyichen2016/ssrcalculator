@@ -28,3 +28,6 @@ path = "src/main.rs"
 # keeps its normal debug info.
 [profile.dev.package."*"]
 debug = false
+
+[lints.rust]
+unsafe_code = "forbid"

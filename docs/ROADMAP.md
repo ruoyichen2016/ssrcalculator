@@ -236,6 +236,18 @@
   gui/Cargo.toml`).  CI runs fmt + clippy + build for the GUI crate.
 - `gui/src/app.rs` is the former `src/gui.rs` (paths updated to `springsharp::`).
 
+## Phase 20 — repository hygiene wrap-up (completed 2026-09-27)
+
+- Added the missing `LICENSE` (MIT) and a `## License` section to the README.
+- Added `rust-toolchain.toml` (stable + rustfmt/clippy) so local and CI use the
+  same toolchain.
+- Added `[lints.rust] unsafe_code = "forbid"` to both workspaces; the crates
+  contain no `unsafe`.
+- Added `scripts/check.sh` (local CI: core fmt/clippy/test; `--gui` also does
+  GUI fmt/clippy/build) and verified it end to end.
+- Fixed a stale current-state paragraph in `docs/VALIDATION.md` (factors and
+  full-set MAPE 10.71% -> 10.40%).
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model
