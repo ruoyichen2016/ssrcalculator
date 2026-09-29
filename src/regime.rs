@@ -9,7 +9,9 @@
 //! The original SpringSharp model is retained as a comparison baseline; see
 //! [`RegimeLoocv::original_baseline_mape`].
 
-use crate::accuracy::{historical_cases, simulate_case, simulate_case_with_model, HistoricalCase};
+use crate::accuracy::{
+    case_confidence, historical_cases, simulate_case, simulate_case_with_model, HistoricalCase,
+};
 use crate::model::{ResistanceModel, ShipModel};
 
 /// One row of the production regime table.
@@ -42,30 +44,55 @@ fn raw_holtrop(case: &HistoricalCase) -> f64 {
 /// ~0.13pp improvement over the plain mean; see docs/VALIDATION.md.
 const FACTOR_TRIM: f64 = 0.15;
 
-/// Robust `reference / simulated` factor over a set of cases: 15% trimmed mean.
+/// Robust `reference / simulated` factor: 15% trimmed mean with curated cases
+/// weighted 2x relative to the approximate bulk.  Confidence weighting improved
+/// both the full-set and curated-core nested LOOCV (docs/VALIDATION.md).
 fn factor_for(cases: &[&HistoricalCase], power: impl Fn(&HistoricalCase) -> f64) -> f64 {
-    let mut ratios: Vec<f64> = cases
+    let mut pairs: Vec<(f64, f64)> = cases
         .iter()
         .filter_map(|case| {
             let p = power(case);
             if case.reference_hp > 0.0 && p > 0.0 {
-                Some(case.reference_hp / p)
+                let weight = if case.provenance.is_curated() {
+                    2.0
+                } else {
+                    1.0
+                };
+                Some((case.reference_hp / p, weight))
             } else {
                 None
             }
         })
         .collect();
-    if ratios.is_empty() {
+    if pairs.is_empty() {
         return 1.0;
     }
-    ratios.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let k = ((ratios.len() as f64) * FACTOR_TRIM).floor() as usize;
-    let lo = k.min(ratios.len() / 2);
-    let hi = ratios.len() - lo;
-    if hi > lo {
-        ratios[lo..hi].iter().sum::<f64>() / (hi - lo) as f64
+    pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let total_weight: f64 = pairs.iter().map(|(_, w)| w).sum();
+    let trim = total_weight * FACTOR_TRIM;
+    // Trim by weight from each tail.
+    let mut acc = 0.0;
+    let mut start = 0;
+    while start < pairs.len() && acc < trim {
+        acc += pairs[start].1;
+        start += 1;
+    }
+    let mut acc = 0.0;
+    let mut end = pairs.len();
+    while end > start && acc < trim {
+        end -= 1;
+        acc += pairs[end].1;
+    }
+    let slice = if end > start {
+        &pairs[start..end]
     } else {
-        ratios.iter().sum::<f64>() / ratios.len() as f64
+        &pairs[..]
+    };
+    let weight_sum: f64 = slice.iter().map(|(_, w)| w).sum();
+    if weight_sum > 1e-9 {
+        slice.iter().map(|(r, w)| r * w).sum::<f64>() / weight_sum
+    } else {
+        pairs.iter().map(|(r, _)| r).sum::<f64>() / pairs.len() as f64
     }
 }
 
@@ -136,6 +163,8 @@ pub struct RegimeResidual {
     pub reference_hp: f64,
     pub predicted_hp: f64,
     pub error_pct: f64,
+    /// Declared data confidence (0.7 curated core, 0.5 approximate bulk).
+    pub confidence: f64,
 }
 
 /// Nested-LOOCV result for the regime model.
@@ -154,6 +183,10 @@ pub struct RegimeLoocv {
     pub holtrop_uncalibrated_mape: f64,
     /// Per-case nested-LOOCV residuals.
     pub residuals: Vec<RegimeResidual>,
+    /// Cases in the curated core (declared confidence >= 0.65).
+    pub curated_cases: usize,
+    /// Nested-LOOCV MAPE over the curated core only.
+    pub curated_mape: f64,
 }
 
 /// Nested leave-one-out evaluation.
@@ -207,6 +240,7 @@ pub fn run_loocv_regime() -> RegimeLoocv {
             reference_hp: test.reference_hp,
             predicted_hp: pred_h,
             error_pct: (pred_h - test.reference_hp) / test.reference_hp.max(1e-9) * 100.0,
+            confidence: case_confidence(test.name),
         });
 
         let ty = test.ship_type.to_string();
@@ -223,6 +257,17 @@ pub fn run_loocv_regime() -> RegimeLoocv {
     per_type.sort_by(|a, b| a.0.cmp(&b.0));
 
     let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len().max(1) as f64;
+    let curated: Vec<f64> = residuals
+        .iter()
+        .filter(|r| r.confidence >= 0.65)
+        .map(|r| (r.error_pct / 100.0).abs())
+        .collect();
+    let curated_cases = curated.len();
+    let curated_mape = if curated.is_empty() {
+        f64::NAN
+    } else {
+        curated.iter().sum::<f64>() / curated.len() as f64
+    };
     let macro_mape = if per_type.is_empty() {
         f64::NAN
     } else {
@@ -236,6 +281,8 @@ pub fn run_loocv_regime() -> RegimeLoocv {
         original_baseline_mape: mean(&orig_errs),
         holtrop_uncalibrated_mape: mean(&holt_uncal),
         residuals,
+        curated_cases,
+        curated_mape,
     }
 }
 
@@ -264,6 +311,13 @@ mod tests {
         assert!(r.overall_mape < r.holtrop_uncalibrated_mape);
         let total: usize = r.per_type.iter().map(|(_, n, _)| *n).sum();
         assert_eq!(total, historical_cases().len());
+        assert!(r.curated_cases > 0 && r.curated_cases < r.residuals.len());
+        assert!(
+            r.curated_mape <= r.overall_mape,
+            "curated core {:.3} should not be worse than the full set {:.3}",
+            r.curated_mape,
+            r.overall_mape
+        );
     }
 
     #[test]

@@ -26,10 +26,16 @@ present.  Traceable + verified are the two provenance inputs to the composite
 quality gate.
 
 Current status: **0/123 independently verified, 0/123 traceable** — all cases are
-`SourceType::PublicReference` with declared displacement type `Normal`
-(Conway's/Jane's/class-trial summaries; displacement and power are approximate).
+`SourceType::PublicReference` with declared displacement type `Normal`:
+
+- **37 curated cases** (declared confidence 0.7): key magnitudes cross-checked
+  against two or more public sources;
+- **86 approximate cases** (declared confidence 0.5): bulk-imported public
+  references, not yet cross-checked.
+
 `data-target` therefore fails honestly; this is expected until official trial or
-model-basin data with citations, URLs and verifiers is added.
+model-basin data with citations, URLs and verifiers is added.  Accuracy reports
+quote both the full set and the curated core.
 
 Useful commands:
 

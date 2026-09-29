@@ -54,12 +54,12 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 
 - Base model: Holtrop-Mennen
 - Per-ship-type calibration factor `reference / simulated`, fitted to the public
-  historical dataset with a 15% trimmed mean (robust to outlier cases):
-  battleship 0.760, carrier 0.778, cruiser 0.922, destroyer 1.053
+  historical dataset with a confidence-weighted 15% trimmed mean (curated cases
+  weighted 2x): battleship 0.781, carrier 0.801, cruiser 0.920, destroyer 1.017
 - The original SpringSharp empirical model is retained as a comparison baseline
 - Validated by **nested** LOOCV: the factor is re-fitted on each training split
-  - regime (Holtrop + factor): 10.71% case-weighted / 10.75% type-averaged (123 cases)
-  - original (uncalibrated): 21.28%; with per-type factor: 11.34%
+  - regime (Holtrop + factor): 10.60% case-weighted / 10.64% type-averaged (123 cases); curated core 8.18%
+  - original (uncalibrated): 21.28%; with per-type factor: 11.39%
   - Holtrop uncalibrated: 19.56%
 - Applied to a design via `calibrate-regime` (sets `resistance_model` + `power_factor`)
 

@@ -1,5 +1,18 @@
 # Data changelog
 
+## built-in-v1.11 (2026-09-27) — confidence tiers
+
+- Split the 123 cases into a **curated core** (37 cases, declared confidence
+  0.7, magnitudes cross-checked against two or more sources) and an
+  **approximate bulk** (86 cases, 0.5, bulk-imported and not cross-checked).
+- `Provenance::curated_reference()` / `is_curated()` added; accuracy reports and
+  `regime-residuals` now show the confidence tier and the curated-core MAPE.
+- Per-type factor is a confidence-weighted 15% trimmed mean (curated 2x):
+  full-set nested LOOCV 10.71% -> 10.60%; curated core 8.38% -> 8.18%.
+- Fn-aware corrections tested by nested LOOCV and rejected (no robust gain).
+- Status remains: **0/123 independently verified, 0/123 traceable**.
+
+
 ## built-in-v1.10 (2026-09-27) — sample expanded to 123 cases
 
 - Added 22 public-reference ships: 5 battleship/battlecruiser (Bretagne,

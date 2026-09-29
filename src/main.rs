@@ -1308,6 +1308,11 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                 "  Holtrop uncalibrated       : {:.2}%",
                 r.holtrop_uncalibrated_mape * 100.0
             );
+            println!(
+                "  curated core ({} cases, conf>=0.65): {:.2}%  (approximate bulk excluded)",
+                r.curated_cases,
+                r.curated_mape * 100.0
+            );
             println!("\nPer ship type (regime, nested):");
             for (ty, n, m) in &r.per_type {
                 println!("  {:<12} n={:<2} {:.2}%", ty, n, m * 100.0);
@@ -1527,19 +1532,21 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
             println!(
-                "{:<28} {:>10} {:>10} {:>9}",
-                "Ship", "Ref HP", "Regime HP", "Error %"
+                "{:<28} {:>10} {:>10} {:>9} {:>6}",
+                "Ship", "Ref HP", "Regime HP", "Error %", "Conf"
             );
             for row in &rows {
                 println!(
-                    "{:<28} {:>10.0} {:>10.0} {:>8.1}%",
-                    row.name, row.reference_hp, row.predicted_hp, row.error_pct
+                    "{:<28} {:>10.0} {:>10.0} {:>8.1}% {:>6.2}",
+                    row.name, row.reference_hp, row.predicted_hp, row.error_pct, row.confidence
                 );
             }
             println!(
-                "\nOverall nested LOOCV: {:.2}% case-weighted / {:.2}% type-averaged",
+                "\nOverall nested LOOCV: {:.2}% case-weighted / {:.2}% type-averaged / {:.2}% curated core ({} cases)",
                 r.overall_mape * 100.0,
-                r.macro_mape * 100.0
+                r.macro_mape * 100.0,
+                r.curated_mape * 100.0,
+                r.curated_cases
             );
             println!(
                 "Residuals are against public historical references (approximate, not trial data)."

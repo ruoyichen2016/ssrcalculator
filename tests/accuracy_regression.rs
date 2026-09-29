@@ -145,7 +145,7 @@ fn regularization_grid_is_not_a_noop() {
 
 // ---------------------------------------------------------------------------
 // Regime-aware modern model: Holtrop + per-ship-type calibration factor.
-// Baseline nested LOOCV ~10.7% with the expanded 123-case dataset (2026-09-27).
+// Baseline nested LOOCV ~10.6% with the expanded 123-case dataset (2026-09-27).
 // ---------------------------------------------------------------------------
 
 const REGIME_OVERALL_MAX: f64 = 0.115;
@@ -163,6 +163,12 @@ fn regime_nested_loocv_does_not_regress() {
         r.macro_mape.is_finite() && r.macro_mape <= 0.115,
         "regime type-averaged MAPE {:.2}% exceeded baseline",
         r.macro_mape * 100.0
+    );
+    assert!(r.curated_cases > 0);
+    assert!(
+        r.curated_mape.is_finite() && r.curated_mape <= 0.095,
+        "curated-core MAPE {:.2}% exceeded baseline",
+        r.curated_mape * 100.0
     );
     // The modern regime model must beat both comparison baselines.
     assert!(

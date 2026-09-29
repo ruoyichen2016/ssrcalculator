@@ -27,7 +27,7 @@
 ## Phase 2 — modern regime model + CLI groups (completed 2026-09-27)
 
 - Modern default: Holtrop-Mennen + per-ship-type calibration factor fitted to
-  the public historical dataset, validated by nested LOOCV (**10.71%** over 123 cases)
+  the public historical dataset, validated by nested LOOCV (**10.60%** over 123 cases)
 - `validate-regime` compares regime vs original+factor (10.57%) and uncalibrated
   Holtrop (19.42%); original kept as the comparison baseline
 - `calibrate-regime`, `regime-table`, `accuracy-target` commands
@@ -170,6 +170,20 @@
 - Original SpringSharp baseline 21.28%; original+factor 11.34%; Holtrop
   uncalibrated 19.56%
 - Holdout re-frozen at 93 train / 30 held-out (original 13.9%, Holtrop 12.6%)
+
+## Phase 15 — confidence tiers, curated reporting, model v2 test (completed 2026-09-27)
+
+- Split the 123 cases into a **curated core** (37 cases, declared confidence 0.7)
+  and an **approximate bulk** (86 cases, 0.5); provenance constructors and
+  `curated_reference()` added
+- Regime reports now include `curated_cases` / `curated_mape`; `validate-regime`
+  and `regime-residuals` show the curated subset (8.18% nested LOOCV)
+- Per-type factor switched to a **confidence-weighted** 15% trimmed mean
+  (curated 2x): full 10.71% -> 10.60%, curated 8.38% -> 8.18%, macro 10.75% -> 10.64%
+- **Fn-aware model v2 tested and rejected**: per-type linear (with 0/4/8
+  shrinkage), shared-slope, and quadratic corrections gave no robust gain and
+  worsened the curated core, so the constant per-type factor is retained
+- Regression tests extended with curated-subset assertions
 
 ## Completed
 

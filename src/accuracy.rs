@@ -93,20 +93,43 @@ pub struct Provenance {
     pub verification_date: &'static str,
 }
 
+/// Citation for the curated (cross-checked) core cases.
+pub const CURATED_REFERENCE_SOURCE: &str =
+    "Curated public references; magnitudes cross-checked against two or more sources";
+
 impl Provenance {
-    /// Default provenance for the current built-in database: public
-    /// references, *not* independently verified and not yet traceable to a
-    /// specific URL/verifier.
+    /// Curated core case: public references whose key magnitudes were
+    /// cross-checked against more than one source.  Still not an official
+    /// trial, but stronger than the bulk-imported approximate cases.
+    pub const fn curated_reference() -> Self {
+        Provenance {
+            source_type: SourceType::PublicReference,
+            displacement_type: DisplacementType::Normal,
+            confidence: 0.7,
+            source: CURATED_REFERENCE_SOURCE,
+            source_url: "",
+            verifier: "",
+            verification_date: "2026-09-27",
+        }
+    }
+
+    /// Bulk-imported approximate case: public references, magnitudes not
+    /// independently cross-checked.
     pub const fn public_reference() -> Self {
         Provenance {
             source_type: SourceType::PublicReference,
             displacement_type: DisplacementType::Normal,
-            confidence: 0.6,
+            confidence: 0.5,
             source: PUBLIC_REFERENCE_SOURCE,
             source_url: "",
             verifier: "",
             verification_date: "2026-09-27",
         }
+    }
+
+    /// True for the curated core (declared confidence >= 0.65).
+    pub const fn is_curated(self) -> bool {
+        self.confidence >= 0.65
     }
 
     pub const fn is_verified(self) -> bool {
@@ -146,7 +169,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.61,
             speed_kt: 21.0,
             reference_hp: 23_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Bismarck (1940)",
@@ -158,7 +181,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.56,
             speed_kt: 30.0,
             reference_hp: 138_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Iowa (1943)",
@@ -170,7 +193,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.60,
             speed_kt: 33.0,
             reference_hp: 212_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Fletcher class DD (1942)",
@@ -182,7 +205,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.48,
             speed_kt: 36.5,
             reference_hp: 60_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Yamato (1941)",
@@ -194,7 +217,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.61,
             speed_kt: 27.0,
             reference_hp: 150_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Kongo (refit 1936)",
@@ -206,7 +229,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.57,
             speed_kt: 30.0,
             reference_hp: 136_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Essex (1943)",
@@ -218,7 +241,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.59,
             speed_kt: 33.0,
             reference_hp: 150_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Atlanta class CL (1942)",
@@ -230,7 +253,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.50,
             speed_kt: 32.5,
             reference_hp: 75_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Tribal class DD (1938)",
@@ -242,7 +265,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.47,
             speed_kt: 36.0,
             reference_hp: 44_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "South Dakota (1942)",
@@ -254,7 +277,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.60,
             speed_kt: 27.5,
             reference_hp: 130_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "King George V (1940)",
@@ -266,7 +289,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.58,
             speed_kt: 28.0,
             reference_hp: 110_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Baltimore CA (1943)",
@@ -278,7 +301,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.52,
             speed_kt: 33.0,
             reference_hp: 120_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Cleveland CL (1942)",
@@ -290,7 +313,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.51,
             speed_kt: 32.5,
             reference_hp: 100_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Yorktown (1937)",
@@ -302,7 +325,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.55,
             speed_kt: 32.5,
             reference_hp: 120_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Illustrious (1940)",
@@ -314,7 +337,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.56,
             speed_kt: 30.5,
             reference_hp: 111_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "North Carolina (1941)",
@@ -326,7 +349,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.61,
             speed_kt: 28.0,
             reference_hp: 121_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Vanguard (1946)",
@@ -338,7 +361,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.60,
             speed_kt: 30.0,
             reference_hp: 130_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Shokaku (1941)",
@@ -350,7 +373,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.58,
             speed_kt: 34.2,
             reference_hp: 160_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Hood (1920)",
@@ -362,7 +385,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.56,
             speed_kt: 32.0,
             reference_hp: 144_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Zara class CA (1931)",
@@ -374,7 +397,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.52,
             speed_kt: 32.0,
             reference_hp: 95_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Mogami (1935)",
@@ -386,7 +409,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.51,
             speed_kt: 35.0,
             reference_hp: 152_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Kagero class DD (1939)",
@@ -398,7 +421,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.48,
             speed_kt: 35.0,
             reference_hp: 52_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Brooklyn CL (1937)",
@@ -410,7 +433,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.53,
             speed_kt: 32.5,
             reference_hp: 100_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Dido CL (1940)",
@@ -422,7 +445,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.51,
             speed_kt: 32.25,
             reference_hp: 62_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Somers DD (1937)",
@@ -434,7 +457,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.47,
             speed_kt: 36.0,
             reference_hp: 52_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Benson DD (1942)",
@@ -446,7 +469,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.47,
             speed_kt: 37.5,
             reference_hp: 50_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Independence CVL (1943)",
@@ -458,7 +481,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.56,
             speed_kt: 31.6,
             reference_hp: 100_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Bogue CVE (1943)",
@@ -470,7 +493,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.59,
             speed_kt: 18.0,
             reference_hp: 8_500.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Alaska CB (1944)",
@@ -482,7 +505,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.55,
             speed_kt: 33.0,
             reference_hp: 150_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Gneisenau (1938)",
@@ -494,7 +517,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.56,
             speed_kt: 32.0,
             reference_hp: 160_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Porter class DD (1936)",
@@ -506,7 +529,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.47,
             speed_kt: 37.0,
             reference_hp: 50_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Sims class DD (1939)",
@@ -518,7 +541,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.47,
             speed_kt: 37.0,
             reference_hp: 51_138.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Mahan class DD (1936)",
@@ -530,7 +553,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.47,
             speed_kt: 37.0,
             reference_hp: 46_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "New Orleans class CA (1934)",
@@ -542,7 +565,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.52,
             speed_kt: 32.7,
             reference_hp: 107_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Kuma class CL (1920)",
@@ -554,7 +577,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.50,
             speed_kt: 36.0,
             reference_hp: 90_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Sendai class CL (1924)",
@@ -566,7 +589,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.50,
             speed_kt: 35.25,
             reference_hp: 90_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Admiral Hipper class CA (1939)",
@@ -578,7 +601,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             block_coefficient: 0.52,
             speed_kt: 32.0,
             reference_hp: 132_000.0,
-            provenance: Provenance::public_reference(),
+            provenance: Provenance::curated_reference(),
         },
         HistoricalCase {
             name: "Lexington CV (1927)",
