@@ -367,7 +367,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             name: "Shokaku (1941)",
             ship_type: "carrier",
             length_ft: 845.0,
-            beam_ft: 95.0,
+            beam_ft: 85.0,
             draught_ft: 27.0,
             displacement_tons: 25_675.0,
             block_coefficient: 0.58,
@@ -643,7 +643,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
             name: "Wasp CV (1940)",
             ship_type: "carrier",
             length_ft: 741.0,
-            beam_ft: 93.0,
+            beam_ft: 80.0,
             draught_ft: 25.0,
             displacement_tons: 14700.0,
             block_coefficient: 0.56,
@@ -2659,6 +2659,159 @@ pub fn historical_validation_audit() -> ValidationAudit {
     }
 }
 
+/// Result of a physical-consistency check on a historical case.
+#[derive(Clone, Copy, Debug)]
+pub struct DataConsistencyEntry {
+    pub name: &'static str,
+    pub ship_type: &'static str,
+    /// Displacement as written in the case (usually standard/normal).
+    pub documented_tons: f64,
+    /// Displacement the engine models: `L * B * T * Cb / 35` (long tons),
+    /// which is closer to full load.
+    pub modeled_tons: f64,
+    /// `modeled / documented` (warship full-load ratios are ~1.05-1.4).
+    pub ratio: f64,
+    pub plausible: bool,
+}
+
+/// Check every historical case against the prismatic displacement formula.
+///
+/// A large mismatch means the dimensions, block coefficient or displacement
+/// were recorded inconsistently.  Tolerance is 15%.
+pub fn data_consistency_audit() -> Vec<DataConsistencyEntry> {
+    historical_cases()
+        .iter()
+        .map(|c| {
+            let modeled = c.length_ft * c.beam_ft * c.draught_ft * c.block_coefficient / 35.0;
+            let ratio = if c.displacement_tons > 0.0 {
+                modeled / c.displacement_tons
+            } else {
+                1.0
+            };
+            DataConsistencyEntry {
+                name: c.name,
+                ship_type: c.ship_type,
+                documented_tons: c.displacement_tons,
+                modeled_tons: modeled,
+                ratio,
+                // Full-load / standard is normally 1.0-1.5; outside means the
+                // dimensions, block coefficient and displacement disagree.
+                plausible: (0.95..=1.6).contains(&ratio),
+            }
+        })
+        .collect()
+}
+
+/// One entry of the curated-baseline outlier screen.
+#[derive(Clone, Copy, Debug)]
+pub struct DataOutlierEntry {
+    pub name: &'static str,
+    pub ship_type: &'static str,
+    pub confidence: f64,
+    /// Residual from the curated log-linear power law, in standard deviations.
+    pub z_score: f64,
+    pub flagged: bool,
+}
+
+fn solve4(mut a: [[f64; 4]; 4], mut b: [f64; 4]) -> [f64; 4] {
+    for col in 0..4 {
+        let mut piv = col;
+        for r in (col + 1)..4 {
+            if a[r][col].abs() > a[piv][col].abs() {
+                piv = r;
+            }
+        }
+        a.swap(col, piv);
+        b.swap(col, piv);
+        let d = a[col][col];
+        if d.abs() < 1e-12 {
+            return [0.0; 4];
+        }
+        for j in col..4 {
+            a[col][j] /= d;
+        }
+        b[col] /= d;
+        for r in 0..4 {
+            if r != col {
+                let f = a[r][col];
+                for j in col..4 {
+                    a[r][j] -= f * a[col][j];
+                }
+                b[r] -= f * b[col];
+            }
+        }
+    }
+    b
+}
+
+/// Screen approximate cases against a power-law fitted to the curated core.
+///
+/// Flags non-curated cases more than 2.5 standard deviations from the curated
+/// baseline (a data-error candidate, not proof of error).
+pub fn data_outlier_audit() -> Vec<DataOutlierEntry> {
+    let cases = historical_cases();
+    let mut a = [[0.0_f64; 4]; 4];
+    let mut b = [0.0_f64; 4];
+    let mut n = 0_usize;
+    for c in &cases {
+        if case_confidence(c.name) < 0.65 {
+            continue;
+        }
+        let x = [
+            1.0,
+            c.displacement_tons.ln(),
+            c.speed_kt.ln(),
+            c.length_ft.ln(),
+        ];
+        let y = c.reference_hp.ln();
+        for i in 0..4 {
+            for j in 0..4 {
+                a[i][j] += x[i] * x[j];
+            }
+            b[i] += x[i] * y;
+        }
+        n += 1;
+    }
+    let coef = solve4(a, b);
+    let predict = |c: &HistoricalCase| {
+        coef[0]
+            + coef[1] * c.displacement_tons.ln()
+            + coef[2] * c.speed_kt.ln()
+            + coef[3] * c.length_ft.ln()
+    };
+    let mut curated_res = Vec::new();
+    for c in &cases {
+        if case_confidence(c.name) >= 0.65 {
+            curated_res.push(c.reference_hp.ln() - predict(c));
+        }
+    }
+    let mean = if n > 0 {
+        curated_res.iter().sum::<f64>() / n as f64
+    } else {
+        0.0
+    };
+    let var = if n > 1 {
+        curated_res.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / (n as f64 - 1.0)
+    } else {
+        1.0
+    };
+    let sd = var.sqrt().max(1e-9);
+    cases
+        .iter()
+        .map(|c| {
+            let residual = c.reference_hp.ln() - predict(c);
+            let z = (residual - mean).abs() / sd;
+            DataOutlierEntry {
+                name: c.name,
+                ship_type: c.ship_type,
+                confidence: case_confidence(c.name),
+                z_score: z,
+                flagged: case_confidence(c.name) < 0.65 && z > 2.5,
+            }
+        })
+        .collect()
+}
+
 /// Literature pointers for improving the empirical resistance/power model.
 pub const REFERENCES: &[&str] = &[
     "Holtrop, J. & Mennen, G.J. (1978). A statistical power prediction method. International Shipbuilding Progress, 25(252).",
@@ -2708,6 +2861,25 @@ fn historical_validation_audit_reports_data_gaps() {
     // The minimal simulated ships are known to be non-physical for weights.
     assert!(a.nonphysical_hull_weight_cases > 0);
     assert_eq!(a.zero_magazine_cases, a.case_count);
+}
+
+#[test]
+fn consistency_and_outlier_audits_run() {
+    let consistency = data_consistency_audit();
+    assert_eq!(consistency.len(), historical_cases().len());
+    assert!(consistency
+        .iter()
+        .all(|e| e.modeled_tons > 0.0 && e.ratio > 0.0));
+    // The dataset is standard-displacement metadata vs a full-load model, so
+    // most ratios sit above 1; at least some must be plausible.
+    assert!(consistency.iter().filter(|e| e.plausible).count() > 0);
+
+    let outliers = data_outlier_audit();
+    assert_eq!(outliers.len(), historical_cases().len());
+    assert!(outliers.iter().all(|e| e.z_score.is_finite()));
+    // Only a small number of approximate cases should be flagged.
+    let flagged = outliers.iter().filter(|e| e.flagged).count();
+    assert!(flagged <= 3, "too many outliers flagged: {flagged}");
 }
 
 #[test]

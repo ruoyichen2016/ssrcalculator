@@ -27,7 +27,7 @@
 ## Phase 2 — modern regime model + CLI groups (completed 2026-09-27)
 
 - Modern default: Holtrop-Mennen + per-ship-type calibration factor fitted to
-  the public historical dataset, validated by nested LOOCV (**10.60%** over 123 cases)
+  the public historical dataset, validated by nested LOOCV (**10.40%** over 123 cases)
 - `validate-regime` compares regime vs original+factor (10.57%) and uncalibrated
   Holtrop (19.42%); original kept as the comparison baseline
 - `calibrate-regime`, `regime-table`, `accuracy-target` commands
@@ -184,6 +184,22 @@
   shrinkage), shared-slope, and quadratic corrections gave no robust gain and
   worsened the curated core, so the constant per-type factor is retained
 - Regression tests extended with curated-subset assertions
+
+## Phase 16 — data verification tools + fixes (completed 2026-09-27)
+
+- Added `data-consistency`: compares documented displacement with the engine's
+  `L*B*T*Cb/35` (full-load) model; flags ratios outside [0.95, 1.60].
+- Added `data-outliers`: screens the 86 approximate cases against a power law
+  fitted to the 37 curated cases (flags > 2.5 sigma; currently 1, Ranger CV).
+- Verification fixes: Wasp and Shokaku used the flight-deck width as beam; both
+  corrected to the hull waterline beam (93 -> 80 ft, 95 -> 85 ft).  Regime nested
+  LOOCV improved 10.60% -> 10.40% (macro 10.64% -> 10.45%, curated 8.18% -> 8.09%,
+  carrier 12.01% -> 11.24%).
+- A blanket `Cb = documented*35/(L*B*T)` re-derivation was tested and rejected:
+  it improved the curated core (7.65%) but hurt the full set (10.91%, cruisers
+  12.08%), so only the unambiguous beam fixes were kept.
+- Remaining consistency flags are standard-vs-full-load convention differences,
+  not errors; the outlier screen found no further clear data errors.
 
 ## Completed
 

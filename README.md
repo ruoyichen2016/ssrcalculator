@@ -195,11 +195,11 @@ Nested leave-one-out cross-validation (the factor is re-fitted on every training
 split) gives:
 
 ```text
-regime (Holtrop + per-type factor) : 10.60% case-weighted, 10.64% type-averaged
-curated core (37 cases)            : 8.18%
-original (uncalibrated)            : 21.28%   <- original SpringSharp baseline
-original + per-type factor         : 11.39%
-Holtrop uncalibrated               : 19.56%
+regime (Holtrop + per-type factor) : 10.40% case-weighted, 10.45% type-averaged
+curated core (37 cases)            : 8.09%
+original (uncalibrated)            : 21.05%   <- original SpringSharp baseline
+original + per-type factor         : 11.16%
+Holtrop uncalibrated               : 19.31%
 ```
 
 Apply it to a design with:
@@ -405,9 +405,12 @@ The `calibrate-stats` command also reports:
 - `calibrate-type` command applying per-ship-type power calibration
 - `data/README.md` documenting provenance and replacement workflow
 - `data/CHANGELOG.md` tracking database versions
-- built-in-v1.11: 123 cases, split into a **curated core** (37 cases, declared
+- built-in-v1.12: 123 cases, split into a **curated core** (37 cases, declared
   confidence 0.7) and an **approximate bulk** (86 cases, 0.5); 0/123 independently
   verified, 0/123 traceable — `validate`, `data-score`, `data-target` report this honestly
+- data verification: `data-consistency` (L*B*T*Cb/35 vs documented displacement) and
+  `data-outliers` (screen approximate cases vs the curated power law); fixed two
+  flight-deck-vs-hull beam errors (Wasp, Shokaku), which cut the regime MAPE
 - per-ship-type factor is a 15% trimmed mean with curated cases weighted 2x;
   nested LOOCV 10.71% -> 10.60% (curated core 8.38% -> 8.18%)
 - Fn-aware corrections (per-type linear/quadratic, shared slope) tested and
@@ -434,7 +437,7 @@ The `calibrate-stats` command also reports:
   **rule-style scantling module** (plate bending + buckling + corrosion, stiffener section modulus,
   deflection); JSON/HTML report occupancy, evacuation/mustering times, congestion, density, escape
   metres, scantling utilisation, structure weight and objective (23 checks)
-- regime-aware modern model: Holtrop-Mennen + per-ship-type confidence-weighted 15% trimmed-mean factor (nested LOOCV 10.60% case-weighted / 10.64% type-averaged over 123 cases, curated core 8.18%, vs original 21.28%); original retained as baseline
+- regime-aware modern model: Holtrop-Mennen + per-ship-type confidence-weighted 15% trimmed-mean factor (nested LOOCV 10.40% case-weighted / 10.45% type-averaged over 123 cases, curated core 8.09%, vs original 21.05%); original retained as baseline
 - `validate-regime`, `regime-table`, `calibrate-regime` and `accuracy-target` commands
 - grouped CLI aliases (`calibrate stats`, `validate holdout|audit`, `data score`, `regime show|residuals`, `accuracy target`, `cfd fit`, ...) with flat names preserved
 - quality-report HTML test

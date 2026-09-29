@@ -1,5 +1,18 @@
 # Data changelog
 
+## built-in-v1.12 (2026-09-27) — verification fixes
+
+- Corrected two flight-deck-vs-hull beam errors: Wasp CV beam 93 -> 80 ft,
+  Shokaku beam 95 -> 85 ft (hull waterline beam).  Regime nested LOOCV improved
+  10.60% -> 10.40% (macro 10.64% -> 10.45%, curated core 8.18% -> 8.09%,
+  carrier 12.01% -> 11.24%).
+- Added `data-consistency` and `data-outliers` verification tools.
+- A blanket block-coefficient re-derivation was tested and rejected (helped the
+  curated core but hurt the full set).
+- Remaining consistency flags are standard-vs-full-load convention differences.
+- Status: **0/123 independently verified, 0/123 traceable**.
+
+
 ## built-in-v1.11 (2026-09-27) — confidence tiers
 
 - Split the 123 cases into a **curated core** (37 cases, declared confidence

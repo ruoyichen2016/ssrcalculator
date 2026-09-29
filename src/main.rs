@@ -9,19 +9,20 @@ use springsharp::{
     calculate_internal_spaces, calibration_factor, calibration_factor_holtrop, cfd_holdout_report,
     cfd_holdout_stability, cfd_loocv_report, cfd_report_html, cfd_status, compare_qr_svd,
     compartment_placement_html, compartment_placement_json, compute_planing_calibration,
-    compute_planing_calibration_from_files, data_quality_report_html, data_quality_score,
-    data_quality_summary, data_replacement_log, data_replacement_priority,
-    data_replacement_progress, data_source_summary, data_target_matrix_for, data_tier_summary,
-    data_version, demo_ship, deserialize, detect_duplicate_external_cases, external_report_html,
-    fit_cfd_proxy_report, fit_cfd_proxy_ridge, fit_ensemble, fit_ensemble_cv, fit_reduced_form,
-    fit_reduced_form_by_type, fit_reduced_form_interaction, fit_reduced_form_weighted,
-    fit_reduced_form_with_external, fit_regime_calibration, fit_structural_form,
-    fit_structural_form_segmented, fit_structural_form_segmented_lasso,
-    fit_structural_form_segmented_ridge, fit_structural_form_segmented_weighted,
-    fit_structural_form_weighted, fit_structural_form_with_external, format_compartment_report,
-    format_space_report, froude_number, generate_html_report, generate_report,
-    historical_validation_audit, holdout_validation, is_planing_eligible, load_from_file,
-    parse_cfd_samples, parse_external_cases, planing_hp_estimate_calibrated, quality_gate_by_type,
+    compute_planing_calibration_from_files, data_consistency_audit, data_outlier_audit,
+    data_quality_report_html, data_quality_score, data_quality_summary, data_replacement_log,
+    data_replacement_priority, data_replacement_progress, data_source_summary,
+    data_target_matrix_for, data_tier_summary, data_version, demo_ship, deserialize,
+    detect_duplicate_external_cases, external_report_html, fit_cfd_proxy_report,
+    fit_cfd_proxy_ridge, fit_ensemble, fit_ensemble_cv, fit_reduced_form, fit_reduced_form_by_type,
+    fit_reduced_form_interaction, fit_reduced_form_weighted, fit_reduced_form_with_external,
+    fit_regime_calibration, fit_structural_form, fit_structural_form_segmented,
+    fit_structural_form_segmented_lasso, fit_structural_form_segmented_ridge,
+    fit_structural_form_segmented_weighted, fit_structural_form_weighted,
+    fit_structural_form_with_external, format_compartment_report, format_space_report,
+    froude_number, generate_html_report, generate_report, historical_validation_audit,
+    holdout_validation, is_planing_eligible, load_from_file, parse_cfd_samples,
+    parse_external_cases, planing_hp_estimate_calibrated, quality_gate_by_type,
     quality_gate_with_loocv, run_loocv, run_loocv_regime, run_loocv_weighted,
     run_loocv_with_external, run_loocv_with_external_weighted, run_server, run_validation,
     save_to_file, savitsky_planing, segmented_calibration, select_cfd_ridge_lambda,
@@ -90,6 +91,8 @@ COMMANDS:
   data-replace-log     Show suggested replacement actions per case
   data-version         Show built-in data version tag
   data-targets         Check multiple composite-quality targets
+  data-consistency     Check displacement/dimension consistency
+  data-outliers        Screen approximate cases against the curated power law
   data-target [frac]   Check composite quality gate + per-type (default 0.8)
   apply-ensemble-external <file> <csv>  Apply external-data ensemble weights to a design
   apply-ensemble <file>  Write LOOCV-optimized ensemble weights into a design
@@ -102,7 +105,7 @@ COMMANDS:
 Grouped aliases (flat names still work):
   calibrate <stats|regime|type|ridge|lasso|structural|external> ...
   validate  <types|holdout|regime|audit>
-  data      <score|progress|target|targets|tiers|priority|sources|replace-log|version>
+  data      <score|progress|target|targets|tiers|priority|sources|replace-log|version|consistency|outliers>
   regime    <show|apply|validate|residuals>
   accuracy  target [mape]
   cfd       <status|proxy|fit|report|fit-ridge|select-lambda|apply>
@@ -436,6 +439,50 @@ fn main() {
             for (name, confidence, action) in data_replacement_log() {
                 println!("{confidence:>5.2}  {name:<28} {action}");
             }
+        }
+        "data-consistency" => {
+            let mut rows = data_consistency_audit();
+            rows.sort_by(|a, b| {
+                (b.ratio - 1.0)
+                    .abs()
+                    .partial_cmp(&(a.ratio - 1.0).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            let bad = rows.iter().filter(|r| !r.plausible).count();
+            println!("Physical consistency (modeled = L*B*T*Cb/35 vs documented displacement):");
+            println!(
+                "  {} / {} cases outside the full-load band [0.95, 1.60]",
+                bad,
+                rows.len()
+            );
+            for r in rows.iter().filter(|r| !r.plausible) {
+                println!(
+                    "  {:<30} {:<11} documented={:>7.0}  modeled={:>7.0}  ratio={:.2}",
+                    r.name, r.ship_type, r.documented_tons, r.modeled_tons, r.ratio
+                );
+            }
+            println!("  Note: ratios >1 are expected (documented standard vs modeled full load);");
+            println!(
+                "  values above 1.6 usually mean overall length / flight-deck beam / full-load"
+            );
+            println!("  draught were mixed with a standard displacement.");
+        }
+        "data-outliers" => {
+            let rows = data_outlier_audit();
+            let flagged: Vec<_> = rows.iter().filter(|r| r.flagged).collect();
+            println!(
+                "Outlier screen: {} / {} cases flagged (>2.5 sigma from the curated power law)",
+                flagged.len(),
+                rows.len()
+            );
+            for r in &flagged {
+                println!(
+                    "  {:<30} {:<11} conf={:.2}  z={:.2}",
+                    r.name, r.ship_type, r.confidence, r.z_score
+                );
+            }
+            println!("  Note: flags are data-error candidates (design vs trial values, wrong");
+            println!("  dimensions/displacement), not proof of error.");
         }
         "data-tiers" => {
             let tiers = data_tier_summary();

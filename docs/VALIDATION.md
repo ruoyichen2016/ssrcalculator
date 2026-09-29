@@ -53,16 +53,16 @@ sample (four expansion batches) moved the overall nested LOOCV from 8.92% to
 
 | Metric | Baseline (123 cases) | Regression threshold |
 |---|---|---|
-| **Regime nested LOOCV, case-weighted** | **~10.60%** | **<= 11.5%** |
-| Regime nested, type-averaged (macro) | ~10.64% | <= 11.5% |
-| **Curated core (37 cases)** | **~8.18%** | <= 9.5% |
+| **Regime nested LOOCV, case-weighted** | **~10.40%** | **<= 11.5%** |
+| Regime nested, type-averaged (macro) | ~10.45% | <= 11.5% |
+| **Curated core (37 cases)** | **~8.09%** | <= 9.5% |
 | Regime nested, battleship | ~9.92% | <= 12.0% |
-| Regime nested, carrier | ~12.01% | <= 13.0% |
+| Regime nested, carrier | ~11.24% | <= 13.0% |
 | Regime nested, cruiser | ~9.50% | <= 10.5% |
 | Regime nested, destroyer | ~11.14% | <= 13.0% |
-| Original uncalibrated (original model) | ~21.28% | (comparison) |
-| Original + per-type factor | ~11.39% | (must be beaten) |
-| Holtrop uncalibrated | ~19.56% | (must be beaten) |
+| Original uncalibrated (original model) | ~21.05% | (comparison) |
+| Original + per-type factor | ~11.16% | (must be beaten) |
+| Holtrop uncalibrated | ~19.31% | (must be beaten) |
 | 2-way ensemble, reported (optimistic) | ~9.96% | <= 12.0% |
 | Holdout MAPE, original | ~13.9% | <= 18.5% |
 | Holdout MAPE, Holtrop | ~12.6% | <= 15.0% |
@@ -120,7 +120,7 @@ the built-in historical data:
 
 | Model family | Historical references | Status |
 |---|---|---|
-| Speed/power (regime) | 123 cases (37 curated) | validated; nested LOOCV 10.60% case-weighted, curated core 8.18% |
+| Speed/power (regime) | 123 cases (37 curated) | validated; nested LOOCV 10.40% case-weighted, curated core 8.09% |
 | Planing (Savitsky vs empirical) | 8 public planing cases | validated; both 23.3% calibrated |
 | Structural weight | 0 | **cannot be validated** with the current dataset |
 | Internal spaces (machinery/magazine/accommodation) | 0 | **cannot be validated** |
@@ -141,6 +141,16 @@ historical design file), none of which are in the current dataset.
 
 Per-case speed/power residuals are available with `regime-residuals`.
 
+### Data verification tools
+
+- `data-consistency` compares the documented displacement with the engine's
+  full-load model `L*B*T*Cb/35`.  Ratios are normally 1.0-1.5 (standard vs full
+  load); outside [0.95, 1.60] means the dimensions, block coefficient and
+  displacement disagree.  It flagged the carrier beam errors fixed in Phase 16.
+- `data-outliers` screens the 86 approximate cases against a power law fitted to
+  the 37 curated cases; currently 1 case exceeds 2.5 sigma (Ranger CV, a real
+  design rather than an error).
+
 ## Composite quality gate (`data-target`)
 
 ```text
@@ -153,7 +163,7 @@ loocv_accuracy_score = 1.0                       if MAPE <= 10%
                      = linear interpolation      in between
 ```
 
-Baseline composite (123 public-reference cases, nested regime LOOCV 10.60%):
+Baseline composite (123 public-reference cases, nested regime LOOCV 10.40%):
 **0.400**.  `data-target 0.8` (and all `data-targets` thresholds) therefore fail
 honestly until official trial / model-basin data with citations, URLs and named
 verifiers is added.
