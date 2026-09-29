@@ -184,6 +184,11 @@ pub fn serialize(ship: &ShipModel) -> String {
     push("engine.screws", ship.engine.screws.to_string());
     push("engine.power_factor", ship.engine.power_factor.to_string());
     push(
+        "engine.original_power_factor",
+        ship.engine.original_power_factor.to_string(),
+    );
+    push("engine.blend_weight", ship.engine.blend_weight.to_string());
+    push(
         "engine.resistance_model",
         match ship.engine.resistance_model {
             crate::model::ResistanceModel::Original => "original",
@@ -647,6 +652,14 @@ fn set_value(ship: &mut ShipModel, key: &str, value: &str) -> Result<(), String>
             ship.engine.power_factor = parse_f64(value)?;
             true
         }
+        "engine.original_power_factor" => {
+            ship.engine.original_power_factor = parse_f64(value)?;
+            true
+        }
+        "engine.blend_weight" => {
+            ship.engine.blend_weight = parse_f64(value)?;
+            true
+        }
         "engine.resistance_model" => {
             ship.engine.resistance_model = match value {
                 "original" => crate::model::ResistanceModel::Original,
@@ -987,6 +1000,8 @@ mod tests {
         ship.free.fd_length = 0.3;
         ship.free.qd_length = 0.15;
         ship.engine.screws = 3;
+        ship.engine.original_power_factor = 0.9;
+        ship.engine.blend_weight = 0.6;
 
         let text = serialize(&ship);
         let mut loaded = ShipModel::new();
@@ -998,6 +1013,8 @@ mod tests {
         assert_eq!(loaded.hull.date_engine, 1912);
         assert_eq!(loaded.engine.screws, 3);
         assert_eq!(loaded.free.qd_length, 0.15);
+        assert_eq!(loaded.engine.original_power_factor, 0.9);
+        assert_eq!(loaded.engine.blend_weight, 0.6);
         assert_eq!(loaded.engine.planing_min_speed_kt, 25.0);
         assert_eq!(loaded.engine.planing_max_displacement_tons, 3000.0);
     }

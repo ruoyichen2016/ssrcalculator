@@ -1,5 +1,18 @@
 # Data changelog
 
+## built-in-v1.15 (2026-09-27) — slender/fast cases
+
+- Added 23 slender, high-speed historical cases (all `PublicReference`, 0.5):
+  destroyers/leaders (Farragut, Bagley, Benham, Mutsuki, Hatsuharu, Navigatori,
+  Maestrale, Tashkent, Vauquelin, Battle, Z31, Leningrad, Gnevny) and fast light
+  cruisers (Yubari, Nagara, Tenryu, Da Giussano, Montecuccoli, Duguay-Trouin,
+  Omaha, Arethusa, Agano, Maxim Gorky).  Dataset 123 -> 146.
+- Regime nested LOOCV 10.57% -> 10.36% case-weighted (10.60% -> 10.38% macro,
+  curated 8.04% -> 7.97%); cruiser 10.39% -> 9.95%, destroyer 11.14% -> 10.69%.
+- Data-consistency still reports 2/146 out-of-band (the two carriers).
+- Status: **0/146 independently verified, 0/146 traceable**.
+
+
 ## built-in-v1.14 (2026-09-27) — approximate-bulk review (11 flagged cases)
 
 - Reviewed the 11 consistency-flagged approximate cases; details in

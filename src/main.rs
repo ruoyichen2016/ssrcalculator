@@ -1,8 +1,8 @@
 use std::io::{self, BufRead, Write};
 
 use springsharp::{
-    apply_ensemble_calibration, apply_ensemble_calibration_with_external, apply_regime_calibration,
-    apply_structural_calibration, apply_structural_calibration_lasso,
+    apply_blend_calibration, apply_ensemble_calibration, apply_ensemble_calibration_with_external,
+    apply_regime_calibration, apply_structural_calibration, apply_structural_calibration_lasso,
     apply_structural_calibration_ridge, apply_structural_calibration_segmented,
     bootstrap_uncertainty_for_ship, bootstrap_uncertainty_for_ship_weighted,
     bootstrap_uncertainty_with_external, bootstrap_uncertainty_with_external_weighted,
@@ -13,24 +13,24 @@ use springsharp::{
     data_outlier_audit, data_quality_report_html, data_quality_score, data_quality_summary,
     data_replacement_log, data_replacement_priority, data_replacement_progress,
     data_source_summary, data_target_matrix_for, data_tier_summary, data_version, demo_ship,
-    deserialize, detect_duplicate_external_cases, external_report_html, fit_cfd_proxy_report,
-    fit_cfd_proxy_ridge, fit_ensemble, fit_ensemble_cv, fit_reduced_form, fit_reduced_form_by_type,
-    fit_reduced_form_interaction, fit_reduced_form_weighted, fit_reduced_form_with_external,
-    fit_regime_calibration, fit_structural_form, fit_structural_form_segmented,
-    fit_structural_form_segmented_lasso, fit_structural_form_segmented_ridge,
-    fit_structural_form_segmented_weighted, fit_structural_form_weighted,
-    fit_structural_form_with_external, format_compartment_report, format_space_report,
-    froude_number, generate_html_report, generate_report, historical_validation_audit,
-    holdout_validation, is_planing_eligible, load_from_file, nearest_historical_cases,
-    parse_cfd_samples, parse_external_cases, planing_hp_estimate_calibrated, quality_gate_by_type,
-    quality_gate_with_loocv, run_loocv, run_loocv_regime, run_loocv_weighted,
-    run_loocv_with_external, run_loocv_with_external_weighted, run_server, run_validation,
-    save_to_file, savitsky_planing, segmented_calibration, select_cfd_ridge_lambda,
-    select_lasso_lambda, select_ridge_lambda, small_fast_error_diagnostic, solve_max_speed,
-    solve_range, suggest_compartment_placement, summarize_external_by_source,
-    summarize_external_by_type, type_calibration_factors, validate_external_cases,
-    validate_planing_cases, validation_by_type, CfdProxyConfig, PlaningInput, ShipModel,
-    MAX_EVAC_TIME_S,
+    deserialize, detect_duplicate_external_cases, external_report_html, fit_blend_calibration,
+    fit_cfd_proxy_report, fit_cfd_proxy_ridge, fit_ensemble, fit_ensemble_cv, fit_reduced_form,
+    fit_reduced_form_by_type, fit_reduced_form_interaction, fit_reduced_form_weighted,
+    fit_reduced_form_with_external, fit_regime_calibration, fit_structural_form,
+    fit_structural_form_segmented, fit_structural_form_segmented_lasso,
+    fit_structural_form_segmented_ridge, fit_structural_form_segmented_weighted,
+    fit_structural_form_weighted, fit_structural_form_with_external, format_compartment_report,
+    format_space_report, froude_number, generate_html_report, generate_report,
+    historical_validation_audit, holdout_validation, is_planing_eligible, load_from_file,
+    nearest_historical_cases, parse_cfd_samples, parse_external_cases,
+    planing_hp_estimate_calibrated, quality_gate_by_type, quality_gate_with_loocv, run_loocv,
+    run_loocv_blend, run_loocv_regime, run_loocv_weighted, run_loocv_with_external,
+    run_loocv_with_external_weighted, run_server, run_validation, save_to_file, savitsky_planing,
+    segmented_calibration, select_cfd_ridge_lambda, select_lasso_lambda, select_ridge_lambda,
+    small_fast_error_diagnostic, solve_max_speed, solve_range, suggest_compartment_placement,
+    summarize_external_by_source, summarize_external_by_type, type_calibration_factors,
+    validate_external_cases, validate_planing_cases, validation_by_type, CfdProxyConfig,
+    PlaningInput, ShipModel, MAX_EVAC_TIME_S,
 };
 
 fn print_help() {
@@ -60,6 +60,9 @@ COMMANDS:
   accuracy-target [m]  Check nested regime LOOCV against a MAPE target (default 0.10)
   regime-table         Show production regime table (Holtrop + per-ship-type factor)
   calibrate-regime <file>  Apply Holtrop + per-ship-type factor (modern default)
+  calibrate-blend <file>   Apply blended Holtrop/original model (per-type weights)
+  blend-table              Show per-type blend weights and factors
+  validate-blend           Nested-LOOCV error of the blended model
   calibrate-type <file>  Apply per-ship-type power calibration
   calibrate <file>     Apply historical power calibration to a design
   spaces <file>        Show improved internal-space volume model
@@ -273,7 +276,12 @@ fn main() {
                         calibration_factor(&results)
                     }
                 });
-            ship.engine.power_factor = factor;
+            if ship.engine.resistance_model == springsharp::ResistanceModel::HoltropMennen {
+                ship.engine.power_factor = factor;
+            } else {
+                ship.engine.original_power_factor = factor;
+            }
+            ship.engine.blend_weight = 1.0;
             ship.calculate();
             println!("Applied historical calibration factor {factor:.3} to {path}");
             print!("{}", ship.summary());
@@ -1284,7 +1292,12 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                 } else {
                     entry.factor_original
                 };
-            ship.engine.power_factor = factor;
+            if ship.engine.resistance_model == springsharp::ResistanceModel::HoltropMennen {
+                ship.engine.power_factor = factor;
+            } else {
+                ship.engine.original_power_factor = factor;
+            }
+            ship.engine.blend_weight = 1.0;
             ship.calculate();
             save_to_file(&ship, path).expect("failed to save design");
             println!(
@@ -1571,6 +1584,74 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
             println!(
                 "Note: public historical/approximate cases (not basin data); assumptions: deadrise 12-14 deg, LCG=0.42L, eta=0.55."
             );
+        }
+        "blend-table" => {
+            println!(
+                "{:<12} {:>4} {:>8} {:>10} {:>11} {:>10}",
+                "Type", "N", "Holtrop w", "Holt factor", "Orig factor", "Train MAPE"
+            );
+            for b in fit_blend_calibration() {
+                println!(
+                    "{:<12} {:>4} {:>8.2} {:>10.3} {:>11.3} {:>9.1}%",
+                    b.ship_type,
+                    b.count,
+                    b.weight,
+                    b.holtrop_factor,
+                    b.original_factor,
+                    b.train_mape * 100.0
+                );
+            }
+            println!("Note: Train MAPE is in-sample/diagnostic; use `validate-blend`.");
+        }
+        "calibrate-blend" => {
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: springsharp calibrate-blend <file>");
+                std::process::exit(2);
+            };
+            let mut ship = ShipModel::new();
+            load_from_file(&mut ship, path).expect("failed to load design");
+            ship.calculate();
+            match apply_blend_calibration(&mut ship) {
+                Some(b) => {
+                    save_to_file(&ship, path).expect("failed to save design");
+                    println!(
+                        "Applied blended regime to {path}: type={} Holtrop w={:.2} (Holtrop factor {:.3}, original factor {:.3})",
+                        b.ship_type, b.weight, b.holtrop_factor, b.original_factor
+                    );
+                    println!("NOTE: use `validate-blend` for the out-of-sample error.");
+                }
+                None => {
+                    eprintln!("No blend entry for ship type '{}'", ship.ship_type);
+                    std::process::exit(3);
+                }
+            }
+        }
+        "validate-blend" => {
+            let b = run_loocv_blend();
+            let r = run_loocv_regime();
+            println!("Blended regime: Holtrop and original SpringSharp, per-type weights");
+            println!("Nested LOOCV (out-of-sample):");
+            println!(
+                "  blended                  : {:.2}% case-weighted, {:.2}% type-averaged",
+                b.overall_mape * 100.0,
+                b.macro_mape * 100.0
+            );
+            println!(
+                "  regime only (Holtrop)    : {:.2}%",
+                r.overall_mape * 100.0
+            );
+            println!(
+                "  original + per-type factor: {:.2}%",
+                r.original_baseline_mape * 100.0
+            );
+            println!(
+                "  curated core             : {:.2}%",
+                b.curated_mape * 100.0
+            );
+            println!("\nPer ship type:");
+            for (ty, n, m) in &b.per_type {
+                println!("  {ty:<12} n={n:<3} {:.2}%", m * 100.0);
+            }
         }
         "regime-compare" => {
             let c = compare_regime_vs_original();

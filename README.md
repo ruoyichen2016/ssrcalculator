@@ -169,7 +169,7 @@ format.  `load_from_file()` automatically detects files beginning with
 
 ## Accuracy and calibration
 
-`accuracy.rs` includes 123 historical speed/power cases from battleships, fleet
+`accuracy.rs` includes 146 historical speed/power cases from battleships, fleet
 carriers, cruisers and destroyers (Dreadnought, Bismarck, Iowa, Fletcher,
 Yamato, Kongo, Essex, Atlanta, Tribal, South Dakota, KGV, Baltimore, Cleveland,
 Yorktown, Illustrious, North Carolina, Vanguard, Shokaku, Hood, Zara, Mogami,
@@ -188,6 +188,7 @@ explicitly approximate.
 
 ```bash
 cargo run -- validate-regime   # primary: nested-LOOCV regime vs baselines
+cargo run -- validate-blend    # blended Holtrop/original model (nested 9.81%)
 cargo run -- regime-compare    # paired regime vs original SpringSharp baseline
 cargo run -- regime-residuals  # per-case historical speed/power residuals
 cargo run -- validation-audit  # which model families have historical references
@@ -206,11 +207,12 @@ Nested leave-one-out cross-validation (the factor is re-fitted on every training
 split) gives:
 
 ```text
-regime (Holtrop + per-type factor) : 10.57% case-weighted, 10.60% type-averaged
-curated core (37 cases)            : 8.04%
-original (uncalibrated)            : 21.11%   <- original SpringSharp baseline
-original + per-type factor         : 11.08%
-Holtrop uncalibrated               : 20.89%
+regime (Holtrop + per-type factor) : 10.36% case-weighted, 10.38% type-averaged
+blended Holtrop/original (per type): 9.81% case-weighted, 9.80% type-averaged
+curated core (37 cases)            : 7.97%  (blended 7.47%)
+original (uncalibrated)            : 22.44%   <- original SpringSharp baseline
+original + per-type factor         : 11.93%
+Holtrop uncalibrated               : 19.16%
 ```
 
 Apply it to a design with:
@@ -224,12 +226,12 @@ design's ship type.  The original SpringSharp model is retained as a comparison
 baseline.  In-sample fits are diagnostic only; use `validate-regime` for the
 out-of-sample number.
 
-Against the original SpringSharp model the regime model wins **84/123** paired
-cases (sign-test p = 6.1e-5) and roughly halves the MAPE (10.57% vs 21.11%);
-the one exception is cruisers, where the original is still better (9.57% vs
-10.39%).
+Against the original SpringSharp model the regime model wins **98/146** paired
+cases (sign-test p = 4.3e-5) and roughly halves the MAPE (10.36% vs 22.44%);
+after adding slender light cruisers the two are nearly tied on cruisers
+(9.88% original vs 9.95% regime).
 
-Because all 123 cases are also used by the `calibrate-*` fits, the in-sample
+Because all 146 cases are also used by the `calibrate-*` fits, the in-sample
 numbers printed by `calibrate-stats` are optimistic.  `calibrate-stats` prints
 the LOOCV summary first and labels the in-sample fits as diagnostic only.
 

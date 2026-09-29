@@ -1152,6 +1152,13 @@ pub struct EngineValues {
     pub pct_coal: f64,
     pub screws: i32,
     pub power_factor: f64,
+    /// Calibration factor applied to the original SpringSharp empirical model
+    /// (used when blending or when `resistance_model = original`).
+    pub original_power_factor: f64,
+    /// 1.0 = use the selected `resistance_model` only.  A value in (0,1) blends
+    /// the Holtrop-Mennen result (weight `blend_weight`) with the original
+    /// SpringSharp result (weight `1 - blend_weight`).
+    pub blend_weight: f64,
     pub resistance_model: ResistanceModel,
     pub holtrop_viscous_factor: f64,
     pub holtrop_wave_factor: f64,
@@ -1215,15 +1222,17 @@ impl EngineValues {
         } else {
             hull.length - (hull.length_effect - hull.length)
         };
-        let mut hp = (pow(hull.displacement, 0.66666668653488159) / self.length_hp
+        let mut original_hp = (pow(hull.displacement, 0.66666668653488159) / self.length_hp
             * hull.co_sharp
             * pow(speed, 4.0)
             + 0.01 * hull.wetted_surface * pow(speed, 1.83))
             * speed
             / 184.1666667;
         if hull.date_engine < 1890 {
-            hp *= 1.0 + (1890.0 - hull.date_engine as f64) / 100.0;
+            original_hp *= 1.0 + (1890.0 - hull.date_engine as f64) / 100.0;
         }
+        original_hp *= self.original_power_factor;
+
         let fn_ = crate::cfd_proxy::cfd_froude_number(speed, hull.length);
         let cfd = crate::cfd_proxy::CfdProxyConfig {
             enabled: self.cfd_proxy_enabled,
@@ -1231,31 +1240,40 @@ impl EngineValues {
             wave_correction: self.cfd_proxy_wave,
             fn_ref: self.cfd_proxy_fn_ref,
         };
-        if self.resistance_model == ResistanceModel::HoltropMennen {
-            if speed >= self.planing_min_speed_kt
-                && hull.displacement <= self.planing_max_displacement_tons
-            {
-                let planing_hp = crate::planing::planing_hp_estimate_calibrated(
-                    hull.length,
-                    hull.beam,
-                    hull.displacement * 2240.0,
-                    speed,
-                    self.planing_calibration_factor,
-                );
-                return cfd.apply(planing_hp, fn_) * self.power_factor;
-            }
-            let holtrop_hp = crate::resistance::holtrop_power_hp_calibrated(
-                hull,
+
+        // Planing override applies to the Holtrop path (as before).
+        if self.resistance_model == ResistanceModel::HoltropMennen
+            && speed >= self.planing_min_speed_kt
+            && hull.displacement <= self.planing_max_displacement_tons
+        {
+            let planing_hp = crate::planing::planing_hp_estimate_calibrated(
+                hull.length,
+                hull.beam,
+                hull.displacement * 2240.0,
                 speed,
-                self.holtrop_viscous_factor,
-                self.holtrop_wave_factor,
-                self.holtrop_correlation_factor,
+                self.planing_calibration_factor,
             );
-            return cfd.apply(holtrop_hp, fn_) * self.power_factor;
+            return cfd.apply(planing_hp, fn_) * self.power_factor;
         }
-        hp = cfd.apply(hp, fn_);
-        hp *= self.power_factor;
-        hp
+
+        let holtrop_hp = crate::resistance::holtrop_power_hp_calibrated(
+            hull,
+            speed,
+            self.holtrop_viscous_factor,
+            self.holtrop_wave_factor,
+            self.holtrop_correlation_factor,
+        ) * self.power_factor;
+
+        let weight = self.blend_weight.clamp(0.0, 1.0);
+        let base_hp = if weight < 1.0 - 1e-9 {
+            weight * holtrop_hp + (1.0 - weight) * original_hp
+        } else {
+            match self.resistance_model {
+                ResistanceModel::HoltropMennen => holtrop_hp,
+                ResistanceModel::Original => original_hp,
+            }
+        };
+        cfd.apply(base_hp, fn_)
     }
 
     pub fn resistance(&mut self, hull: &HullValues) {
@@ -1507,6 +1525,8 @@ impl Default for ShipModel {
             weapons: WeaponAggregate::default(),
             engine: EngineValues {
                 power_factor: 1.0,
+                original_power_factor: 1.0,
+                blend_weight: 1.0,
                 holtrop_viscous_factor: 1.0,
                 holtrop_wave_factor: 1.0,
                 holtrop_correlation_factor: 1.0,
@@ -2187,6 +2207,38 @@ mod tests {
         assert!(ship.engine.qpc_applicable);
         assert!(ship.engine.qpc > 0.0);
         assert!(ship.engine.hull_efficiency > 0.0);
+    }
+
+    #[test]
+    fn blend_weight_mixes_the_two_models() {
+        let mut ship = ShipModel::new();
+        ship.hull.length = 600.0;
+        ship.hull.beam = 90.0;
+        ship.hull.beam_bulges = 90.0;
+        ship.hull.draught = 28.0;
+        ship.hull.block = 0.55;
+        ship.hull.date_hull = 1940;
+        ship.hull.date_engine = 1940;
+        ship.engine.screws = 4;
+        ship.engine.speed_max = 24.0;
+        ship.engine.power_factor = 1.0;
+        ship.engine.original_power_factor = 1.0;
+
+        ship.engine.resistance_model = ResistanceModel::Original;
+        ship.engine.blend_weight = 1.0;
+        ship.calculate();
+        let original = ship.engine.hp_max;
+
+        ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+        ship.engine.blend_weight = 1.0;
+        ship.calculate();
+        let holtrop = ship.engine.hp_max;
+
+        ship.engine.blend_weight = 0.5;
+        ship.calculate();
+        let blended = ship.engine.hp_max;
+        assert!(blended > original.min(holtrop) && blended < original.max(holtrop));
+        assert!((blended - 0.5 * (original + holtrop)).abs() < 1e-6);
     }
 
     #[test]

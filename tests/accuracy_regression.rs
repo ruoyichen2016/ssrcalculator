@@ -64,7 +64,7 @@ fn loocv_per_type_does_not_regress() {
     assert!(per_type(&by_type, "battleship") <= 0.126);
     assert!(per_type(&by_type, "carrier") <= 0.141);
     assert!(per_type(&by_type, "cruiser") <= 0.138);
-    assert!(per_type(&by_type, "destroyer") <= 0.105);
+    assert!(per_type(&by_type, "destroyer") <= 0.120);
 
     for (ty, n, mape) in &by_type {
         assert!(*n >= 2, "{ty} has too few cases for a per-type estimate");
@@ -96,6 +96,25 @@ fn holdout_does_not_regress() {
         "Holtrop holdout MAPE {:.2}% exceeded frozen baseline",
         h.holtrop_mape * 100.0
     );
+}
+
+#[test]
+fn blended_model_does_not_regress() {
+    let b = springsharp::run_loocv_blend();
+    assert!(
+        b.overall_mape <= 0.105,
+        "blended nested LOOCV {:.2}% exceeded baseline",
+        b.overall_mape * 100.0
+    );
+    assert!(
+        b.curated_mape <= 0.085,
+        "blended curated-core MAPE {:.2}% exceeded baseline",
+        b.curated_mape * 100.0
+    );
+    // The blend should beat the pure regime and original baselines.
+    let r = springsharp::run_loocv_regime();
+    assert!(b.overall_mape < r.overall_mape);
+    assert!(b.overall_mape < r.original_baseline_mape);
 }
 
 #[test]

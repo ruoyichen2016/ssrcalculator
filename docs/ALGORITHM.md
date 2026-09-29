@@ -55,12 +55,12 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 - Base model: Holtrop-Mennen
 - Per-ship-type calibration factor `reference / simulated`, fitted to the public
   historical dataset with a confidence-weighted 15% trimmed mean (curated cases
-  weighted 2x): battleship 0.767, carrier 0.803, cruiser 0.911, destroyer 1.017
+  weighted 2x): battleship 0.767, carrier 0.803, cruiser 0.919, destroyer 1.017
 - The original SpringSharp empirical model is retained as a comparison baseline
 - Validated by **nested** LOOCV: the factor is re-fitted on each training split
-  - regime (Holtrop + factor): 10.57% case-weighted / 10.60% type-averaged (123 cases); curated core 8.04%
-  - original (uncalibrated): 21.11%; with per-type factor: 11.08%
-  - Holtrop uncalibrated: 20.89%
+  - regime (Holtrop + factor): 10.36% case-weighted / 10.38% type-averaged (146 cases); curated core 7.97%
+  - original (uncalibrated): 22.44%; with per-type factor: 11.93%
+  - Holtrop uncalibrated: 19.16%
 - Applied to a design via `calibrate-regime` (sets `resistance_model` + `power_factor`)
 
 ## Internal Space Model
@@ -105,6 +105,16 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 - Web console with design form
 - External CSV validation / calibration in Web console
 
+## Blended model (optional)
+
+- Per ship type, blend the regime (Holtrop) result with the original SpringSharp
+  result: `P = w * P_holtrop + (1 - w) * P_original` (both with their own
+  per-type factors).
+- The Holtrop weight `w` is fitted on out-of-fold predictions and shrunk toward
+  the global weight (battleship 0.45, carrier 0.53, cruiser 0.65, destroyer 0.94).
+- Nested LOOCV 9.81% (curated core 7.47%) vs 10.36% for regime-only.
+- `blend_weight = 1` (default) keeps the single-model behaviour.
+
 ## Planing / Savitsky
 
 - Savitsky (1964) planing equilibrium: lift coefficient balance, centre of
@@ -125,7 +135,7 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 
 ## Validation
 
-- 123 built-in historical cases, all currently `SourceType::PublicReference`
+- 146 built-in historical cases, all currently `SourceType::PublicReference`
 - Explicit `Provenance { source_type, displacement_type, confidence, source,
   source_url, verifier, verification_date }` per case
 - Verified = official trial / model test only; traceable = citation + URL + verifier

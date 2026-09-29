@@ -307,6 +307,24 @@
   group for another, so the current model is kept.  A type-aware blend remains a
   candidate only with nested validation.
 
+## Phase 26 — slender/fast cases + blended model (completed 2026-09-27)
+
+- Added 23 slender, high-speed historical cases (destroyers/leaders and fast
+  light cruisers); dataset 123 -> 146.  Regime nested LOOCV improved across the
+  board: 10.57% -> 10.36% case-weighted, 10.60% -> 10.38% macro, curated core
+  8.04% -> 7.97%, cruiser 10.39% -> 9.95%.
+- Diagnosed the cruiser gap (per-type constant cannot capture the within-type
+  trend; |error| correlates with displacement) and tested extra parameters:
+  none improved all metrics at once.
+- Implemented an optional **blended model**: per-type weighted combination of the
+  Holtrop regime and the original SpringSharp model (`blend_weight`,
+  `original_power_factor` engine fields; `calibrate-blend`, `blend-table`,
+  `validate-blend`).  Nested LOOCV **9.81%** (curated core 7.47%) vs 10.36%
+  regime-only; weights battleship 0.45, carrier 0.53, cruiser 0.65, destroyer 0.94.
+- Note: Series 64 / Fung-type high-speed slender-hull regressions were not
+  implemented because their coefficients could not be sourced offline; the
+  blend is the validated alternative.
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model

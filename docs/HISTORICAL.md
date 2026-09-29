@@ -7,14 +7,14 @@ intended for real ship design, class approval or safety decisions.
 
 ## What the data is
 
-The built-in database has **123 public-reference historical cases**:
+The built-in database has **146 public-reference historical cases**:
 
 - **37 curated cases** (declared confidence 0.7): key magnitudes cross-checked
   against two or more public sources;
-- **86 approximate cases** (0.5): bulk-imported public references, not yet
-  cross-checked.
+- **109 approximate cases** (0.5): bulk-imported public references, not yet
+  cross-checked (including 23 slender, high-speed destroyers/light cruisers).
 
-There is **no official trial or model-basin data**: 0/123 cases are
+There is **no official trial or model-basin data**: 0/146 cases are
 independently verified or traceable.  Speeds/powers are a mix of trial and
 design values, and displacements are usually standard/normal while hull
 dimensions are closer to full load.  Treat every number as approximate.
@@ -22,9 +22,10 @@ dimensions are closer to full load.  Treat every number as approximate.
 ## What can be trusted
 
 - **Speed/power regime estimates** for ship types and sizes represented in the
-  dataset: nested LOOCV 10.40% case-weighted / 10.45% type-averaged over all
-  123 cases; **8.09%** on the curated core.  The original SpringSharp model is
-  21.05% on the same data, so the regime model is a clear improvement.
+  dataset: nested LOOCV 10.36% case-weighted / 10.38% type-averaged over all
+  146 cases; **7.97%** on the curated core; the optional blended Holtrop/original
+  model reaches 9.81%.  The original SpringSharp model is 22.44% on the same
+  data, so the modern models are a clear improvement.
 - **Relative comparisons** (larger/faster/heavier) and the
   `historical-compare` command, which lists the closest historical cases.
 - The curated core was reviewed line by line (`docs/DATA_REVIEW.md`): 36/37

@@ -493,6 +493,7 @@ pub fn fit_ensemble() -> EnsembleFit {
 pub fn apply_structural_calibration(ship: &mut ShipModel) {
     let fit = fit_structural_form();
     ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.blend_weight = 1.0;
     ship.engine.holtrop_viscous_factor = fit.viscous_factor;
     ship.engine.holtrop_wave_factor = fit.wave_factor;
     ship.engine.holtrop_correlation_factor = fit.correlation_factor;
@@ -508,6 +509,7 @@ pub fn apply_structural_calibration_segmented(ship: &mut ShipModel) {
         .or_else(|| segments.first());
     if let Some(seg) = seg {
         ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+        ship.engine.blend_weight = 1.0;
         ship.engine.holtrop_viscous_factor = seg.viscous_factor;
         ship.engine.holtrop_wave_factor = seg.wave_factor;
         ship.engine.holtrop_correlation_factor = seg.correlation_factor;
@@ -1545,6 +1547,7 @@ pub fn apply_structural_calibration_ridge(ship: &mut ShipModel) {
         .or_else(|| segments.first());
     if let Some(seg) = seg {
         ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+        ship.engine.blend_weight = 1.0;
         ship.engine.holtrop_viscous_factor = seg.viscous_factor;
         ship.engine.holtrop_wave_factor = seg.wave_factor;
         ship.engine.holtrop_correlation_factor = seg.correlation_factor;
@@ -1563,6 +1566,7 @@ pub fn apply_structural_calibration_lasso(ship: &mut ShipModel) {
         .or_else(|| segments.first());
     if let Some(seg) = seg {
         ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+        ship.engine.blend_weight = 1.0;
         ship.engine.holtrop_viscous_factor = seg.viscous_factor;
         ship.engine.holtrop_wave_factor = seg.wave_factor;
         ship.engine.holtrop_correlation_factor = seg.correlation_factor;

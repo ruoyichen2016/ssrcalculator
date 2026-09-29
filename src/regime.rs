@@ -151,6 +151,8 @@ pub fn apply_regime_calibration(ship: &mut ShipModel) -> Option<RegimeCalibratio
     let entry = regime_for_ship_type(&ship.ship_type)?;
     ship.engine.resistance_model = entry.model;
     ship.engine.power_factor = entry.factor;
+    ship.engine.original_power_factor = 1.0;
+    ship.engine.blend_weight = 1.0;
     ship.calculate();
     Some(entry)
 }
@@ -193,6 +195,188 @@ pub struct RegimeLoocv {
     pub curated_cases: usize,
     /// Nested-LOOCV MAPE over the curated core only.
     pub curated_mape: f64,
+}
+
+/// How strongly the Holtrop and original models are blended for a ship type.
+#[derive(Clone, Copy, Debug)]
+pub struct BlendCalibration {
+    pub ship_type: &'static str,
+    pub count: usize,
+    /// Weight of the Holtrop result; the original gets `1 - weight`.
+    pub weight: f64,
+    pub holtrop_factor: f64,
+    pub original_factor: f64,
+    /// In-sample (weight-selected) MAPE, diagnostic only.
+    pub train_mape: f64,
+}
+
+/// How much the per-type blend weight is shrunk toward the global weight.
+const BLEND_SHRINK: f64 = 8.0;
+
+/// Best Holtrop weight on a 0.05 grid for a set of (regime, original, ref).
+fn best_blend_weight(rows: &[(f64, f64, f64)]) -> f64 {
+    if rows.is_empty() {
+        return 1.0;
+    }
+    let mut best = (1.0_f64, f64::INFINITY);
+    for k in 0..=20 {
+        let w = k as f64 / 20.0;
+        let m = rows
+            .iter()
+            .map(|(a, b, r)| ((w * a + (1.0 - w) * b - r) / r).abs())
+            .sum::<f64>()
+            / rows.len() as f64;
+        if m < best.1 {
+            best = (w, m);
+        }
+    }
+    best.0
+}
+
+fn blend_rows() -> Vec<(f64, f64, f64, &'static str, f64)> {
+    run_loocv_regime()
+        .residuals
+        .iter()
+        .map(|x| {
+            (
+                x.predicted_hp,
+                x.original_calibrated_hp,
+                x.reference_hp,
+                x.ship_type,
+                x.confidence,
+            )
+        })
+        .collect()
+}
+
+/// Fit the production blend: per-type Holtrop weight (shrunk toward the global
+/// weight) and both per-type calibration factors.
+pub fn fit_blend_calibration() -> Vec<BlendCalibration> {
+    let rows = blend_rows();
+    let all: Vec<(f64, f64, f64)> = rows.iter().map(|r| (r.0, r.1, r.2)).collect();
+    let global_w = best_blend_weight(&all);
+    let cases = historical_cases();
+    let mut types: Vec<&'static str> = rows.iter().map(|r| r.3).collect();
+    types.sort_unstable();
+    types.dedup();
+    types
+        .into_iter()
+        .map(|ty| {
+            let subset: Vec<(f64, f64, f64)> = rows
+                .iter()
+                .filter(|r| r.3 == ty)
+                .map(|r| (r.0, r.1, r.2))
+                .collect();
+            let n = subset.len() as f64;
+            let w_type = if subset.len() >= 4 {
+                best_blend_weight(&subset)
+            } else {
+                global_w
+            };
+            let weight = (n * w_type + BLEND_SHRINK * global_w) / (n + BLEND_SHRINK);
+            let type_cases: Vec<&HistoricalCase> =
+                cases.iter().filter(|c| c.ship_type == ty).collect();
+            let holtrop_factor = factor_for(&type_cases, raw_holtrop);
+            let original_factor = factor_for(&type_cases, raw_original);
+            let train_mape = if subset.is_empty() {
+                f64::NAN
+            } else {
+                subset
+                    .iter()
+                    .map(|(a, b, r)| ((weight * a + (1.0 - weight) * b - r) / r).abs())
+                    .sum::<f64>()
+                    / n
+            };
+            BlendCalibration {
+                ship_type: ty,
+                count: subset.len(),
+                weight,
+                holtrop_factor,
+                original_factor,
+                train_mape,
+            }
+        })
+        .collect()
+}
+
+/// Blend row for a ship type (case-insensitive, tolerant of qualifiers).
+pub fn blend_for_ship_type(ship_type: &str) -> Option<BlendCalibration> {
+    let needle = ship_type.to_ascii_lowercase();
+    fit_blend_calibration()
+        .into_iter()
+        .find(|r| needle.contains(r.ship_type) || r.ship_type.contains(needle.trim()))
+}
+
+/// Apply the blended regime model (and both factors) to a design.
+pub fn apply_blend_calibration(ship: &mut ShipModel) -> Option<BlendCalibration> {
+    let entry = blend_for_ship_type(&ship.ship_type)?;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = entry.holtrop_factor;
+    ship.engine.original_power_factor = entry.original_factor;
+    ship.engine.blend_weight = entry.weight;
+    ship.calculate();
+    Some(entry)
+}
+
+/// Nested-LOOCV result for the blended model.
+#[derive(Clone, Debug)]
+pub struct BlendLoocv {
+    pub overall_mape: f64,
+    pub macro_mape: f64,
+    pub curated_mape: f64,
+    pub per_type: Vec<(String, usize, f64)>,
+}
+
+/// Nested estimation of the blend: the weights and factors come from the
+/// out-of-fold predictions, and the blend weight is re-chosen without the test
+/// case (shrunk per-type toward the global weight).
+pub fn run_loocv_blend() -> BlendLoocv {
+    let rows = blend_rows();
+    let mut errs: Vec<(String, f64, f64)> = Vec::new();
+    for i in 0..rows.len() {
+        let (a, b, r, ty, conf) = rows[i];
+        let train: Vec<&(f64, f64, f64, &'static str, f64)> = rows
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| *j != i)
+            .map(|(_, x)| x)
+            .collect();
+        let global_w =
+            best_blend_weight(&train.iter().map(|x| (x.0, x.1, x.2)).collect::<Vec<_>>());
+        let same: Vec<&(f64, f64, f64, &'static str, f64)> =
+            train.iter().copied().filter(|x| x.3 == ty).collect();
+        let w_type = if same.len() >= 4 {
+            best_blend_weight(&same.iter().map(|x| (x.0, x.1, x.2)).collect::<Vec<_>>())
+        } else {
+            global_w
+        };
+        let n = same.len() as f64;
+        let w = (n * w_type + BLEND_SHRINK * global_w) / (n + BLEND_SHRINK);
+        errs.push((
+            ty.to_string(),
+            ((w * a + (1.0 - w) * b - r) / r).abs(),
+            conf,
+        ));
+    }
+    let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len().max(1) as f64;
+    let all: Vec<f64> = errs.iter().map(|e| e.1).collect();
+    let curated: Vec<f64> = errs.iter().filter(|e| e.2 >= 0.65).map(|e| e.1).collect();
+    let mut types: Vec<String> = errs.iter().map(|e| e.0.clone()).collect();
+    types.sort();
+    types.dedup();
+    let per_type = types
+        .into_iter()
+        .map(|ty| {
+            let es: Vec<f64> = errs.iter().filter(|e| e.0 == ty).map(|e| e.1).collect();
+            (ty, es.len(), mean(&es))
+        })
+        .collect::<Vec<_>>();
+    BlendLoocv {
+        overall_mape: mean(&all),
+        macro_mape: per_type.iter().map(|(_, _, m)| *m).sum::<f64>() / per_type.len().max(1) as f64,
+        curated_mape: mean(&curated),
+        per_type,
+    }
 }
 
 /// Paired comparison of the modern regime model against baselines.
@@ -449,6 +633,25 @@ mod tests {
         assert!((sign_test_p(0, 0) - 1.0).abs() < 1e-12);
         assert!(sign_test_p(50, 100) > 0.9);
         assert!(sign_test_p(84, 123) < 1e-3);
+    }
+
+    #[test]
+    fn blend_beats_regime_alone() {
+        let b = run_loocv_blend();
+        let r = run_loocv_regime();
+        assert!(
+            b.overall_mape < r.overall_mape,
+            "blend {:.3} should beat regime {:.3}",
+            b.overall_mape,
+            r.overall_mape
+        );
+        assert!(b.curated_mape < r.curated_mape);
+        let cal = fit_blend_calibration();
+        assert!(!cal.is_empty());
+        for c in &cal {
+            assert!((0.0..=1.0).contains(&c.weight));
+            assert!(c.holtrop_factor > 0.0 && c.original_factor > 0.0);
+        }
     }
 
     #[test]
