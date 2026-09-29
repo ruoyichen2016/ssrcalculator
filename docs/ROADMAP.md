@@ -6,7 +6,7 @@
 - `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test` all clean
 - Honest provenance: `SourceType`/`Provenance` on every case; hardcoded `DATA_UPGRADES`
   and `case_source_confidence` removed
-- `data-targets` now measures official-trial/model-test coverage (currently 0/52, fails honestly)
+- `data-targets` now measures official-trial/model-test coverage (currently 0/77, fails honestly)
 - LOOCV promoted to the primary metric in `calibrate-stats`; in-sample fits labelled diagnostic
 - Deterministic holdout split + `validate-holdout` (calibration fitted on 28 train, scored on 9 held-out)
 - Docs synced with actual counts (unit + integration tests green)
@@ -27,7 +27,7 @@
 ## Phase 2 — modern regime model + CLI groups (completed 2026-09-27)
 
 - Modern default: Holtrop-Mennen + per-ship-type calibration factor fitted to
-  the public historical dataset, validated by nested LOOCV (**9.06%** over 52 cases)
+  the public historical dataset, validated by nested LOOCV (**10.21%** over 77 cases)
 - `validate-regime` compares regime vs original+factor (10.57%) and uncalibrated
   Holtrop (19.42%); original kept as the comparison baseline
 - `calibrate-regime`, `regime-table`, `accuracy-target` commands
@@ -81,7 +81,7 @@
   edges), enforced by repair and checked in the report.
 - JSON/HTML/CLI report decks, access edges and connectivity; 10 constraint checks.
 - Regime factor switched to a 15% trimmed mean (outlier-robust); nested LOOCV
-  8.92% case-weighted / 8.39% type-averaged.  Per-type Fn slopes tested and
+  8.92% case-weighted / 8.39% type-averaged (52 cases).  Per-type Fn slopes tested and
   rejected as overfitting.
 - New tests: deck/access feasibility; existing determinism and seed-comparison
   tests cover the multi-deck GA.
@@ -128,6 +128,20 @@
   corrosion addition, standard thickness series, stiffener section modulus,
   bulkhead flooding head, deflection l/200; per-element utilisation reported
 - 23 constraint checks total (was 15); 96 unit + 7 integration tests
+
+## Phase 12 — expanded historical sample (completed 2026-09-27)
+
+- Added 25 more public-reference ships: 10 battleships (Nelson, Rodney, Queen
+  Elizabeth, Revenge, Colorado, Nagato, Richelieu, Littorio, Tirpitz, Dunkerque),
+  10 cruisers (Myoko, Takao, Tone, Aoba, Leander, Southampton, Belfast, Wichita,
+  Admiral Graf Spee, Kirov) and 5 destroyers (Shimakaze, Akizuki, Yugumo,
+  Le Fantasque, Gleaves); dataset 52 -> 77
+- The broader sample exposes genuine extreme-Froude weaknesses (Shimakaze 40.9 kt
+  over-predicted, Queen Elizabeth/Revenge low-Fn under-predicted): regime nested
+  LOOCV 8.92% -> 10.21% case-weighted / 8.39% -> 10.35% type-averaged
+- Still far ahead of the original SpringSharp model (21.58% uncalibrated);
+  per type: cruiser 8.5%, carrier 10.7%, battleship 10.7%, destroyer 11.5%
+- Holdout re-frozen at 58 train / 19 held-out (original 13.9%, Holtrop 12.5%)
 
 ## Completed
 

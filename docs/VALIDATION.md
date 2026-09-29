@@ -19,12 +19,12 @@ Provenance {
 - **Verified** means `source_type` is `OfficialTrial` or `ModelTest` only.
   Self-declared `confidence` can never make a case count as verified.
 - **Traceable** means citation + URL + named verifier are all present.
-- Current built-in database: **0/52 verified, 0/52 traceable**, all
+- Current built-in database: **0/77 verified, 0/77 traceable**, all
   `PublicReference` (Conway's/Jane's/class-trial summaries; approximate).
 
 ## Accuracy evidence
 
-In-sample fits (all 52 cases used for fitting and scoring) are optimistic and
+In-sample fits (all 77 cases used for fitting and scoring) are optimistic and
 must not be used as accuracy claims.
 
 **Primary metric: nested LOOCV of the regime model** (`run_loocv_regime`,
@@ -33,8 +33,8 @@ calibration factor is re-fitted on each training split.
 
 Secondary metrics:
 
-- **Holdout** (`validate-holdout`) fits calibration on 39 training cases and
-  scores 13 held-out cases.
+- **Holdout** (`validate-holdout`) fits calibration on 58 training cases and
+  scores 19 held-out cases.
 - The reduced/structural ensemble (`run_loocv`, `calibrate-stats`) is retained
   as a diagnostic; its `ensemble_mape` fits the blend weight on all folds, so it
   is optimistic.  The honest nested 2-way number is ~10.8%.
@@ -43,25 +43,27 @@ Secondary metrics:
 
 `Holtrop-Mennen + per-ship-type calibration factor`, fitted on the public
 historical dataset (the default when a design is run through
-`calibrate-regime`).  Factors (ref/sim, 15% trimmed mean): battleship 0.760,
-carrier 0.778, cruiser 0.922, destroyer 1.053.  The carrier factor was refitted
-after adding 15 literature carrier cases (carrier nested LOOCV 13.13% -> 10.68%).
+`calibrate-regime`).  Factors (ref/sim, 15% trimmed mean) at 77 cases:
+battleship 0.782, carrier 0.778, cruiser 0.888, destroyer 1.002.  The wider
+sample (15 carriers + 25 battleship/cruiser/destroyer) moved the overall nested
+LOOCV from 8.92% to 10.21% by exposing extreme-Froude cases.
 
 ### Frozen baseline (2026-09-27)
 
-| Metric | Baseline (52 cases) | Regression threshold |
+| Metric | Baseline (77 cases) | Regression threshold |
 |---|---|---|
-| **Regime nested LOOCV, case-weighted** | **~8.92%** | **<= 10.0%** |
-| Regime nested, type-averaged (macro) | ~8.39% | <= 9.5% |
-| Regime nested, battleship | ~8.50% | <= 9.6% |
-| Regime nested, carrier | ~10.68% | <= 12.5% |
-| Regime nested, cruiser | ~7.84% | <= 8.8% |
-| Regime nested, destroyer | ~6.53% | <= 7.3% |
-| Original + per-type factor (baseline) | ~11.67% | (must be beaten) |
-| Holtrop uncalibrated | ~22.24% | (must be beaten) |
-| 2-way ensemble, reported (optimistic) | ~10.0% | <= 12.0% |
-| Holdout MAPE, original | ~16.1% | <= 18.5% |
-| Holdout MAPE, Holtrop | ~12.9% | <= 14.5% |
+| **Regime nested LOOCV, case-weighted** | **~10.21%** | **<= 11.5%** |
+| Regime nested, type-averaged (macro) | ~10.35% | <= 11.5% |
+| Regime nested, battleship | ~10.72% | <= 12.0% |
+| Regime nested, carrier | ~10.68% | <= 12.0% |
+| Regime nested, cruiser | ~8.52% | <= 10.0% |
+| Regime nested, destroyer | ~11.49% | <= 13.0% |
+| Original uncalibrated (original model) | ~21.58% | (comparison) |
+| Original + per-type factor | ~12.33% | (must be beaten) |
+| Holtrop uncalibrated | ~21.91% | (must be beaten) |
+| 2-way ensemble, reported (optimistic) | ~10.08% | <= 12.0% |
+| Holdout MAPE, original | ~13.9% | <= 18.5% |
+| Holdout MAPE, Holtrop | ~12.5% | <= 14.5% |
 
 These are enforced by `tests/accuracy_regression.rs`.  If a change is a
 deliberate improvement, update the baseline here and the constants in that file
@@ -116,7 +118,7 @@ the built-in historical data:
 
 | Model family | Historical references | Status |
 |---|---|---|
-| Speed/power (regime) | 52 cases | validated; nested LOOCV 8.92% case-weighted / 8.39% type-averaged |
+| Speed/power (regime) | 77 cases | validated; nested LOOCV 10.21% case-weighted / 10.35% type-averaged |
 | Planing (Savitsky vs empirical) | 8 public planing cases | validated; both 23.3% calibrated |
 | Structural weight | 0 | **cannot be validated** with the current dataset |
 | Internal spaces (machinery/magazine/accommodation) | 0 | **cannot be validated** |
@@ -126,8 +128,8 @@ The built-in dataset stores only length/beam/draught/block/speed/power
 references.  A validation attempt using `simulate_case` showed the minimal
 ships are non-physical for weight/space work:
 
-- **15/52** cases give hull weight that is negative or >= displacement;
-- **52/52** cases give zero magazine volume (no guns are configured);
+- **19/77** cases give hull weight that is negative or >= displacement;
+- **77/77** cases give zero magazine volume (no guns are configured);
 - accommodation volume fractions are 40-90% of hull volume (implausible).
 
 `simulate_case` is therefore used only for speed/power validation.  Validating
@@ -149,7 +151,7 @@ loocv_accuracy_score = 1.0                       if MAPE <= 10%
                      = linear interpolation      in between
 ```
 
-Baseline composite (52 public-reference cases, nested regime LOOCV 9.06%):
+Baseline composite (77 public-reference cases, nested regime LOOCV 10.21%):
 **0.400**.  `data-target 0.8` (and all `data-targets` thresholds) therefore fail
 honestly until official trial / model-basin data with citations, URLs and named
 verifiers is added.
@@ -166,7 +168,7 @@ target normalized to unit RMS, so the lambda grid `1e-4 .. 1e4` is meaningful.
 - All displacement types are currently declared `Normal` and unverified.
 - The holdout split is deterministic by index (stable, but not stratified by
   ship type).
-- `calibrate-*` commands still fit on all 52 cases by design; use LOOCV and
+- `calibrate-*` commands still fit on all 77 cases by design; use LOOCV and
   `validate-holdout` for accuracy claims.
 - `data-target` also includes an accuracy component, so it can move when the
   model changes even if the data does not.

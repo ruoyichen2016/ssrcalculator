@@ -146,6 +146,8 @@ pub struct RegimeLoocv {
     /// Type-averaged MAPE (each ship type weighted equally).
     pub macro_mape: f64,
     pub per_type: Vec<(String, usize, f64)>,
+    /// Original SpringSharp model with no calibration factor (raw baseline).
+    pub original_uncalibrated_mape: f64,
     /// Same nested protocol for original + per-type factor (comparison baseline).
     pub original_baseline_mape: f64,
     /// Holtrop with no calibration factor (nested protocol), for reference.
@@ -166,6 +168,7 @@ pub fn run_loocv_regime() -> RegimeLoocv {
 
     let mut errs = Vec::new();
     let mut holt_uncal = Vec::new();
+    let mut orig_uncal = Vec::new();
     let mut orig_errs = Vec::new();
     let mut per_type: Vec<(String, usize, f64)> = Vec::new();
     let mut residuals: Vec<RegimeResidual> = Vec::new();
@@ -192,10 +195,12 @@ pub fn run_loocv_regime() -> RegimeLoocv {
         let eh = ((pred_h - test.reference_hp) / test.reference_hp).abs();
         let eo = ((pred_o - test.reference_hp) / test.reference_hp).abs();
         let eu = ((raw_h[i] - test.reference_hp) / test.reference_hp).abs();
+        let eou = ((raw_o[i] - test.reference_hp) / test.reference_hp).abs();
 
         errs.push(eh);
         orig_errs.push(eo);
         holt_uncal.push(eu);
+        orig_uncal.push(eou);
         residuals.push(RegimeResidual {
             name: test.name,
             ship_type: test.ship_type,
@@ -227,6 +232,7 @@ pub fn run_loocv_regime() -> RegimeLoocv {
         overall_mape: mean(&errs),
         macro_mape,
         per_type,
+        original_uncalibrated_mape: mean(&orig_uncal),
         original_baseline_mape: mean(&orig_errs),
         holtrop_uncalibrated_mape: mean(&holt_uncal),
         residuals,
@@ -252,7 +258,8 @@ mod tests {
     fn nested_loocv_beats_comparison_baselines() {
         let r = run_loocv_regime();
         assert!(r.overall_mape.is_finite());
-        assert!(r.overall_mape <= 0.095, "regime MAPE {:.3}", r.overall_mape);
+        assert!(r.overall_mape <= 0.115, "regime MAPE {:.3}", r.overall_mape);
+        assert!(r.overall_mape < r.original_uncalibrated_mape);
         assert!(r.overall_mape < r.original_baseline_mape);
         assert!(r.overall_mape < r.holtrop_uncalibrated_mape);
         let total: usize = r.per_type.iter().map(|(_, n, _)| *n).sum();

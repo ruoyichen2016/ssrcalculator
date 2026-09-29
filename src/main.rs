@@ -1297,7 +1297,11 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
                 r.macro_mape * 100.0
             );
             println!(
-                "  original + per-type factor: {:.2}%  (comparison baseline)",
+                "  original (uncalibrated)   : {:.2}%  (original SpringSharp baseline)",
+                r.original_uncalibrated_mape * 100.0
+            );
+            println!(
+                "  original + per-type factor: {:.2}%",
                 r.original_baseline_mape * 100.0
             );
             println!(

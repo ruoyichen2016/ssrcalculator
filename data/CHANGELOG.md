@@ -1,5 +1,18 @@
 # Data changelog
 
+## built-in-v1.8 (2026-09-27) — expanded sample to 77 cases
+
+- Added 25 public-reference ships: 10 battleships (Nelson, Rodney, Queen
+  Elizabeth, Revenge, Colorado, Nagato, Richelieu, Littorio, Tirpitz, Dunkerque),
+  10 cruisers (Myoko, Takao, Tone, Aoba, Leander, Southampton, Belfast, Wichita,
+  Admiral Graf Spee, Kirov) and 5 destroyers (Shimakaze, Akizuki, Yugumo,
+  Le Fantasque, Gleaves).
+- The wider sample exposes genuine extreme-Froude weaknesses: regime nested
+  LOOCV moves from 8.92% to 10.21% case-weighted (8.39% -> 10.35% macro), still
+  far ahead of the original SpringSharp model at 21.58%.
+- Status: **0/77 independently verified, 0/77 traceable**.
+
+
 ## built-in-v1.7 (2026-09-27) — 15 literature carrier cases
 
 - Added 15 carrier cases (Lexington, Saratoga, Ranger, Wasp, Akagi, Kaga,

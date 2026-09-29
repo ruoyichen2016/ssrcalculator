@@ -64,7 +64,7 @@ fn loocv_per_type_does_not_regress() {
     assert!(per_type(&by_type, "battleship") <= 0.126);
     assert!(per_type(&by_type, "carrier") <= 0.141);
     assert!(per_type(&by_type, "cruiser") <= 0.138);
-    assert!(per_type(&by_type, "destroyer") <= 0.068);
+    assert!(per_type(&by_type, "destroyer") <= 0.105);
 
     for (ty, n, mape) in &by_type {
         assert!(*n >= 2, "{ty} has too few cases for a per-type estimate");
@@ -145,10 +145,10 @@ fn regularization_grid_is_not_a_noop() {
 
 // ---------------------------------------------------------------------------
 // Regime-aware modern model: Holtrop + per-ship-type calibration factor.
-// Baseline nested LOOCV ~9.06% with the expanded 52-case dataset (2026-09-27).
+// Baseline nested LOOCV ~10.2% with the expanded 77-case dataset (2026-09-27).
 // ---------------------------------------------------------------------------
 
-const REGIME_OVERALL_MAX: f64 = 0.100;
+const REGIME_OVERALL_MAX: f64 = 0.115;
 
 #[test]
 fn regime_nested_loocv_does_not_regress() {
@@ -160,7 +160,7 @@ fn regime_nested_loocv_does_not_regress() {
         REGIME_OVERALL_MAX * 100.0
     );
     assert!(
-        r.macro_mape.is_finite() && r.macro_mape <= 0.095,
+        r.macro_mape.is_finite() && r.macro_mape <= 0.115,
         "regime type-averaged MAPE {:.2}% exceeded baseline",
         r.macro_mape * 100.0
     );
@@ -185,10 +185,10 @@ fn regime_nested_loocv_does_not_regress() {
             .map(|(_, _, m)| *m)
             .unwrap_or_else(|| panic!("no regime entry for {ty}"))
     };
-    assert!(lookup("battleship") <= 0.096);
-    assert!(lookup("carrier") <= 0.125);
-    assert!(lookup("cruiser") <= 0.088);
-    assert!(lookup("destroyer") <= 0.073);
+    assert!(lookup("battleship") <= 0.120);
+    assert!(lookup("carrier") <= 0.120);
+    assert!(lookup("cruiser") <= 0.100);
+    assert!(lookup("destroyer") <= 0.130);
 }
 
 #[test]
