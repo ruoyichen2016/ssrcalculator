@@ -24,3 +24,9 @@ gui = ["dep:eframe"]
 
 [dependencies]
 eframe = { version = "0.36", optional = true, default-features = false, features = ["glow", "default_fonts", "x11", "wayland"] }
+
+# Dependencies (notably the optional eframe/egui GUI tree) do not need debug
+# symbols; this keeps the dependency artifacts much smaller.  The crate itself
+# keeps its normal debug info.
+[profile.dev.package."*"]
+debug = false

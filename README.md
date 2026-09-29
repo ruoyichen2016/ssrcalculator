@@ -67,8 +67,11 @@ cargo run -- load example.ssr
 cargo run -- report example.ssr
 cargo run -- html example.ssr > example.html
 
-# Native egui GUI (optional feature; needs a display/GL environment)
-cargo run --features gui --bin springsharp-gui
+# Native egui GUI (optional feature; needs a display/GL environment).
+# scripts/build-gui.sh builds it into a separate target-gui/ directory so the
+# eframe dependency tree never competes with the core target/.
+scripts/build-gui.sh
+CARGO_TARGET_DIR=target-gui cargo run --features gui --bin springsharp-gui
 
 # Web console (browser GUI with form inputs)
 cargo run -- web 8080
@@ -378,8 +381,12 @@ Metric conversions (`Conversion` / `metric_calc`) are provided for reports.
 - `docs/ROADMAP.md` lists completed work and remaining items.
 - `docs/CHANGELOG.md` is the cumulative implementation log.
 - Native GUI uses eframe/egui behind the optional `gui` feature:
-  `cargo run --features gui --bin springsharp-gui`. The GUI builds headless but
-  needs a display/GL environment at runtime.
+  `scripts/build-gui.sh` (or `cargo run --features gui --bin springsharp-gui`).
+  It builds headless but needs a display/GL environment at runtime.  The helper
+  script uses `target-gui/` so the ~130-crate GUI dependency tree stays out of
+  the core `target/`, and `[profile.dev.package."*"] debug = false` keeps those
+  dependency artifacts smaller.  Measured: core `target/` ~60-200 MB with a ~15 s
+  rebuild, GUI `target-gui/` ~770 MB and independently removable.
 
 ## Design notes
 

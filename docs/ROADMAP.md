@@ -210,6 +210,15 @@
   `docs/CHANGELOG.md`; README is now ~400 lines and points to the log.
 - Documented the CI in the README design notes and the documentation index.
 
+## Phase 18 — isolate the GUI build (completed 2026-09-27)
+
+- `scripts/build-gui.sh` builds the optional GUI with `CARGO_TARGET_DIR=target-gui`,
+  so the eframe/egui dependency tree (~130 crates) never shares the core target.
+- `[profile.dev.package."*"] debug = false` drops debug symbols from dependency
+  artifacts (the GUI tree is the only dependency tree), shrinking the cache.
+- `target-gui/` ignored by git and removable independently (`rm -rf target-gui`).
+- Core builds/tests remain dependency-free and fast.
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model
