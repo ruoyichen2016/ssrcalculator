@@ -21,8 +21,8 @@ use springsharp::{
     fit_structural_form_segmented_weighted, fit_structural_form_weighted,
     fit_structural_form_with_external, format_compartment_report, format_space_report,
     froude_number, generate_html_report, generate_report, historical_validation_audit,
-    holdout_validation, is_planing_eligible, load_from_file, parse_cfd_samples,
-    parse_external_cases, planing_hp_estimate_calibrated, quality_gate_by_type,
+    holdout_validation, is_planing_eligible, load_from_file, nearest_historical_cases,
+    parse_cfd_samples, parse_external_cases, planing_hp_estimate_calibrated, quality_gate_by_type,
     quality_gate_with_loocv, run_loocv, run_loocv_regime, run_loocv_weighted,
     run_loocv_with_external, run_loocv_with_external_weighted, run_server, run_validation,
     save_to_file, savitsky_planing, segmented_calibration, select_cfd_ridge_lambda,
@@ -55,6 +55,7 @@ COMMANDS:
   validate-regime      Nested-LOOCV comparison of regime model vs original baseline
   regime-residuals     Per-case nested-LOOCV residuals (historical speed/power)
   validation-audit     Historical data coverage by model family
+  historical-compare <file> [n]  Show historical cases closest to a design
   accuracy-target [m]  Check nested regime LOOCV against a MAPE target (default 0.10)
   regime-table         Show production regime table (Holtrop + per-ship-type factor)
   calibrate-regime <file>  Apply Holtrop + per-ship-type factor (modern default)
@@ -1621,6 +1622,42 @@ literature={}, analytic={}, synthetic={}. Use `force` to override.",
             for note in &a.notes {
                 println!("  - {note}");
             }
+        }
+        "historical-compare" => {
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: springsharp historical-compare <file> [n]");
+                std::process::exit(2);
+            };
+            let max: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(5);
+            let mut ship = ShipModel::new();
+            load_from_file(&mut ship, path).expect("failed to load design");
+            ship.calculate();
+            println!(
+                "Design: {} ({}, {:.0} t, {:.1} kt, {:.0} ft)",
+                ship.name,
+                ship.ship_type,
+                ship.hull.displacement,
+                ship.engine.speed_max,
+                ship.hull.length
+            );
+            println!(
+                "{:<30} {:<11} {:>8} {:>7} {:>9} {:>7}",
+                "Historical case", "Type", "Disp(t)", "Speed", "Ref HP", "Dist"
+            );
+            for c in nearest_historical_cases(&ship, max) {
+                println!(
+                    "{:<30} {:<11} {:>8.0} {:>6.1} {:>9.0} {:>7.2}",
+                    c.name,
+                    c.ship_type,
+                    c.displacement_tons,
+                    c.speed_kt,
+                    c.reference_hp,
+                    c.distance
+                );
+            }
+            println!(
+                "Note: public historical references (approximate), for context only - not validation."
+            );
         }
         "interact" => {
             let mut ship = ShipModel::new();

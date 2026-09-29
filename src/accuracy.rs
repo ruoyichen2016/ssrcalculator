@@ -2608,6 +2608,57 @@ pub fn segmented_calibration(results: &[ValidationResult]) -> Vec<CalibrationSeg
         .collect()
 }
 
+/// A historical case ranked by similarity to a design.
+#[derive(Clone, Copy, Debug)]
+pub struct NearestHistoricalCase {
+    pub name: &'static str,
+    pub ship_type: &'static str,
+    pub displacement_tons: f64,
+    pub speed_kt: f64,
+    pub length_ft: f64,
+    pub reference_hp: f64,
+    /// Similarity distance (lower is closer); 0 would be an exact match.
+    pub distance: f64,
+}
+
+/// Find the historical cases closest to a design (same type preferred, then
+/// displacement/speed/length).  Intended for context, not as validation.
+pub fn nearest_historical_cases(ship: &ShipModel, max: usize) -> Vec<NearestHistoricalCase> {
+    let disp = ship.hull.displacement.max(1.0);
+    let speed = ship.engine.speed_max.max(0.1);
+    let length = ship.hull.length.max(1.0);
+    let mut out: Vec<NearestHistoricalCase> = historical_cases()
+        .iter()
+        .map(|c| {
+            let type_penalty = if c.ship_type.eq_ignore_ascii_case(&ship.ship_type) {
+                0.0
+            } else {
+                1.0
+            };
+            let distance = type_penalty
+                + (c.displacement_tons.ln() - disp.ln()).abs()
+                + (c.speed_kt - speed).abs() / 5.0
+                + (c.length_ft - length).abs() / 100.0;
+            NearestHistoricalCase {
+                name: c.name,
+                ship_type: c.ship_type,
+                displacement_tons: c.displacement_tons,
+                speed_kt: c.speed_kt,
+                length_ft: c.length_ft,
+                reference_hp: c.reference_hp,
+                distance,
+            }
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        a.distance
+            .partial_cmp(&b.distance)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    out.truncate(max.max(1));
+    out
+}
+
 /// Coverage of historical reference data by model family.
 ///
 /// The built-in dataset only carries speed/power references.  Structural
@@ -2861,6 +2912,21 @@ fn historical_validation_audit_reports_data_gaps() {
     // The minimal simulated ships are known to be non-physical for weights.
     assert!(a.nonphysical_hull_weight_cases > 0);
     assert_eq!(a.zero_magazine_cases, a.case_count);
+}
+
+#[test]
+fn nearest_historical_cases_are_ranked() {
+    let mut ship = crate::features::demo_ship();
+    ship.calculate();
+    let near = nearest_historical_cases(&ship, 5);
+    assert_eq!(near.len(), 5);
+    for pair in near.windows(2) {
+        assert!(pair[0].distance <= pair[1].distance + 1e-9);
+    }
+    assert!(near.iter().any(|c| c.ship_type == "battleship"));
+    assert!(near
+        .iter()
+        .all(|c| c.reference_hp > 0.0 && c.displacement_tons > 0.0));
 }
 
 #[test]

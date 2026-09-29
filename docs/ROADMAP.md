@@ -248,6 +248,16 @@
 - Fixed a stale current-state paragraph in `docs/VALIDATION.md` (factors and
   full-set MAPE 10.71% -> 10.40%).
 
+## Phase 21 — historical-ship positioning (completed 2026-09-27)
+
+- Added `historical-compare <file> [n]`: ranks the historical cases closest to a
+  design (same type preferred, then displacement/speed/length) for context.
+- Added `docs/HISTORICAL.md`: scope, data provenance tiers, what is
+  trustworthy (speed/power) versus planning-only (weights, spaces, GA,
+  evacuation, scantlings, CFD, planing), accuracy caveats and workflow.
+- Clarified that the project is personal, historical-warship use only; no real
+  trial/model-test data is available, so no further data-validation work.
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model

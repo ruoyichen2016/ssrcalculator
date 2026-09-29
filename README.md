@@ -81,6 +81,9 @@ CARGO_TARGET_DIR=target-gui cargo run --manifest-path gui/Cargo.toml
 # Web console (browser GUI with form inputs)
 cargo run -- web 8080
 
+# Historical context
+cargo run -- historical-compare example.ssr 5
+
 # Solvers
 cargo run -- solve-speed example.ssr 50000
 cargo run -- solve-range example.ssr 1500
@@ -381,6 +384,7 @@ Metric conversions (`Conversion` / `metric_calc`) are provided for reports.
 
 ## Documentation
 
+- `docs/HISTORICAL.md` describes the historical-ship scope and trust boundaries.
 - `docs/ALGORITHM.md` describes the current algorithm chain.
 - `docs/VALIDATION.md` defines provenance, LOOCV/holdout baselines and the composite quality gate.
 - `docs/ROADMAP.md` lists completed work and remaining items.
