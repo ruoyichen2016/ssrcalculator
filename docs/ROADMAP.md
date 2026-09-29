@@ -258,6 +258,19 @@
 - Clarified that the project is personal, historical-warship use only; no real
   trial/model-test data is available, so no further data-validation work.
 
+## Phase 22 — curated-core data review (completed 2026-09-27)
+
+- Reviewed all 37 curated cases against documented dimensions, displacement,
+  block coefficient, speed and power; recorded in `docs/DATA_REVIEW.md`.
+- One correction: Sendai class CL length 532 -> 500 ft (it had used the Kuma
+  class length).  All other values confirmed within the approximation.
+- Consistency check: all 37 curated cases have a modeled/documented
+  displacement ratio in 0.95-1.59; the 11 out-of-band cases are all in the
+  approximate bulk (next candidates for manual review).
+- Regime nested LOOCV 10.40% -> 10.41% (macro 10.45% -> 10.47%, curated core
+  8.09% -> 8.14%): the corrected data is slightly harder for the model, which is
+  the honest direction.
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model

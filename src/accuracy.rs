@@ -582,7 +582,7 @@ pub fn historical_cases() -> Vec<HistoricalCase> {
         HistoricalCase {
             name: "Sendai class CL (1924)",
             ship_type: "cruiser",
-            length_ft: 532.0,
+            length_ft: 500.0,
             beam_ft: 46.5,
             draught_ft: 15.7,
             displacement_tons: 5_195.0,

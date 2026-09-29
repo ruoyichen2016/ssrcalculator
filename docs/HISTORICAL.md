@@ -27,6 +27,9 @@ dimensions are closer to full load.  Treat every number as approximate.
   21.05% on the same data, so the regime model is a clear improvement.
 - **Relative comparisons** (larger/faster/heavier) and the
   `historical-compare` command, which lists the closest historical cases.
+- The curated core was reviewed line by line (`docs/DATA_REVIEW.md`): 36/37
+  values confirmed and 1 corrected (Sendai length), and all 37 are dimensionally
+  self-consistent (modeled/documented displacement ratio 0.95-1.59).
 - Overfitting controls: nested LOOCV, a deterministic holdout, provenance tiers
   and regression tests (`tests/accuracy_regression.rs`).
 

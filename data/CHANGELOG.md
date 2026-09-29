@@ -1,5 +1,18 @@
 # Data changelog
 
+## built-in-v1.13 (2026-09-27) — curated-core review
+
+- Line-by-line review of the 37 curated cases; details in
+  `docs/DATA_REVIEW.md`.
+- Corrected Sendai class CL length from 532 ft (Kuma class) to 500 ft.
+- All 37 curated cases now have a modeled/documented displacement ratio within
+  0.95-1.59 (self-consistent); the 11 out-of-band cases are in the approximate
+  bulk.
+- Regime nested LOOCV 10.40% -> 10.41% (curated core 8.09% -> 8.14%): the more
+  accurate data is marginally harder for the model.
+- Status: **0/123 independently verified, 0/123 traceable**.
+
+
 ## built-in-v1.12 (2026-09-27) — verification fixes
 
 - Corrected two flight-deck-vs-hull beam errors: Wasp CV beam 93 -> 80 ft,

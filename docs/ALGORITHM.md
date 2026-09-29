@@ -58,7 +58,7 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
   weighted 2x): battleship 0.781, carrier 0.803, cruiser 0.920, destroyer 1.017
 - The original SpringSharp empirical model is retained as a comparison baseline
 - Validated by **nested** LOOCV: the factor is re-fitted on each training split
-  - regime (Holtrop + factor): 10.40% case-weighted / 10.45% type-averaged (123 cases); curated core 8.09%
+  - regime (Holtrop + factor): 10.41% case-weighted / 10.47% type-averaged (123 cases); curated core 8.14%
   - original (uncalibrated): 21.05%; with per-type factor: 11.16%
   - Holtrop uncalibrated: 19.31%
 - Applied to a design via `calibrate-regime` (sets `resistance_model` + `power_factor`)

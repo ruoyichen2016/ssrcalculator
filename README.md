@@ -205,8 +205,8 @@ Nested leave-one-out cross-validation (the factor is re-fitted on every training
 split) gives:
 
 ```text
-regime (Holtrop + per-type factor) : 10.40% case-weighted, 10.45% type-averaged
-curated core (37 cases)            : 8.09%
+regime (Holtrop + per-type factor) : 10.41% case-weighted, 10.47% type-averaged
+curated core (37 cases)            : 8.14%
 original (uncalibrated)            : 21.05%   <- original SpringSharp baseline
 original + per-type factor         : 11.16%
 Holtrop uncalibrated               : 19.31%
@@ -385,6 +385,7 @@ Metric conversions (`Conversion` / `metric_calc`) are provided for reports.
 ## Documentation
 
 - `docs/HISTORICAL.md` describes the historical-ship scope and trust boundaries.
+- `docs/DATA_REVIEW.md` is the line-by-line review of the 37 curated cases.
 - `docs/ALGORITHM.md` describes the current algorithm chain.
 - `docs/VALIDATION.md` defines provenance, LOOCV/holdout baselines and the composite quality gate.
 - `docs/ROADMAP.md` lists completed work and remaining items.

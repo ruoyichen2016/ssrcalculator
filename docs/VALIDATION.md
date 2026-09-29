@@ -47,20 +47,20 @@ historical dataset (the default when a design is run through
 `calibrate-regime`).  Factors (ref/sim, 15% trimmed mean) at 123 cases:
 battleship 0.781, carrier 0.803, cruiser 0.920, destroyer 1.017.  The wider
 sample (four expansion batches) moved the overall nested LOOCV from 8.92% to
-10.40% (curated core 8.09%) by exposing extreme-Froude cases across the whole
-speed range.  Data verification later corrected two carrier beam entries
-(Wasp, Shokaku).
+10.41% (curated core 8.14%) by exposing extreme-Froude cases across the whole
+speed range.  Data verification corrected two carrier beam entries (Wasp,
+Shokaku) and the Sendai length; see `docs/DATA_REVIEW.md`.
 
 ### Frozen baseline (2026-09-27)
 
 | Metric | Baseline (123 cases) | Regression threshold |
 |---|---|---|
-| **Regime nested LOOCV, case-weighted** | **~10.40%** | **<= 11.5%** |
-| Regime nested, type-averaged (macro) | ~10.45% | <= 11.5% |
-| **Curated core (37 cases)** | **~8.09%** | <= 9.5% |
+| **Regime nested LOOCV, case-weighted** | **~10.41%** | **<= 11.5%** |
+| Regime nested, type-averaged (macro) | ~10.47% | <= 11.5% |
+| **Curated core (37 cases)** | **~8.14%** | <= 9.5% |
 | Regime nested, battleship | ~9.92% | <= 12.0% |
 | Regime nested, carrier | ~11.24% | <= 13.0% |
-| Regime nested, cruiser | ~9.50% | <= 10.5% |
+| Regime nested, cruiser | ~9.57% | <= 10.5% |
 | Regime nested, destroyer | ~11.14% | <= 13.0% |
 | Original uncalibrated (original model) | ~21.05% | (comparison) |
 | Original + per-type factor | ~11.16% | (must be beaten) |
