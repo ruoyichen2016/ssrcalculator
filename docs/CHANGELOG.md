@@ -1,5 +1,24 @@
 # Project change log
 
+## 0.2.0 (2026-09-27) — release notes
+
+Highlights since 0.1.0:
+
+- **Modern regime model**: Holtrop-Mennen + per-ship-type confidence-weighted
+  factor; nested LOOCV 10.40% case-weighted / 10.45% type-averaged over 123
+  cases, curated core 8.09%, versus the original SpringSharp model at 21.05%.
+- **Validation**: provenance tiers, LOOCV/holdout, composite quality gate,
+  per-case residuals and data audits (`data-consistency`, `data-outliers`).
+- **123 historical cases** with a curated core (37) and approximate bulk (86).
+- **General arrangement**: multi-deck GA with access network, IMO evacuation
+  (density/congestion/assembly) and corridor-polyline escape distances.
+- **Rule-style scantlings**, Savitsky planing, CFD-surrogate provenance tooling.
+- **Engineering**: CI, zero-dependency core, GUI as a separate workspace,
+  `scripts/check.sh`.
+
+The cumulative implementation log below predates this summary.  See
+`docs/ROADMAP.md` for the phase-by-phase record.
+
 This is the cumulative implementation log for the Rust SpringSharp port.  For
 the current status and roadmap see `docs/ROADMAP.md`; for accuracy baselines see
 `docs/VALIDATION.md`.  Data changes are tracked separately in

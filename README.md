@@ -410,6 +410,16 @@ CI runs `fmt`, `clippy -D warnings`, `test` and the optional GUI build (see
   current front-ends. The web console now uses structured form inputs instead of
   a raw `.ssr` textarea, while an optional raw editor could be added later.
 
+## Development
+
+- `scripts/check.sh` is the local CI: core `cargo fmt` / `clippy -D warnings` /
+  `test`; add `--gui` to also check the GUI crate.
+- CI lives in `.github/workflows/ci.yml` (a fast core job plus a GUI job that
+  installs the X11/xkbcommon/Wayland dev packages).
+- The core workspace has no dependencies.  The GUI is a separate workspace under
+  `gui/` and is built with `scripts/build-gui.sh` or
+  `cargo build --manifest-path gui/Cargo.toml`.
+
 ## License
 
 MIT.  See [LICENSE](LICENSE).

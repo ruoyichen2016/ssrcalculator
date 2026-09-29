@@ -1,10 +1,11 @@
 [package]
 name = "springsharp"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 default-run = "springsharp"
 description = "A Rust reimplementation of the SpringSharp naval design calculation engine"
 license = "MIT"
+readme = "README.md"
 
 # The core is its own workspace with no dependencies, so `cargo build`/`test`
 # here never resolves eframe.  The GUI lives in `gui/` as a *separate* workspace
