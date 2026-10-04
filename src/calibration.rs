@@ -1436,7 +1436,10 @@ fn percentile(sorted: &mut [f64], q: f64) -> f64 {
     if sorted.is_empty() {
         return f64::NAN;
     }
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    // `total_cmp` orders NaN deterministically instead of panicking, which is
+    // important because bootstrap samples can occasionally contain non-finite
+    // predictions if an input is degenerate.
+    sorted.sort_by(f64::total_cmp);
     let idx = (q * (sorted.len() - 1) as f64).round() as usize;
     sorted[idx.min(sorted.len() - 1)]
 }

@@ -292,8 +292,23 @@ pub fn deserialize(ship: &mut ShipModel, text: &str) -> Result<(), String> {
 }
 
 fn parse_f64(v: &str) -> Result<f64, String> {
-    v.parse::<f64>()
-        .map_err(|e| format!("invalid number '{v}': {e}"))
+    let parsed: f64 = v
+        .parse()
+        .map_err(|e| format!("invalid number '{v}': {e}"))?;
+    if !parsed.is_finite() {
+        return Err(format!(
+            "number '{v}' must be finite (NaN/inf are not allowed)"
+        ));
+    }
+    Ok(parsed)
+}
+
+/// Validate a parsed value against an inclusive range.
+fn check_range(value: f64, lo: f64, hi: f64, field: &str) -> Result<f64, String> {
+    if value < lo || value > hi {
+        return Err(format!("{field} = {value} is out of range [{lo}, {hi}]"));
+    }
+    Ok(value)
 }
 
 fn parse_i32(v: &str) -> Result<i32, String> {
@@ -389,23 +404,23 @@ fn set_value(ship: &mut ShipModel, key: &str, value: &str) -> Result<(), String>
 
     let handled = match key {
         "hull.length" => {
-            ship.hull.length = parse_f64(value)?;
+            ship.hull.length = check_range(parse_f64(value)?, 1.0, 2000.0, "hull.length")?;
             true
         }
         "hull.beam" => {
-            ship.hull.beam = parse_f64(value)?;
+            ship.hull.beam = check_range(parse_f64(value)?, 1.0, 500.0, "hull.beam")?;
             true
         }
         "hull.beam_bulges" => {
-            ship.hull.beam_bulges = parse_f64(value)?;
+            ship.hull.beam_bulges = check_range(parse_f64(value)?, 1.0, 500.0, "hull.beam_bulges")?;
             true
         }
         "hull.draught" => {
-            ship.hull.draught = parse_f64(value)?;
+            ship.hull.draught = check_range(parse_f64(value)?, 0.1, 200.0, "hull.draught")?;
             true
         }
         "hull.block" => {
-            ship.hull.block = parse_f64(value)?;
+            ship.hull.block = check_range(parse_f64(value)?, 0.05, 0.95, "hull.block")?;
             true
         }
         "hull.date_hull" => {
@@ -417,11 +432,13 @@ fn set_value(ship: &mut ShipModel, key: &str, value: &str) -> Result<(), String>
             true
         }
         "hull.lcb_percent" => {
-            ship.hull.lcb_percent = parse_f64(value)?;
+            ship.hull.lcb_percent =
+                check_range(parse_f64(value)?, -100.0, 100.0, "hull.lcb_percent")?;
             true
         }
         "hull.midship_coefficient" => {
-            ship.hull.midship_coefficient = parse_f64(value)?;
+            ship.hull.midship_coefficient =
+                check_range(parse_f64(value)?, 0.0, 1.0, "hull.midship_coefficient")?;
             true
         }
         "hull.bulb_area_sqft" => {
@@ -1065,6 +1082,19 @@ mod tests {
         assert!(ship.engine.fuel[0]);
         assert!(ship.engine.engine_types[1]);
         assert!(ship.engine.drive[0]);
+    }
+
+    #[test]
+    fn rejects_non_finite_and_out_of_range_values() {
+        let mut ship = ShipModel::new();
+        assert!(deserialize(&mut ship, "hull.length=NaN\n").is_err());
+        assert!(deserialize(&mut ship, "hull.beam=inf\n").is_err());
+        assert!(deserialize(&mut ship, "hull.length=-5\n").is_err());
+        assert!(deserialize(&mut ship, "hull.block=1.5\n").is_err());
+        assert!(deserialize(&mut ship, "hull.draught=0\n").is_err());
+        // Valid values still parse.
+        assert!(deserialize(&mut ship, "hull.length=500\nhull.block=0.5\n").is_ok());
+        assert_eq!(ship.hull.length, 500.0);
     }
 
     #[test]
