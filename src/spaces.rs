@@ -1971,7 +1971,8 @@ pub fn compartment_placement_html(ship: &ShipModel, placement: &CompartmentPlace
     );
     html.push_str(&format!(
         "<h1>General arrangement (multi-deck GA)</h1><p>Ship: <b>{}</b> ({})</p>",
-        ship.name, ship.ship_type
+        crate::features::html_escape(&ship.name),
+        crate::features::html_escape(&ship.ship_type)
     ));
     html.push_str("<p>Multi-deck genetic-algorithm allocation with feasibility repair and an access network. Volumes in m&sup3;, positions as fraction of length.</p>");
     html.push_str("<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\">");

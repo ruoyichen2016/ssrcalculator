@@ -297,6 +297,26 @@ fn ship_classification(ship: &ShipModel) -> Vec<String> {
     lines
 }
 
+/// Escape text for safe inclusion in HTML element content or attribute values.
+///
+/// Rust's `format!` gives no automatic escaping, and several report generators
+/// interpolate user-supplied strings (ship names, external CSV fields, source
+/// labels).  Everything that lands in HTML must go through this helper.
+pub fn html_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 pub fn generate_report(ship: &ShipModel) -> String {
     let mut r = String::new();
     let h = &ship.hull;
@@ -486,14 +506,10 @@ pub fn generate_report(ship: &ShipModel) -> String {
 
 pub fn generate_html_report(ship: &ShipModel) -> String {
     let text = generate_report(ship);
-    let body = text
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('\n', "<br>\n");
+    let body = html_escape(&text).replace('\n', "<br>\n");
     format!(
         "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>{}</title></head><body>\n<pre>{body}</pre>\n</body></html>\n",
-        ship.name.replace('<', "&lt;")
+        html_escape(&ship.name)
     )
 }
 

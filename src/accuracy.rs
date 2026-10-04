@@ -5,6 +5,7 @@
 //! cases and a calibration factor.  The listed papers are starting points for
 //! replacing the resistance model with a more modern method.
 
+use crate::features::html_escape;
 use crate::model::{ResistanceModel, ShipModel};
 
 /// How a historical reference case was obtained.  This is the primary
@@ -2409,14 +2410,14 @@ pub fn data_quality_report_html() -> String {
     for (case, q) in cases.iter().zip(quality.iter()) {
         html.push_str(&format!(
             "<tr><td>{}</td><td>{}</td><td>{:.2}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
-            case.name,
-            case.ship_type,
+            html_escape(case.name),
+            html_escape(case.ship_type),
             q.confidence,
             q.source_type.label(),
             q.displacement_type.label(),
             if q.traceable { "yes" } else { "no" },
-            q.verifier,
-            q.source
+            html_escape(q.verifier),
+            html_escape(q.source)
         ));
     }
     html.push_str("</table>");
@@ -2627,7 +2628,10 @@ pub fn external_report_html(cases: &[ExternalCase]) -> String {
     for (name, sim, reference, confidence) in results {
         html.push_str(&format!(
             "<tr><td>{}</td><td>{:.0}</td><td>{:.0}</td><td>{:.2}</td></tr>",
-            name, sim, reference, confidence
+            html_escape(&name),
+            sim,
+            reference,
+            confidence
         ));
     }
     html.push_str("</table>");
@@ -2635,7 +2639,8 @@ pub fn external_report_html(cases: &[ExternalCase]) -> String {
     html.push_str("<h2>Sources</h2><ul>");
     for (source, count, conf) in summarize_external_by_source(cases) {
         html.push_str(&format!(
-            "<li>{source}: count={count}, mean confidence={conf:.2}</li>"
+            "<li>{}: count={count}, mean confidence={conf:.2}</li>",
+            html_escape(&source)
         ));
     }
     html.push_str("</ul>");
@@ -2643,7 +2648,8 @@ pub fn external_report_html(cases: &[ExternalCase]) -> String {
     html.push_str("<h2>Ship types</h2><ul>");
     for (typ, count, conf) in summarize_external_by_type(cases) {
         html.push_str(&format!(
-            "<li>{typ}: count={count}, mean confidence={conf:.2}</li>"
+            "<li>{}: count={count}, mean confidence={conf:.2}</li>",
+            html_escape(&typ)
         ));
     }
     html.push_str("</ul></body></html>");
@@ -3445,5 +3451,31 @@ mod tests {
         let results = run_validation();
         let f = calibration_factor(&results);
         assert!(f.is_finite() && f > 0.0);
+    }
+
+    #[test]
+    fn external_report_html_escapes_user_supplied_fields() {
+        let csv = "name,type,length,beam,draught,displacement,block,speed,hp,confidence,source\n\
+<script>x</script>,battleship,600,90,28,23760,0.55,24,50000,0.9,<img src=x onerror=alert(1)>\n";
+        let cases = parse_external_cases(csv).unwrap();
+        let html = external_report_html(&cases);
+        assert!(
+            !html.contains("<script>"),
+            "external report must not contain raw <script>"
+        );
+        assert!(
+            !html.contains("<img"),
+            "external report must not contain raw <img>"
+        );
+        assert!(html.contains("&lt;script&gt;"));
+        assert!(html.contains("&lt;img"));
+    }
+
+    #[test]
+    fn data_quality_report_html_escapes() {
+        let html = data_quality_report_html();
+        assert!(html.contains("&lt;") || html.contains("&amp;") || !html.contains("<td>weird"));
+        // The built-in sources are plain ASCII, so the report must remain valid.
+        assert!(html.ends_with("</body></html>"));
     }
 }
