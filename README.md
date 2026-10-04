@@ -33,10 +33,13 @@ springsharp/            # core crate: zero dependencies
 ├── Cargo.toml          # core workspace (members = ["."], excludes gui/)
 ├── src/
 │   ├── lib.rs
-│   ├── main.rs         # CLI + interactive terminal session
+│   ├── main.rs         # thin CLI entry point (dispatch + interactive session)
+│   ├── cli/            # command bodies by theme
+│   │   ├── mod.rs      #   argument helpers, help text, grouped-alias mapping
+│   │   └── {design,calibration,validation,data,spaces,cfd,planing,web}.rs
 │   ├── model.rs        # calculation structures and formulas
-│   ├── io.rs           # save/load support
-│   ├── features.rs     # reports and iterative solvers
+│   ├── io.rs           # save/load support (with input range validation)
+│   ├── features.rs     # reports, HTML escaping and iterative solvers
 │   ├── accuracy.rs     # historical cases, validation, provenance audits
 │   ├── resistance.rs   # Holtrop-Mennen style resistance/power
 │   ├── regime.rs       # modern regime model (Holtrop + per-type factor)
@@ -47,6 +50,7 @@ springsharp/            # core crate: zero dependencies
 │   ├── savitsky.rs     # Savitsky planing solver
 │   ├── cfd_proxy.rs    # CFD-surrogate framework
 │   └── web.rs          # zero-dependency local web console
+├── tests/              # accuracy regression + CLI command-surface tests
 ├── docs/               # ALGORITHM / VALIDATION / ROADMAP / CHANGELOG
 └── gui/                # separate workspace crate (springsharp-gui)
     ├── Cargo.toml      # depends on `springsharp` + eframe
@@ -74,7 +78,9 @@ cargo run -- html example.ssr > example.html
 
 # Native egui GUI (optional feature; needs a display/GL environment).
 # scripts/build-gui.sh builds it into a separate target-gui/ directory so the
-# eframe dependency tree never competes with the core target/.
+# eframe dependency tree never competes with the core target/.  Always go through
+# the script (or `cd gui` first): a bare `cargo --manifest-path gui/...` from
+# this directory writes a *second* full copy of the eframe cache to gui/target.
 scripts/build-gui.sh
 CARGO_TARGET_DIR=target-gui cargo run --manifest-path gui/Cargo.toml
 
@@ -399,24 +405,36 @@ Metric conversions (`Conversion` / `metric_calc`) are provided for reports.
 - `docs/ROADMAP.md` lists completed work and remaining items.
 - `docs/CHANGELOG.md` is the cumulative implementation log.
 - Native GUI uses eframe/egui behind the optional `gui` feature:
-  `scripts/build-gui.sh` (or `cargo run --manifest-path gui/Cargo.toml`).
+  `scripts/build-gui.sh` (or `cd gui && cargo run`, which `gui/.cargo/config.toml`
+  redirects to the same cache).
   It builds headless but needs a display/GL environment at runtime.  Because the
   GUI is a **separate workspace** (`gui/` is excluded from the core workspace),
   the core `cargo build`/`test` never resolves eframe at all — verified by
   building with an empty cargo cache.  `scripts/build-gui.sh` puts the GUI in
-  `target-gui/`, and `[profile.dev.package."*"] debug = false` (in `gui/Cargo.toml`)
-  keeps those artifacts smaller.  Measured: core `target/` ~250 MB (or ~60 MB
-  after `cargo clean -p springsharp`) with a ~2-15 s rebuild; GUI `target-gui/`
-  ~740 MB and removable with `rm -rf target-gui`.
+  `target-gui/`; `[profile.dev.package."*"] debug = false` and
+  `[profile.dev] debug = "line-tables-only"` (both in `gui/Cargo.toml`) keep
+  those artifacts smaller.  Measured core `target/`: ~110 MB after a single
+  `cargo build --all-targets`, ~160 MB once `clippy` and `test` have also run
+  (the realistic dev-loop figure; `debug = "line-tables-only"` cut this from
+  ~215 MB).  Roughly two thirds of it is incremental state, which is what makes a
+  one-file edit rebuild ~0.8 s instead of ~2.9 s — so do not disable it casually.
+  The GUI cache is ~740 MB and is removable with `rm -rf target-gui`.
+  These caches scale with the number of *distinct build configurations* you
+  invoke (build vs. clippy vs. test, changed flags), not with source size, so
+  re-measure with `du -sh target target-gui` rather than trusting the figures
+  above — a stale `target/` reached ~715 MB (3x the figure that used to be
+  quoted here) purely from accumulated build configurations.
 
 ## Design notes
 
-CI runs `fmt`, `clippy -D warnings`, `test` and the optional GUI build (see
-`.github/workflows/ci.yml`).
+CI runs `fmt`, `clippy -D warnings`, `test`, a build against the declared MSRV
+(`rust-version`) and the optional GUI build (see `.github/workflows/ci.yml`).
 
 - The C# code uses many mutually recursive updates through UI event handlers.
   The Rust model resolves the same dependency graph by running the
-  armour/machinery weight cycle to a fixed point.
+  armour/machinery weight cycle to a fixed point (1e-9 relative tolerance, cap 50
+  passes).  A design that fails to converge is reported as such in `summary`,
+  the text report and the web console rather than being presented as settled.
 - Areas where the decompiled C# has obvious typo-like behaviour are replicated
   as faithfully as practical.
 - The graphical WinForms code is left out; the terminal CLI and web console are the
@@ -430,9 +448,21 @@ CI runs `fmt`, `clippy -D warnings`, `test` and the optional GUI build (see
 - CI lives in `.github/workflows/ci.yml` (a fast core job plus a GUI job that
   installs the X11/xkbcommon/Wayland dev packages).
 - The core workspace has no dependencies.  The GUI is a separate workspace under
-  `gui/` and is built with `scripts/build-gui.sh` or
-  `cargo build --manifest-path gui/Cargo.toml`.
+  `gui/` and is built with `scripts/build-gui.sh` (equivalently
+  `CARGO_TARGET_DIR=target-gui cargo build --manifest-path gui/Cargo.toml`).
+  Dropping the `CARGO_TARGET_DIR` there is what used to create a second,
+  ~950 MB `gui/target/` copy of the eframe tree; `scripts/check.sh` now warns
+  when that directory exists.
 
 ## License
 
-MIT.  See [LICENSE](LICENSE).
+MIT for the original Rust code (CLI, web console, GUI, validation framework,
+tests and documentation).  See [LICENSE](LICENSE).
+
+**Important:** this project is derived from the proprietary SpringSharp 3.0
+engine (Copyright 2008 James Ross-Gowan and Ian Ross-Gowan; parts used with
+permission from SpringStyle 1.2.1, Copyright 2001 Rick Robinson).  The upstream
+source is not OSI-licensed, so the MIT grant does not automatically extend to
+that derived formula content.  Read [NOTICE](NOTICE) before redistributing, and
+obtain permission from the upstream authors or reimplement the formula layer
+from public literature first.

@@ -141,9 +141,10 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 - Verified = official trial / model test only; traceable = citation + URL + verifier
 - Composite quality gate (`data-target`): `0.4*official + 0.2*traceable +
   0.4*LOOCV-accuracy`, with per-ship-type breakdown
-- `validate-holdout`: calibration fitted on 28 training cases, scored on 9 held-out cases
+- `validate-holdout`: calibration fitted on the 110 training cases, scored on the
+  36 held-out cases (every fourth case)
 - Per-type LOOCV (`loocv_by_type`) feeds the per-type quality gate
 - Nested-LOOCV regime accuracy (`validate-regime`, `accuracy-target`) is the primary metric;
   in-sample fits are diagnostic only
 - `tests/accuracy_regression.rs` freezes overall/per-type LOOCV and holdout baselines
-- 90 unit tests + 7 accuracy-regression integration tests
+- 112 unit tests + 8 accuracy-regression + 2 CLI-surface integration tests

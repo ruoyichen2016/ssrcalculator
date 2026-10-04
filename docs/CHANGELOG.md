@@ -1,5 +1,54 @@
 # Project change log
 
+## 0.3.0 (2026-09-27) — hardening release
+
+No accuracy baseline changed (`validate-regime` 10.36% case-weighted, blended
+9.81%); this release is about the code being easier to change and harder to
+misuse.  See `docs/ROADMAP.md` Phase 27.
+
+- **CLI restructured**: `src/main.rs` 1878 -> 230 lines; command bodies moved to
+  per-theme `src/cli/` submodules behind a shared `CliError` with exit codes
+  2 (usage) / 1 (runtime) / 4 (quality gate not met).  A missing
+  `load_from_file`/`save_to_file` import that stopped the binary from compiling
+  is fixed, and the now-unused `use springsharp::{...}` block is pruned.
+- **Command surface is now tested**: `tests/cli_surface.rs` drives the real
+  binary and fails if any command advertised in `--help` is not routed —
+  `html` was previously advertised and implemented but never dispatched.
+- **Input validation**: `NaN`/`inf` are rejected and every dimensional field is
+  range-checked when parsing `.ssr` input, so a malformed file errors instead of
+  yielding non-physical results.  `percentile` uses `f64::total_cmp` so a
+  non-finite bootstrap sample cannot panic the fit.
+- **Convergence is reported**: the armour <-> machinery fixed point iterates to a
+  1e-9 relative tolerance (cap 50) instead of a fixed 12 passes and records
+  `converged` / `iterations` / `iteration_residual`; a non-converged design is
+  flagged in `summary`, `generate_report` and the web console.
+- **HTML escaping**: new `features::html_escape`, applied to every interpolated
+  user-supplied string in `html`, `quality-report` and `external-report`.
+- **Web console hardening**: 8 MB body cap (413), request-line/header length
+  caps, 10 s read/write timeouts, per-connection threads instead of a blocking
+  accept loop, and `catch_unwind` so a handler panic cannot stop the server.
+- **Licence scope**: added `NOTICE` and a README section recording that the
+  upstream SpringSharp 3.0 source is proprietary, so MIT covers the original
+  Rust code but not the ported formula content.
+- `[profile.dev] debug = "line-tables-only"` in both workspaces: core `target/`
+  217 MB -> 162 MB for the build+clippy+test dev loop, rlib 20.5 MB -> 10.3 MB,
+  with no measurable build-time cost and line numbers preserved in backtraces
+- Release profile tuned: `opt-level = 3`, thin LTO, single codegen unit, stripped
+  (`panic` stays `unwind` because the web console relies on `catch_unwind`)
+- `gui/.cargo/config.toml` pins `build.target-dir = "../target-gui"`, and
+  `scripts/check.sh` / CI export `CARGO_TARGET_DIR=target-gui`, so GUI builds can
+  no longer create a second ~950 MB `gui/target/` copy of the eframe tree
+- `scripts/check.sh` warns when a stray `gui/target/` exists (it is gitignored,
+  so it was previously invisible in `git status`)
+- CI sets `CARGO_INCREMENTAL=0`; incremental artifacts are the largest single
+  contributor to a cached target dir and buy nothing in CI
+- CI gained an MSRV job that builds against `rust-version` with
+  `RUSTUP_TOOLCHAIN` set, because `rustup default` alone loses to the repository
+  `rust-toolchain.toml` directory override (the job would have silently tested
+  the pinned dev toolchain instead of the declared minimum)
+- Declared `rust-version = "1.80"` and pinned `rust-toolchain.toml` so local and
+  CI builds share one toolchain
+
 ## 0.2.0 (2026-09-27) — release notes
 
 Highlights since 0.1.0:

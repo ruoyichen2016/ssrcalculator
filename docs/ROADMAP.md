@@ -325,6 +325,43 @@
   implemented because their coefficients could not be sourced offline; the
   blend is the validated alternative.
 
+## Phase 27 — hardening, CLI split and licence scope (completed)
+
+Engineering pass with no change to the accuracy baselines (`validate-regime`
+still 10.36% / blended 9.81%):
+
+- **CLI split**: `src/main.rs` 1878 -> 230 lines, with the command bodies grouped
+  into `src/cli/{design,calibration,validation,data,spaces,cfd,planing,web}.rs`
+  behind a shared `CliError` (usage=2, runtime=1, gate=4).  New
+  `tests/cli_surface.rs` drives the real binary and asserts that every command
+  advertised in `--help` is actually routed — `html` had been advertised and
+  implemented yet never dispatched.
+- **Input validation**: `io::parse_f64` rejects NaN/inf and every dimensional
+  field is range-checked, so a malformed `.ssr` fails with a message instead of
+  producing non-physical results.  `percentile` uses `f64::total_cmp` so a
+  non-finite bootstrap sample cannot panic the fit.
+- **Convergence reporting**: the armour <-> machinery fixed point now iterates to
+  a 1e-9 relative tolerance (cap 50) instead of a fixed 12 passes, and records
+  `converged` / `iterations` / `iteration_residual`.  A non-converged design is
+  called out in `summary()`, in `generate_report()` and therefore in the web
+  console, instead of being reported as settled.
+- **HTML escaping**: `features::html_escape` is applied to every interpolated
+  user-supplied string (ship names, external CSV fields, source labels), closing
+  an injection path through `html`, `quality-report` and `external-report`.
+- **Web console hardening** (part of the old P2 item): 8 MB request-body cap with
+  a 413 response, request-line/header length caps, 10 s read/write timeouts,
+  per-connection threads instead of a blocking accept loop, and `catch_unwind`
+  so a handler panic cannot kill the server.
+- **Build/CI hygiene**: `debug = "line-tables-only"` for dev in both workspaces
+  (core `target/` ~215 MB -> ~160 MB for the build+clippy+test loop), tuned
+  release profile (thin LTO, one codegen unit, stripped), `rust-version = 1.80`
+  with a new MSRV CI job, pinned `rust-toolchain.toml`, `CARGO_INCREMENTAL=0` in
+  CI, and `gui/.cargo/config.toml` + `scripts/check.sh` tripwire so GUI builds
+  cannot create a second ~950 MB `gui/target/` cache.
+- **Licence scope**: added `NOTICE` and a README section recording that the
+  upstream SpringSharp 3.0 source is proprietary, so the MIT grant covers the
+  original Rust code but not the ported formula content.
+
 ## Completed
 
 - Holtrop-Mennen style resistance/power model
@@ -340,7 +377,8 @@
 - CFD-surrogate correction framework + CSV fitting + R²/RMSE + LOOCV/holdout + Ridge/λ selection + `cfd-apply` + HTML report + propulsion breakdown in reports
 - Global GA general-arrangement optimizer + calibre/rounds/mounts-scaled magazine volume + structural continuity + maintenance void constraints
 - 52 built-in historical cases + multiple example CSV datasets + replacement-priority + source-summary + quality-score + progress/target/tier + replacement-log + version + multi-target reports
-- 94 unit tests + 7 accuracy-regression integration tests (GA suite exercises the capacity/escape checks)
+- 112 unit tests + 8 accuracy-regression + 2 CLI-surface integration tests (the
+  GA suite exercises the capacity/escape checks)
 
 ## Remaining
 
@@ -355,5 +393,7 @@
 ### P2/P3
 
 - Full Savitsky planing model validation on published planing-hull data
-- Web console: request-size limits and optional concurrency
+- Web console: bound the number of simultaneous connections (size limits,
+  per-connection timeouts and per-connection threads are done; a connection cap
+  is not)
 - More literature cases for carriers and cruisers

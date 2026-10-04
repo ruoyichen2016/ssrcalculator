@@ -1,0 +1,48 @@
+Third-party notices and provenance
+==================================
+
+This project is a Rust reimplementation of the calculation engine from
+SpringSharp, a Windows warship-design simulator.  The Rust code in `src/` was
+written by re-implementing the behaviour of the decompiled C# sources kept in
+`raw/SpringSharpMono/` (not committed to this repository's history as part of
+the crate build, but present in the working tree).
+
+Upstream copyright (from `raw/SpringSharpMono/AboutForm` and
+`raw/SpringSharpMono/AssemblyInfo.cs`):
+
+    SpringSharp 3.0b3 — Warship Design Simulator
+    Copyright 2008: James Ross-Gowan and Ian Ross-Gowan
+    "Parts used with permission from SpringStyle 1.2.1
+     Copyright 2001: Rick Robinson"
+
+    Assembly: SpringSharpMono, Version 3.0.7936.40102
+    Copyright 2008 James Ross-Gowan & Ian Ross-Gowan
+
+The upstream SpringSharp source is therefore **proprietary/all-rights-reserved**
+rather than an OSI-approved open-source licence.  The Rust port is an
+independent reimplementation of the published engineering formulas, but it is
+also explicitly derived from reading the upstream source; it is not clear that
+this repository has a right to relicense that derived work under MIT.
+
+Status
+------
+
+  * The MIT licence in `LICENSE` covers the original Rust code contributed to
+    this repository (CLI, web console, GUI, calibration/validation framework,
+    tests and documentation).
+  * It does **not** purport to relicense the upstream SpringSharp formulas or
+    their C# expression.  If you intend to redistribute this project, obtain
+    permission from the SpringSharp authors first, or replace the ported
+    formula content with an independently licensed implementation.
+
+Before any public release or redistribution, one of the following must happen:
+
+  1. Obtain written permission from the current SpringSharp copyright holders
+     to publish this port; or
+  2. Confirm that the upstream distribution permits relicensing (no such grant
+     was found in the decompiled artefacts); or
+  3. Reimplement the formula layer from public naval-architecture literature
+     only, without consulting the decompiled sources.
+
+This file is a factual record, not legal advice.  Consult a qualified attorney
+before distributing the derived work.
