@@ -7,6 +7,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Incremental artifacts are pure overhead in CI: nothing is edited between
+  # runs, and they are the largest single contributor to the cached target dir.
+  CARGO_INCREMENTAL: "0"
 
 jobs:
   core:
@@ -15,8 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `toolchain` input: dtolnay/rust-toolchain honours rust-toolchain.toml,
+      # so CI uses the same pinned version as local builds.
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
           components: rustfmt, clippy
 
@@ -32,14 +37,52 @@ jobs:
       - name: Test
         run: cargo test --all-targets
 
-  gui-build:
-    name: GUI feature build
+  msrv:
+    name: MSRV build (rust-version)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # Build against the declared minimum supported Rust version in
+      # Cargo.toml (`rust-version`), not the pinned dev toolchain.
+      - name: Read rust-version
+        id: msrv
+        run: |
+          v=$(grep -m1 '^rust-version' Cargo.toml | cut -d'"' -f2)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Install MSRV toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check build
+        # `rustup default <version>` alone is NOT enough here: the repository
+        # root has a `rust-toolchain.toml`, and rustup resolves that directory
+        # override *before* the default toolchain, so a bare `cargo build` would
+        # silently use the pinned dev toolchain (1.98.0) and this job would
+        # prove nothing.  RUSTUP_TOOLCHAIN is the one setting that outranks the
+        # override file, so pin it for the whole step.
+        env:
+          RUSTUP_TOOLCHAIN: ${{ steps.msrv.outputs.version }}
+        run: cargo build --all-targets
+
+  gui-build:
+    name: GUI feature build
+    runs-on: ubuntu-latest
+    env:
+      # Steps below invoke cargo from the repo root with `--manifest-path`, which
+      # bypasses gui/.cargo/config.toml; without this the clippy step would build
+      # a second copy of the eframe tree into gui/target.
+      CARGO_TARGET_DIR: target-gui
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -62,4 +105,4 @@ jobs:
         run: cargo clippy --manifest-path gui/Cargo.toml --all-targets -- -D warnings
 
       - name: Build GUI binary
-        run: cargo build --manifest-path gui/Cargo.toml
+        run: ./scripts/build-gui.sh

@@ -18,8 +18,14 @@ path = "src/main.rs"
 springsharp = { path = ".." }
 eframe = { version = "0.36", default-features = false, features = ["glow", "default_fonts", "x11", "wayland"] }
 
+# Profiles are per-workspace, so this repeats the core `../Cargo.toml` policy:
+# line tables for the GUI crate itself, none at all for the ~300-crate eframe
+# tree (which dominates the cache).
+[profile.dev]
+debug = "line-tables-only"
+
 # The eframe/egui dependency tree does not need debug symbols; this keeps the
-# isolated GUI cache much smaller (profiles are per-workspace).
+# isolated GUI cache much smaller.
 [profile.dev.package."*"]
 debug = false
 

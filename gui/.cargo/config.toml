@@ -1,0 +1,21 @@
+# Pin the GUI build output to the canonical `target-gui/` cache.
+#
+# Why this file exists: `gui/` is a separate workspace, and nothing in Cargo
+# enforces one output directory across workspaces.  Building the GUI two
+# different ways (bare `--manifest-path` vs `scripts/build-gui.sh`) silently
+# produced two full copies of the ~300-crate eframe tree, ~950 MB each, and the
+# `.gitignore` entry for `/gui/target` kept both out of `git status` so the
+# duplicate went unnoticed.
+#
+# `build.target-dir` is resolved relative to the parent directory of this
+# `.cargo/` directory (verified against a scratch crate), so this lands on
+# `<repo>/target-gui` no matter which subdirectory of `gui/` you invoke cargo
+# from.
+#
+# Caveat: Cargo discovers config files by walking up from the *current working
+# directory*, not from `--manifest-path`.  Invoking cargo from the repo root
+# with `--manifest-path gui/Cargo.toml` therefore bypasses this file.  For those
+# calls use `scripts/build-gui.sh` (or set `CARGO_TARGET_DIR=target-gui`), which
+# is what `.github/workflows/ci.yml` and `scripts/check.sh` do.
+[build]
+target-dir = "../target-gui"
