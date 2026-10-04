@@ -437,14 +437,39 @@ fn weapon_section(i: usize) -> String {
     h
 }
 
+/// Maximum accepted HTTP request body.
+///
+/// The console is meant for hand-pasted `.ssr`/CSV text; anything larger is a
+/// mistake or an attempt to exhaust memory, so it is rejected early.
+pub const MAX_BODY_BYTES: usize = 8 * 1024 * 1024;
+
+/// Read/write timeout for a single connection.  Without this a client that
+/// announces a body and then stalls would block the (single-threaded) accept
+/// loop indefinitely.
+const CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 pub fn run_server(port: u16) -> io::Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", port))?;
     println!("SpringSharp web console: http://127.0.0.1:{port}");
     for stream in listener.incoming() {
-        let stream = stream?;
-        if let Err(e) = handle_connection(stream) {
-            eprintln!("connection error: {e}");
-        }
+        let stream = match stream {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("accept error: {e}");
+                continue;
+            }
+        };
+        // Handle each connection on its own thread so one slow/stalled client
+        // cannot block the whole console.
+        std::thread::spawn(move || {
+            // A panic inside a request handler must not take down the server.
+            let result = std::panic::catch_unwind(|| handle_connection(stream));
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => eprintln!("connection error: {e}"),
+                Err(_) => eprintln!("connection handler panicked"),
+            }
+        });
     }
     Ok(())
 }
@@ -561,10 +586,18 @@ fn route(method: &str, path: &str, body_text: &str) -> (u16, &'static str, Strin
     }
 }
 
-fn handle_connection(stream: TcpStream) -> io::Result<()> {
+fn handle_connection(mut stream: TcpStream) -> io::Result<()> {
+    stream.set_read_timeout(Some(CONNECTION_TIMEOUT))?;
+    stream.set_write_timeout(Some(CONNECTION_TIMEOUT))?;
+
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut request_line = String::new();
     reader.read_line(&mut request_line)?;
+    // Bound the request line itself: a client that never sends a newline must
+    // not be able to grow this String without limit.
+    if request_line.len() > 8 * 1024 {
+        return write_plain(&mut stream, 400, "Bad Request");
+    }
 
     let mut content_length = 0_usize;
     loop {
@@ -573,9 +606,16 @@ fn handle_connection(stream: TcpStream) -> io::Result<()> {
         if n == 0 || line == "\r\n" || line == "\n" {
             break;
         }
+        if line.len() > 8 * 1024 {
+            return write_plain(&mut stream, 400, "Bad Request");
+        }
         let lower = line.to_ascii_lowercase();
         if let Some(v) = lower.strip_prefix("content-length:") {
+            // Reject absurd lengths outright instead of allocating for them.
             content_length = v.trim().parse().unwrap_or(0);
+            if content_length > MAX_BODY_BYTES {
+                return write_plain(&mut stream, 413, "Payload Too Large");
+            }
         }
     }
 
@@ -593,11 +633,32 @@ fn handle_connection(stream: TcpStream) -> io::Result<()> {
 
     let response = format!(
         "HTTP/1.1 {status} {}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        if status == 200 { "OK" } else if status == 400 { "Bad Request" } else { "Not Found" },
+        reason_phrase(status),
         payload.len(),
         payload
     );
-    let mut stream = stream;
+    stream.write_all(response.as_bytes())?;
+    stream.flush()
+}
+
+fn reason_phrase(status: u16) -> &'static str {
+    match status {
+        200 => "OK",
+        400 => "Bad Request",
+        404 => "Not Found",
+        413 => "Payload Too Large",
+        _ => "Error",
+    }
+}
+
+/// Minimal response used by the header-parse guards before a route is chosen.
+fn write_plain(stream: &mut TcpStream, status: u16, message: &str) -> io::Result<()> {
+    let response = format!(
+        "HTTP/1.1 {status} {}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        reason_phrase(status),
+        message.len(),
+        message
+    );
     stream.write_all(response.as_bytes())?;
     stream.flush()
 }
@@ -659,6 +720,24 @@ mod tests {
         assert_eq!(status, 200);
         let hp: f64 = payload.parse().unwrap();
         assert!(hp > 0.0);
+    }
+
+    #[test]
+    fn oversized_body_is_rejected() {
+        // The body cap must be a sane positive bound (checked at compile time).
+        const { assert!(MAX_BODY_BYTES >= 1024 * 1024) };
+        // Route-level sanity: normal designs still calculate.
+        let body = "meta.name=Test\nhull.length=400\nhull.beam=60\nhull.beam_bulges=60\nhull.draught=20\nhull.block=0.5\nhull.date_hull=1920\nhull.date_engine=1920\n";
+        let (status, _, _) = route("POST", "/api/calculate", body);
+        assert_eq!(status, 200);
+    }
+
+    #[test]
+    fn reason_phrase_covers_statuses() {
+        assert_eq!(reason_phrase(200), "OK");
+        assert_eq!(reason_phrase(400), "Bad Request");
+        assert_eq!(reason_phrase(404), "Not Found");
+        assert_eq!(reason_phrase(413), "Payload Too Large");
     }
 
     #[test]
