@@ -501,6 +501,14 @@ pub fn generate_report(ship: &ShipModel) -> String {
     } else if p.strength_comp < 0.995 {
         r.push_str("\nWARNING: Hull structure strained by open sea conditions!\n");
     }
+    // Same convergence caveat as `ShipModel::summary`: the report is the other
+    // place a user reads the weight breakdown, so it must carry the warning too.
+    if p.iterations > 0 && !p.converged {
+        r.push_str(&format!(
+            "\nWARNING: armour/machinery weight iteration did not converge after {} iterations (relative residual {:.2e}); the weight breakdown is approximate.\n",
+            p.iterations, p.iteration_residual
+        ));
+    }
     r
 }
 

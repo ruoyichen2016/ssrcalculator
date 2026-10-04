@@ -1505,6 +1505,12 @@ pub struct ShipModel {
     pub damage_torp: f64,
     pub super_factor_long: f64,
     pub date_adj_float: f64,
+    /// Whether the armour <-> engine-weight fixed-point iteration converged.
+    pub converged: bool,
+    /// Number of fixed-point iterations actually performed.
+    pub iterations: usize,
+    /// Final relative residual of the fixed-point cycle (armour weight change).
+    pub iteration_residual: f64,
 }
 
 impl Default for ShipModel {
@@ -1573,6 +1579,9 @@ impl Default for ShipModel {
             damage_torp: 0.0,
             super_factor_long: 1.0,
             date_adj_float: 1.0,
+            converged: false,
+            iterations: 0,
+            iteration_residual: f64::NAN,
         }
     }
 }
@@ -1680,7 +1689,21 @@ impl ShipModel {
             .calculate_cap(self.hull.beam, &self.guns.batteries);
 
         // Fixed-point iteration for the armour <-> engine weight cycle.
-        for _ in 0..12 {
+        //
+        // The cycle variable is the total armour weight: each pass recomputes
+        // armour from the current machinery weight, then machinery from the
+        // new armour.  Iterate until the relative change falls below
+        // `FIXED_POINT_TOLERANCE`, with a hard cap so a genuinely divergent
+        // design still terminates (and is reported as not converged).
+        const MAX_FIXED_POINT_ITERATIONS: usize = 50;
+        const FIXED_POINT_TOLERANCE: f64 = 1e-9;
+
+        let mut previous_armour_weight = f64::NAN;
+        let mut iterations = 0_usize;
+        let mut residual = f64::INFINITY;
+        let mut converged = false;
+        for _ in 0..MAX_FIXED_POINT_ITERATIONS {
+            iterations += 1;
             self.armour.calculate(
                 &self.hull,
                 &self.free,
@@ -1701,7 +1724,24 @@ impl ShipModel {
             self.engine.bunker_calc(&self.hull);
             self.engine
                 .load_and_hull_weight(&self.hull, &self.guns, &self.armour, &self.weapons);
+
+            let armour_weight = self.armour.weight;
+            if previous_armour_weight.is_finite() {
+                let scale = armour_weight
+                    .abs()
+                    .max(previous_armour_weight.abs())
+                    .max(1e-12);
+                residual = (armour_weight - previous_armour_weight).abs() / scale;
+                if residual < FIXED_POINT_TOLERANCE {
+                    converged = true;
+                    break;
+                }
+            }
+            previous_armour_weight = armour_weight;
         }
+        self.converged = converged;
+        self.iterations = iterations;
+        self.iteration_residual = residual;
 
         // Final resistance / machinery values.
         self.engine.resistance(&self.hull);
@@ -2115,6 +2155,18 @@ impl ShipModel {
         } else if self.strength_comp < 0.995 {
             lines.push("WARNING: Hull structure strained by open sea conditions!".into());
         }
+        // The armour <-> machinery cycle is a fixed-point iteration.  If it hits
+        // its iteration cap the reported weights are still the last iterate, but
+        // they are no longer trustworthy to the usual tolerance, so say so
+        // instead of silently reporting them as settled.  Guarded on
+        // `iterations > 0` so a model that has never been calculated (where the
+        // flag is still at its default) does not warn spuriously.
+        if self.iterations > 0 && !self.converged {
+            lines.push(format!(
+                "WARNING: armour/machinery weight iteration did not converge after {} iterations (relative residual {:.2e}); the weight breakdown is approximate.",
+                self.iterations, self.iteration_residual
+            ));
+        }
         Summary { lines }
     }
 }
@@ -2308,5 +2360,53 @@ mod tests {
         ship.calculate();
         assert!(ship.hull.displacement > 0.0);
         assert!(ship.strength_comp >= 0.0);
+    }
+
+    #[test]
+    fn fixed_point_converges_and_reports_status() {
+        let mut ship = crate::features::demo_ship();
+        ship.calculate();
+        assert!(ship.converged, "demo design should converge");
+        assert!(ship.iterations >= 1);
+        assert!(ship.iterations <= 50);
+        assert!(ship.iteration_residual.is_finite());
+        assert!(ship.iteration_residual < 1e-9);
+    }
+
+    #[test]
+    fn fixed_point_convergence_is_stable() {
+        // Re-running calculate() must produce the same converged state and the
+        // same armour weight: the fixed point is deterministic.
+        let mut a = crate::features::demo_ship();
+        a.calculate();
+        let weight_a = a.armour.weight;
+        let iters_a = a.iterations;
+        a.calculate();
+        assert_eq!(a.iterations, iters_a);
+        assert!((a.armour.weight - weight_a).abs() <= 1e-9 * weight_a.abs().max(1.0));
+    }
+
+    #[test]
+    fn convergence_status_is_surfaced_in_summary_and_report() {
+        let mut ship = crate::features::demo_ship();
+        ship.calculate();
+        assert!(!ship.summary().to_string().contains("did not converge"));
+        assert!(!crate::features::generate_report(&ship).contains("did not converge"));
+
+        // Force the not-converged state directly: building a design that
+        // genuinely diverges is not portable, and the reporting path is what is
+        // under test here.
+        ship.converged = false;
+        ship.iterations = 50;
+        ship.iteration_residual = 1e-3;
+        assert!(ship.summary().to_string().contains("did not converge"));
+        let report = crate::features::generate_report(&ship);
+        assert!(report.contains("did not converge"));
+        assert!(report.contains("50 iterations"));
+
+        // A model that has never been calculated must not warn spuriously.
+        let fresh = ShipModel::new();
+        assert!(!fresh.summary().to_string().contains("did not converge"));
+        assert!(!crate::features::generate_report(&fresh).contains("did not converge"));
     }
 }
