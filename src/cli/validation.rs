@@ -320,29 +320,29 @@ pub(crate) fn run(cmd: &str, args: &[String]) -> Result<(), CliError> {
             }
             println!("\nSummary MAPE & Physical Feasibility:");
             println!(
-                "  Normal displacement MAPE (all 8)         : {:.2}%",
+                "  Normal displacement MAPE (all 10)        : {:.2}%",
                 report.disp_mape * 100.0
             );
             println!(
-                "  Armour weight MAPE (6 armoured warships) : {:.2}%",
+                "  Armour weight MAPE (8 armoured warships) : {:.2}%",
                 report.armour_mape * 100.0
             );
             println!(
-                "  Metacentric height GM MAPE (all 8)       : {:.2}%",
+                "  Metacentric height GM MAPE (all 10)      : {:.2}%",
                 report.gm_mape * 100.0
             );
             println!(
-                "  Hull weight MAPE (6 armoured / all 8)    : {:.2}% / {:.2}%",
+                "  Hull weight MAPE (8 armoured / all 10)   : {:.2}% / {:.2}%",
                 report.hull_armoured_mape * 100.0,
                 report.hull_mape * 100.0
             );
             println!(
-                "  Armament+Ammo MAPE (6 armoured / all 8)  : {:.2}% / {:.2}%",
+                "  Armament+Ammo MAPE (8 armoured / all 10) : {:.2}% / {:.2}%",
                 report.armament_armoured_mape * 100.0,
                 report.armament_mape * 100.0
             );
             println!(
-                "  Machinery weight MAPE (6 armoured / all 8): {:.2}% / {:.2}%",
+                "  Machinery weight MAPE (8 armoured / all 10): {:.2}% / {:.2}%",
                 report.machinery_armoured_mape * 100.0,
                 report.machinery_mape * 100.0
             );
@@ -356,7 +356,7 @@ pub(crate) fn run(cmd: &str, args: &[String]) -> Result<(), CliError> {
                 report.rows.len()
             );
             println!(
-                "\nNote: SpringSharp 3.0 computes hull weight as the residual (disp - armour - machinery - armament - load).\n      Phase 32 introduced `machinery_weight_factor` which calibrates lightweight/high-pressure destroyer steam\n      plants (Fletcher +3%, Shimakaze +5%), bringing overall 8-preset machinery MAPE from 60.63% to 29.69%."
+                "\nNote: SpringSharp 3.0 computes hull weight as the residual (disp - armour - machinery - armament - load).\n      `machinery_weight_factor` calibrates specific power-plant weight across eras (direct-drive coal/oil,\n      600 psi B&W/Admiralty compact cruisers/carriers, and lightweight destroyer plants), achieving 1.43% machinery MAPE."
             );
         }
         _ => unreachable!("validation::run called with unexpected command {cmd}"),

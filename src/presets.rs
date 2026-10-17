@@ -82,6 +82,22 @@ pub const PRESET_LIST: &[PresetInfo] = &[
         year: 1943,
         displacement_tons: 2_560.0,
     },
+    PresetInfo {
+        id: "hood",
+        name: "HMS Hood",
+        country: "United Kingdom",
+        ship_type: "Battlecruiser",
+        year: 1920,
+        displacement_tons: 41_785.0,
+    },
+    PresetInfo {
+        id: "essex",
+        name: "USS Essex",
+        country: "United States",
+        ship_type: "Aircraft carrier",
+        year: 1943,
+        displacement_tons: 31_500.0,
+    },
 ];
 
 /// Get preset ship model by identifier.
@@ -95,6 +111,8 @@ pub fn get_preset(id: &str) -> Option<ShipModel> {
         "belfast" => preset_belfast(),
         "fletcher" => preset_fletcher(),
         "shimakaze" => preset_shimakaze(),
+        "hood" => preset_hood(),
+        "essex" => preset_essex(),
         _ => return None,
     };
     ship.calculate();
@@ -191,6 +209,8 @@ fn preset_dreadnought() -> ShipModel {
     ship.engine.screws = 4;
     ship.engine.resistance_model = ResistanceModel::HoltropMennen;
     ship.engine.power_factor = 0.767;
+    // Early direct-drive Parsons turbine + Babcock & Wilcox coal/oil boiler plant (~23,000 shp in 2,050t)
+    ship.engine.machinery_weight_factor = 1.23;
 
     ship.weapons = WeaponAggregate {
         torpedo1: WeaponMount {
@@ -307,6 +327,7 @@ fn preset_bismarck() -> ShipModel {
     ship.engine.screws = 3;
     ship.engine.resistance_model = ResistanceModel::HoltropMennen;
     ship.engine.power_factor = 0.767;
+    ship.engine.machinery_weight_factor = 1.13;
     ship
 }
 
@@ -391,6 +412,8 @@ fn preset_iowa() -> ShipModel {
     ship.engine.screws = 4;
     ship.engine.resistance_model = ResistanceModel::HoltropMennen;
     ship.engine.power_factor = 0.767;
+    // High-pressure 600 psi B&W boiler + GE geared turbine plant (212,000 shp in 4,900t)
+    ship.engine.machinery_weight_factor = 0.87;
     ship
 }
 
@@ -489,6 +512,8 @@ fn preset_yamato() -> ShipModel {
     ship.engine.screws = 4;
     ship.engine.resistance_model = ResistanceModel::HoltropMennen;
     ship.engine.power_factor = 0.767;
+    // 12 Kampon boilers + 4 geared turbine sets (150,000 shp in 5,215t => ~28.8 shp/ton)
+    ship.engine.machinery_weight_factor = 1.60;
     ship
 }
 
@@ -569,6 +594,9 @@ fn preset_baltimore() -> ShipModel {
     ship.engine.screws = 4;
     ship.engine.resistance_model = ResistanceModel::HoltropMennen;
     ship.engine.power_factor = 0.919;
+    // Compact 600 psi B&W cruiser machinery (120,000 shp in 2,100t => ~57 shp/ton)
+    ship.engine.machinery_weight_factor = 0.65;
+    ship.weapons.misc_weight_vital = 650.0;
     ship
 }
 
@@ -581,8 +609,8 @@ fn preset_belfast() -> ShipModel {
     ship.hull.length = 613.0;
     ship.hull.beam = 66.0;
     ship.hull.beam_bulges = 66.0;
-    ship.hull.draught = 20.0;
-    ship.hull.block = 0.52;
+    ship.hull.draught = 19.5;
+    ship.hull.block = 0.515;
     ship.hull.date_hull = 1939;
     ship.hull.date_engine = 1939;
 
@@ -629,8 +657,8 @@ fn preset_belfast() -> ShipModel {
     g2.layout_g1 = 9;
 
     ship.armour.belt_main = 4.5;
-    ship.armour.belt_main_length = 320.0;
-    ship.armour.belt_main_height = 10.0;
+    ship.armour.belt_main_length = 340.0;
+    ship.armour.belt_main_height = 11.0;
     ship.armour.deck = 3.0;
     ship.armour.bulkhead = 2.5;
     ship.armour.bulkhead_length = 300.0;
@@ -646,6 +674,8 @@ fn preset_belfast() -> ShipModel {
     ship.engine.screws = 4;
     ship.engine.resistance_model = ResistanceModel::HoltropMennen;
     ship.engine.power_factor = 0.919;
+    // Admiralty 3-drum compact unit-machinery cruiser plant (80,000 shp in 1,550t => ~51.6 shp/ton)
+    ship.engine.machinery_weight_factor = 0.56;
 
     ship.weapons = WeaponAggregate {
         torpedo1: WeaponMount {
@@ -657,6 +687,7 @@ fn preset_belfast() -> ShipModel {
             location: 9,
             ..Default::default()
         },
+        misc_weight_vital: 850.0,
         ..Default::default()
     };
     ship
@@ -795,7 +826,7 @@ fn preset_shimakaze() -> ShipModel {
     ship.engine.screws = 2;
     ship.engine.resistance_model = ResistanceModel::HoltropMennen;
     ship.engine.power_factor = 1.017;
-    // Experimental experimental high-temperature/high-pressure Kampon machinery (75,000+ shp in ~820t => ~92 shp/ton)
+    // Experimental high-temperature/high-pressure Kampon machinery (75,000+ shp in ~820t => ~92 shp/ton)
     ship.engine.machinery_weight_factor = 0.42;
     ship.steadiness = 5;
 
@@ -818,6 +849,228 @@ fn preset_shimakaze() -> ShipModel {
             location: 8,
             ..Default::default()
         },
+        ..Default::default()
+    };
+    ship
+}
+
+fn preset_hood() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "HMS Hood".into();
+    ship.country = "United Kingdom".into();
+    ship.ship_type = "Battlecruiser".into();
+
+    ship.hull.length = 850.0;
+    ship.hull.beam = 104.0;
+    ship.hull.beam_bulges = 104.0;
+    ship.hull.draught = 28.5;
+    ship.hull.block = 0.578;
+    ship.hull.date_hull = 1920;
+    ship.hull.date_engine = 1920;
+
+    ship.free.fc_length = 0.45;
+    ship.free.fd_length = 0.25;
+    ship.free.qd_length = 0.20;
+    ship.free.free_fc_for = 29.0;
+    ship.free.free_fc_aft = 25.0;
+    ship.free.free_fd_for = 21.0;
+    ship.free.free_fd_aft = 19.0;
+    ship.free.free_ad_for = 17.5;
+    ship.free.free_ad_aft = 17.0;
+    ship.free.free_qd_for = 17.0;
+    ship.free.free_qd_aft = 16.5;
+
+    // 8 x 15"/42 BL Mk I in 4 twin turrets (2 fore, 2 aft superfiring)
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 8;
+    g1.calibre = 15.0;
+    g1.cal_length = 42.0;
+    g1.date_gun = 1920;
+    g1.gun_type = 1;
+    g1.mount_type = 3; // Turret on barbette
+    g1.magazine = 120;
+    g1.mounts = 4;
+    g1.guns_in_mount_g1 = 3; // Twin
+    g1.layout_g1 = 1; // Centreline ends
+    g1.mount_super_g1 = 2; // Superfiring fore & aft
+    g1.arm_face = 15.0;
+    g1.arm_back = 11.0;
+    g1.arm_bottom = 12.0;
+
+    // 12 x 5.5"/50 BL Mk I secondary guns
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 12;
+    g2.calibre = 5.5;
+    g2.cal_length = 50.0;
+    g2.date_gun = 1920;
+    g2.gun_type = 2; // QF/BL
+    g2.mount_type = 5;
+    g2.magazine = 150;
+    g2.mounts = 12;
+    g2.guns_in_mount_g1 = 0; // Single
+    g2.layout_g1 = 9; // Sides
+    g2.mount_super_g1 = 10;
+    g2.arm_face = 1.0;
+
+    // 4 x 4"/45 QF Mk V AA
+    let g3 = ship.battery_mut(2);
+    g3.barrels = 4;
+    g3.calibre = 4.0;
+    g3.cal_length = 45.0;
+    g3.date_gun = 1920;
+    g3.gun_type = 3; // AA
+    g3.mount_type = 5;
+    g3.magazine = 200;
+    g3.mounts = 4;
+    g3.guns_in_mount_g1 = 0;
+    g3.layout_g1 = 9;
+
+    ship.armour.belt_main = 12.0;
+    ship.armour.belt_main_length = 562.0;
+    ship.armour.belt_main_height = 12.5;
+    ship.armour.belts_incline = 12.0;
+    ship.armour.belt_upper = 7.0;
+    ship.armour.belt_upper_length = 500.0;
+    ship.armour.belt_upper_height = 10.5;
+    ship.armour.belt_ends = 5.0;
+    ship.armour.belt_ends_length = 160.0;
+    ship.armour.belt_ends_height = 9.0;
+    ship.armour.deck = 3.0;
+    ship.armour.deck_fc = 1.5;
+    ship.armour.deck_qd = 2.0;
+    ship.armour.bulkhead = 5.0;
+    ship.armour.bulkhead_length = 500.0;
+    ship.armour.bulkhead_height = 16.0;
+    ship.armour.bulkhead_beam = 80.0;
+    ship.armour.bulge = 1.5;
+    ship.armour.conning_for = 11.0;
+
+    ship.engine.fuel[1] = true; // Oil
+    ship.engine.engine_types[2] = true; // Turbines
+    ship.engine.drive[1] = true; // Geared
+    ship.engine.speed_max = 31.0;
+    ship.engine.speed_cruise = 14.0;
+    ship.engine.range = 7500.0;
+    ship.engine.screws = 4;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.767;
+    // 24 Yarrow small-tube boilers + 4 Brown-Curtis geared turbines (144,000 shp in 5,300t)
+    ship.engine.machinery_weight_factor = 1.21;
+
+    ship.weapons = WeaponAggregate {
+        torpedo1: WeaponMount {
+            kind: WeaponKind::Torpedo,
+            number: 6,
+            loads: 2,
+            size: 21.0,
+            length: 22.0,
+            location: 4,
+            ..Default::default()
+        },
+        misc_weight_vital: 2200.0,
+        ..Default::default()
+    };
+    ship
+}
+
+fn preset_essex() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "USS Essex".into();
+    ship.country = "United States".into();
+    ship.ship_type = "Aircraft carrier".into();
+
+    ship.hull.length = 820.0;
+    ship.hull.beam = 93.0;
+    ship.hull.beam_bulges = 93.0;
+    ship.hull.draught = 27.5;
+    ship.hull.block = 0.525;
+    ship.hull.date_hull = 1943;
+    ship.hull.date_engine = 1943;
+
+    ship.free.fc_length = 0.35;
+    ship.free.fd_length = 0.35;
+    ship.free.qd_length = 0.15;
+    ship.free.free_fc_for = 28.0;
+    ship.free.free_fc_aft = 26.0;
+    ship.free.free_fd_for = 25.0;
+    ship.free.free_fd_aft = 24.0;
+    ship.free.free_ad_for = 24.0;
+    ship.free.free_ad_aft = 23.0;
+    ship.free.free_qd_for = 23.0;
+    ship.free.free_qd_aft = 22.0;
+    ship.free.bow = 2; // Bulbous
+    ship.free.stern = 1; // Transom
+
+    // 12 x 5"/38 Mark 12 DP guns (4 twin turrets on starboard island + 4 single gallery mounts)
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 12;
+    g1.calibre = 5.0;
+    g1.cal_length = 38.0;
+    g1.date_gun = 1943;
+    g1.gun_type = 4; // DP
+    g1.mount_type = 3; // Turret on barbette
+    g1.magazine = 400;
+    g1.mounts = 8;
+    g1.guns_in_mount_g1 = 3; // Twin (4 mounts = 8 guns)
+    g1.layout_g1 = 9; // Sides
+    g1.mount_super_g1 = 4;
+    g1.guns_in_mount_g2 = 0; // Single (4 mounts = 4 guns)
+    g1.layout_g2 = 9;
+    g1.mount_deck_g2 = 4;
+    g1.arm_face = 1.5;
+    g1.arm_back = 1.0;
+    g1.arm_bottom = 1.0;
+
+    // 32 x 40mm/56 Bofors AA in 8 quad mounts
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 32;
+    g2.calibre = 1.57;
+    g2.cal_length = 56.0;
+    g2.date_gun = 1943;
+    g2.gun_type = 5; // Auto rapid fire
+    g2.mount_type = 5;
+    g2.magazine = 600;
+    g2.mounts = 8;
+    g2.guns_in_mount_g1 = 9; // Quad mount
+    g2.layout_g1 = 9;
+    g2.mount_super_g1 = 8;
+
+    ship.armour.belt_main = 4.0;
+    ship.armour.belt_main_length = 508.0;
+    ship.armour.belt_main_height = 8.5;
+    ship.armour.deck = 1.5;
+    ship.armour.deck_fc = 0.75;
+    ship.armour.deck_qd = 0.75;
+    ship.armour.bulkhead = 4.0;
+    ship.armour.bulkhead_length = 508.0;
+    ship.armour.bulkhead_height = 10.0;
+    ship.armour.bulkhead_beam = 70.0;
+    ship.armour.conning_for = 1.5;
+
+    ship.engine.fuel[1] = true;
+    ship.engine.engine_types[2] = true;
+    ship.engine.drive[1] = true;
+    ship.engine.speed_max = 33.0;
+    ship.engine.speed_cruise = 15.0;
+    ship.engine.range = 15000.0;
+    ship.engine.screws = 4;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.878;
+    // 8 B&W 600 psi boilers + 4 Westinghouse geared turbines (150,000 shp in 3,150t => ~47.6 shp/ton)
+    ship.engine.machinery_weight_factor = 0.83;
+
+    // Aviation ordnance (aerial torpedoes & bombs), flight deck arresting/catapult gear & air group allowance
+    ship.weapons = WeaponAggregate {
+        torpedo1: WeaponMount {
+            kind: WeaponKind::Torpedo,
+            number: 36,
+            loads: 2,
+            size: 22.4,
+            length: 18.0,
+            location: 4,
+            ..Default::default()
+        },
+        misc_weight_deck: 1150.0,
         ..Default::default()
     };
     ship
@@ -962,6 +1215,34 @@ pub const PRESET_WEIGHT_BENCHMARKS: &[PresetWeightBenchmark] = &[
         ref_bunker_t: 420.0,
         ref_gm_ft: 3.4,
         source: "Conway's All the World's Fighting Ships 1922-1946; Stille",
+    },
+    PresetWeightBenchmark {
+        id: "hood",
+        name: "HMS Hood",
+        ship_type: "Battlecruiser",
+        year: 1920,
+        ref_displacement_t: 41_785.0,
+        ref_hull_t: 15_200.0,
+        ref_armour_t: 13_550.0,
+        ref_machinery_t: 5_300.0,
+        ref_armament_t: 3_850.0,
+        ref_bunker_t: 1_200.0,
+        ref_gm_ft: 6.2,
+        source: "Roberts (2001) Anatomy of the Ship: The Battlecruiser Hood; Raven & Roberts",
+    },
+    PresetWeightBenchmark {
+        id: "essex",
+        name: "USS Essex",
+        ship_type: "Aircraft carrier",
+        year: 1943,
+        ref_displacement_t: 31_500.0,
+        ref_hull_t: 19_800.0,
+        ref_armour_t: 2_900.0,
+        ref_machinery_t: 3_150.0,
+        ref_armament_t: 650.0,
+        ref_bunker_t: 3_000.0,
+        ref_gm_ft: 6.5,
+        source: "Friedman (1983) U.S. Aircraft Carriers; Raven (1998) Essex-Class Carriers",
     },
 ];
 

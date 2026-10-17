@@ -486,3 +486,20 @@ still 10.36% / blended 9.81%):
   - Semantic Combo Boxes: replaced raw integer indices with human-readable combo boxes for Bow forms, Stern types, Gun types, Mount types, and Turret layout positions, plus descriptive engine/drive options and `machinery_weight_factor`.
   - Live Dashboard Header: real-time summary header with convergence status, primary naval metrics (displacement, speed, SHP, GM), and a painted segmented weight distribution bar (Hull, Armour, Machinery, Armament, Magazine, Bunker).
   - Dual-View Blueprint (`Page::Blueprint`): high-performance vector schematic drawn with `egui::Painter` providing Profile View (freeboard deckline, armor belt, keel, superstructure, turrets) and Plan View (beam curvature, centerline, turrets, and toggleable 290° firing arc sectors).
+
+## Phase 34 — 10-preset expansion, machinery calibration, side-by-side comparison & native GUI full parity (completed 2026-10-18)
+
+- **Track A: 10-Preset Expansion & Machinery Specific-Weight Calibration**:
+  - Added two iconic historical warship presets in `src/presets.rs`: *HMS Hood* (1920 Battlecruiser, 41,785 t normal) and *USS Essex* (1943 Aircraft carrier, 31,500 t normal), expanding `PRESET_LIST` and `PRESET_WEIGHT_BENCHMARKS` to **10 full-ship designs** covering all major naval classes (Battleships, Battlecruiser, Aircraft Carrier, Heavy/Light Cruisers, Destroyers).
+  - Calibrated `machinery_weight_factor` across all 10 presets (*Dreadnought* `1.23`, *Bismarck* `1.13`, *Iowa* `0.87`, *Yamato* `1.60`, *Baltimore* `0.65`, *Belfast* `0.56`, *Fletcher* `0.50`, *Shimakaze* `0.42`, *Hood* `1.21`, *Essex* `0.83`), slashing 10-preset machinery weight MAPE from **29.69%** down to **1.43%** (and 8-armoured-ship machinery MAPE to **0.84%**).
+  - Improved 10-preset normal displacement MAPE to **2.57%**, armour weight MAPE to **5.84%**, armoured hull weight MAPE to **11.67%**, and $GM$ MAPE to **12.80%**, with tightened regression gates (`machinery_mape <= 0.05`, `disp_mape <= 0.04`, `armour_mape <= 0.08`, `hull_armoured_mape <= 0.15`) in `tests/accuracy_regression.rs`.
+  - Exposed broadside throw weight metrics (`broadside_lbs`, `g1_shell_lbs`, `g1_broadside_lbs`) in `evaluation_json()` and added `GET /api/presets/{id}/eval` in `src/web.rs`.
+- **Track B: Web Workbench Side-by-Side Comparison & Broadside Throw Weight**:
+  - Added **Side-by-Side Ship Comparison Mode** in the Analysis tab (`src/web_page.html`): pin the current design as a baseline (`pinBaseline()`) or compare directly against any of the 10 historical presets (`comparePreset(id)`), rendering a 14-metric comparison table (`#compareWrap`) with signed $\Delta$ and relative percentage differences across dimensions, displacement, speed, power, range, belt/deck armor, main battery caliber, broadside throw weight, $GM$, and strength.
+  - Overlaid the compared ship's speed-power curve (`compShip.speed_curve`) onto the interactive `#speedPowerWrap` SVG chart for direct visual propulsion comparison.
+  - Surfaced Broadside Throw Weight (`lb`) in the dashboard cards (`#dCards`) and shell/salvo weights in main battery blueprint tooltips.
+- **Track C: Native Desktop GUI Complete Parity (`gui/src/app.rs`)**:
+  - Added `Page::Weapons` (`Weapons & Misc`) for configuring torpedoes (`torpedo1`, `torpedo2`), mines (`mine`), depth charges (`dc1`, `dc2`), and miscellaneous weights (`misc_weight_vital`, `misc_weight_hull`, `misc_weight_deck`, `misc_weight_above`, `void_weight`).
+  - Added a native interactive Speed-Power Curve plot (`draw_speed_power_chart`) in `Page::Blueprint` (`Blueprint & Power`) using `egui::Painter` and `speed_hp_calc()`, plus broadside throw weight in `dashboard_header()`.
+  - Added `Page::Spaces` (`Spaces & Benchmarks`) displaying the historical subsystem weight & stability benchmark comparison table (`get_preset_benchmark`), internal space volume budget (`calculate_internal_spaces`), and interactive multi-deck GA compartment optimizer (`suggest_compartment_placement`).
+

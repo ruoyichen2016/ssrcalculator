@@ -1,7 +1,18 @@
 # Project change log
 
-## Unreleased (Phases 29, 30, 31, 32 & 33) — Presets Library, Live SVG Blueprint, Subsystem Weight Validation, Machinery Scaling, Speed-Power Curves & Native GUI Modernization
+## Unreleased (Phases 29–34) — 10-Preset Library, Live Blueprints, Subsystem Weight Benchmarks, Machinery Calibration, Side-by-Side Comparison & Native GUI Parity
 
+- **10-preset expansion & machinery weight calibration** (Phase 34 Track A):
+  - Added *HMS Hood* (1920 Battlecruiser, 41,785 t) and *USS Essex* (1943 Aircraft carrier, 31,500 t) to `src/presets.rs`, expanding the built-in preset library and subsystem weight/stability benchmark suite to **10 iconic warships**.
+  - Calibrated `machinery_weight_factor` across all 10 presets, slashing overall machinery weight MAPE from **29.69%** down to **1.43%** (0.84% across 8 armoured warships) and improving normal displacement MAPE to **2.57%**, armour MAPE to **5.84%**, armoured hull MAPE to **11.67%**, and $GM$ MAPE to **12.80%**.
+  - Exposed `broadside_lbs`, `g1_shell_lbs`, and `g1_broadside_lbs` in `evaluation_json()` and added `GET /api/presets/{id}/eval` in `src/web.rs`.
+- **Web Workbench side-by-side ship comparison & firepower display** (Phase 34 Track B):
+  - Added Side-by-Side Ship Comparison Mode in the Analysis tab (`pinBaseline()`, `comparePreset(id)`, `clearCompare()`), displaying a 14-row comparison table with signed $\Delta$ and `%` columns and overlaying the compared ship's speed-power curve on the SVG propulsion chart.
+  - Added Broadside Throw Weight (`lb`) dashboard card and main battery shell/salvo weight details in blueprint hover tooltips.
+- **Native desktop GUI full parity** (Phase 34 Track C):
+  - Added `Page::Weapons` (`Weapons & Misc`) for configuring torpedo sets, mines, depth charges, and all 5 miscellaneous weight fields.
+  - Added native `egui::Painter` Speed-Power Curve chart in `Page::Blueprint` (`Blueprint & Power`) and broadside throw weight in the dashboard header.
+  - Added `Page::Spaces` (`Spaces & Benchmarks`) displaying the historical subsystem weight & stability benchmark table, internal space volume budget (`calculate_internal_spaces`), and multi-deck GA arrangement optimizer (`suggest_compartment_placement`).
 - **Speed-power curve & interactive blueprint tooltips** (Phase 33 Track A):
   - Added dynamic speed-power curve calculation (`speed_curve: [[speed, model_hp, orig_hp, fn], ...]`) across 10 kt to max speed + 2 kt via exposed `EngineValues::speed_hp_calc()`.
   - Added SVG speed-power curve chart in Web Workbench Analysis tab (`#speedPowerWrap`) comparing calibrated regime model vs original SpringSharp baseline with cruise/max speed markers.

@@ -2986,9 +2986,9 @@ pub fn historical_validation_audit() -> ValidationAudit {
         zero_magazine_cases: zero_magazine,
         notes: vec![
             "speed/power: validated by nested LOOCV on 146 cases; see `validate-regime`",
-            "subsystem weights & stability (GM): benchmarked on 8 full-design historical presets; see `validate-weights`",
+            "subsystem weights & stability (GM): benchmarked on 10 full-design historical presets; see `validate-weights`",
             "minimal 146-ship dataset has no per-ship weight references and must not be used for weight validation",
-            "internal spaces: magazine volumes are positive on all 8 full presets; no published m3 compartment references",
+            "internal spaces: magazine volumes are positive on all 10 full presets; no published m3 compartment references",
             "general arrangement / evacuation / scantlings: no historical GA references; plausibility checks only",
         ],
     }

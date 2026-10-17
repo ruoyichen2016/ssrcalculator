@@ -654,6 +654,12 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         ("g2_m2", json_num(g.batteries[1].mounts_g2 as f64)),
         ("g2_bpm1", json_num(g.batteries[1].per_mount_g1 as f64)),
         ("g2_bpm2", json_num(g.batteries[1].per_mount_g2 as f64)),
+        ("broadside_lbs", json_num(g.broadside)),
+        ("g1_shell_lbs", json_num(g.batteries[0].shell_weight)),
+        (
+            "g1_broadside_lbs",
+            json_num(g.batteries[0].broadside_weight),
+        ),
     ];
     let body = fields
         .iter()
@@ -845,6 +851,24 @@ fn route(method: &str, path: &str, body_text: &str) -> (u16, &'static str, Strin
             (200, "text/plain; charset=utf-8", serialize(&ship))
         }
         ("GET", "/api/presets") => (200, "application/json; charset=utf-8", presets_json()),
+        ("GET", p) if p.starts_with("/api/presets/") && p.ends_with("/eval") => {
+            let id = p
+                .trim_start_matches("/api/presets/")
+                .trim_end_matches("/eval");
+            if let Some(ship) = get_preset(id) {
+                (
+                    200,
+                    "application/json; charset=utf-8",
+                    evaluation_json(&ship, ""),
+                )
+            } else {
+                (
+                    404,
+                    "text/plain; charset=utf-8",
+                    "Preset not found".to_string(),
+                )
+            }
+        }
         ("GET", p) if p.starts_with("/api/presets/") => {
             let id = p.trim_start_matches("/api/presets/");
             if let Some(ship) = get_preset(id) {
@@ -1090,10 +1114,16 @@ mod tests {
             "\"speed_curve\":[[",
             "\"g1_cal_len\":",
             "\"g1_arm_face\":",
+            "\"broadside_lbs\":",
         ] {
             assert!(json.contains(key), "missing {key}");
         }
         assert!(!json.contains(":NaN") && !json.contains(":inf"));
+
+        let (s_hood, ct_hood, json_hood) = route("GET", "/api/presets/hood/eval", "");
+        assert_eq!(s_hood, 200);
+        assert!(ct_hood.contains("json"));
+        assert!(json_hood.contains("\"HMS Hood\""));
     }
 
     #[test]

@@ -140,7 +140,7 @@ COMMANDS:
   validate-types       Show validation errors grouped by ship type
   validate-holdout     Out-of-sample check (calibration fit on training split only)
   validate-regime      Nested-LOOCV comparison of regime model vs original baseline
-  validate-weights     Compare subsystem weights & GM on the 8 full-ship presets
+  validate-weights     Compare subsystem weights & GM on the 10 full-ship presets
   regime-residuals     Per-case nested-LOOCV residuals (historical speed/power)
   regime-compare       Paired comparison: regime vs original SpringSharp baseline
   validation-audit     Historical data coverage by model family

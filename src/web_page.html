@@ -166,6 +166,16 @@ __FORM__
       <div id="calibOut" class="out"></div>
     </div>
     <div class="tab" data-tab="analysis">
+      <h2>Side-by-Side Ship Comparison</h2>
+      <p class="hint">Pin your current design as a baseline or compare against any historical warship preset across dimensions, displacement, speed, power, protection, firepower, and stability.</p>
+      <div class="row">
+        <button class="primary" onclick="pinBaseline()">Pin current as baseline</button>
+        <select id="compSel" onchange="comparePreset(this.value)">
+          <option value="">Compare with preset...</option>
+        </select>
+        <button onclick="clearCompare()">Clear comparison</button>
+      </div>
+      <div id="compareWrap" style="margin-bottom:1.2rem;"></div>
       <div id="presetBench"></div>
       <h2>Speed &amp; Power Characteristics</h2>
       <p class="hint">Dynamic power curves comparing current calibrated resistance model (cyan) against original SpringSharp baseline (amber), with cruise and max design speeds.</p>
@@ -321,19 +331,60 @@ async function runDesign(path, prefix = '') {
   } catch (e) { toast(e.message, true); }
 }
 const evaluate = () => runDesign('/api/evaluate');
+let compShip = null;       // compared ship evaluation JSON (baseline or preset)
+
 async function initPresets() {
   try {
     const res = await fetch('/api/presets');
     if (!res.ok) return;
     const presets = await res.json();
     const sel = $('#presetSel');
+    const cSel = $('#compSel');
     presets.forEach(p => {
+      const label = `${p.name} (${p.ship_type}, ${p.year})`;
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = `${p.name} (${p.ship_type}, ${p.year})`;
+      opt.textContent = label;
       sel.appendChild(opt);
+      if (cSel) {
+        const cOpt = document.createElement('option');
+        cOpt.value = p.id;
+        cOpt.textContent = label;
+        cSel.appendChild(cOpt);
+      }
     });
   } catch (_) {}
+}
+function pinBaseline() {
+  if (!last) return toast('Evaluate a design first', true);
+  compShip = JSON.parse(JSON.stringify(last));
+  if ($('#compSel')) $('#compSel').value = '';
+  renderComparison(last);
+  renderSpeedPower(last);
+  toast('Pinned ' + (compShip.name || 'current design') + ' as comparison baseline');
+}
+async function comparePreset(id) {
+  if (!id) return clearCompare();
+  try {
+    const r = await fetch('/api/presets/' + encodeURIComponent(id) + '/eval');
+    if (!r.ok) throw new Error(await r.text());
+    compShip = await r.json();
+    if (last) {
+      renderComparison(last);
+      renderSpeedPower(last);
+    }
+    toast('Comparing with ' + (compShip.name || id));
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+function clearCompare() {
+  compShip = null;
+  if ($('#compSel')) $('#compSel').value = '';
+  if (last) {
+    renderComparison(last);
+    renderSpeedPower(last);
+  }
 }
 async function loadPreset(id) {
   if (!id) return;
@@ -497,7 +548,8 @@ function renderBlueprint(r) {
   const g1Cal = r.g1_calibre || 0;
   const tRad = Math.max(3, Math.min(5.5, g1Cal * 0.3));
   const g1Bpm = r.g1_bpm1 || 1;
-  const g1Tip = `Main Battery #1\nCalibre: ${g1Cal}"/${r.g1_cal_len || ''} (${(g1Cal * 25.4).toFixed(0)} mm)\nMount: ${g1Bpm}-gun turret\nFace Armor: ${fmt(r.g1_arm_face, 1)}"\nAmmo: ${r.g1_mag || 0} rpg`;
+  const g1ShellLine = r.g1_shell_lbs > 0 ? `\nShell: ${fmt(r.g1_shell_lbs)} lb | Broadside: ${fmt(r.g1_broadside_lbs)} lb` : '';
+  const g1Tip = `Main Battery #1\nCalibre: ${g1Cal}"/${r.g1_cal_len || ''} (${(g1Cal * 25.4).toFixed(0)} mm)\nMount: ${g1Bpm}-gun turret\nFace Armor: ${fmt(r.g1_arm_face, 1)}"\nAmmo: ${r.g1_mag || 0} rpg${g1ShellLine}`;
   g1Positions.forEach(p => {
     const tx = xAt(p);
     const ty = deckYAt(p);
@@ -607,6 +659,7 @@ function renderSpeedPower(r) {
     return;
   }
   const pts = r.speed_curve; // [speed, model_hp, orig_hp, fn]
+  const cPts = (compShip && compShip.speed_curve && compShip.speed_curve.length) ? compShip.speed_curve : null;
   const svgW = 660, svgH = 260;
   const pL = 65, pR = 30, pT = 28, pB = 42;
   const pw = svgW - pL - pR, ph = svgH - pT - pB;
@@ -617,10 +670,17 @@ function renderSpeedPower(r) {
     if (p[1] > maxHp) maxHp = p[1];
     if (p[2] > maxHp) maxHp = p[2];
   });
+  if (cPts) {
+    if (cPts[0][0] < minV) minV = cPts[0][0];
+    if (cPts[cPts.length - 1][0] > maxV) maxV = cPts[cPts.length - 1][0];
+    cPts.forEach(p => {
+      if (p[1] > maxHp) maxHp = p[1];
+    });
+  }
   if (maxHp <= 0) maxHp = 10000;
   maxHp *= 1.12;
 
-  const xAt = v => pL + ((v - minV) / (maxV - minV)) * pw;
+  const xAt = v => pL + ((v - minV) / Math.max(1, maxV - minV)) * pw;
   const yAt = h => pT + (1.0 - (h / maxHp)) * ph;
 
   let svg = `<svg viewBox="0 0 ${svgW} ${svgH}" class="sp-chart">`;
@@ -657,6 +717,17 @@ function renderSpeedPower(r) {
     svg += `<text x="${mx.toFixed(1)}" y="${pT - 8}" fill="#ff6b6b" font-size="8.5" text-anchor="middle">Max (${r.speed_max}kt)</text>`;
   }
 
+  // Compared ship curve if active
+  if (cPts) {
+    const compD = cPts.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${xAt(p[0]).toFixed(1)} ${yAt(p[1]).toFixed(1)}`).join(' ');
+    svg += `<path d="${compD}" fill="none" stroke="#9b7bea" stroke-width="2.2" stroke-dasharray="5,3"/>`;
+    cPts.forEach(p => {
+      const x = xAt(p[0]), y = yAt(p[1]);
+      const tip = `${compShip.name || 'Compared'} @ ${p[0].toFixed(1)} kt: ${fmt(p[1])} hp`;
+      svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.6" fill="#9b7bea" stroke="#08131e" stroke-width="1" class="bp-interactive" data-tip="${esc(tip)}"/>`;
+    });
+  }
+
   // Original path
   const origD = pts.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${xAt(p[0]).toFixed(1)} ${yAt(p[2]).toFixed(1)}`).join(' ');
   svg += `<path d="${origD}" fill="none" stroke="#ffb547" stroke-width="1.8" stroke-dasharray="4,4" opacity="0.85"/>`;
@@ -672,16 +743,62 @@ function renderSpeedPower(r) {
     svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#4fb3ff" stroke="#08131e" stroke-width="1.2" class="bp-interactive" data-tip="${esc(tip)}"/>`;
   });
 
-  // Legend at top right
-  svg += `<g transform="translate(${pL + 12}, ${pT + 8})">` +
+  // Legend at top left
+  let leg = `<g transform="translate(${pL + 12}, ${pT + 8})">` +
     `<line x1="0" y1="4" x2="16" y2="4" stroke="#4fb3ff" stroke-width="2.5"/>` +
     `<text x="22" y="7" fill="#dbe7f3" font-size="8.5">Current Model (${esc(r.model || 'Calibrated')})</text>` +
     `<line x1="0" y1="16" x2="16" y2="16" stroke="#ffb547" stroke-width="1.8" stroke-dasharray="3,3"/>` +
-    `<text x="22" y="19" fill="#ffb547" font-size="8.5">Original Baseline</text>` +
-    `</g>`;
+    `<text x="22" y="19" fill="#ffb547" font-size="8.5">Original Baseline</text>`;
+  if (cPts) {
+    leg += `<line x1="0" y1="28" x2="16" y2="28" stroke="#9b7bea" stroke-width="2.2" stroke-dasharray="4,2"/>` +
+      `<text x="22" y="31" fill="#9b7bea" font-size="8.5">Compared: ${esc(compShip.name || 'Baseline')}</text>`;
+  }
+  leg += `</g>`;
+  svg += leg;
 
   svg += `</svg>`;
   wrap.innerHTML = svg;
+}
+
+function renderComparison(r) {
+  const wrap = $('#compareWrap');
+  if (!wrap) return;
+  if (!r || !compShip) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const c = compShip;
+  const row = (label, v1, v2, d = 0, unit = '') => {
+    const a = Number(v1) || 0, b = Number(v2) || 0;
+    const diff = a - b;
+    const sign = diff > 0 ? '+' : '';
+    const diffStr = Math.abs(diff) < 1e-6 ? '0' : `${sign}${fmt(diff, d)}${unit ? ' ' + unit : ''}`;
+    let pctStr = '–';
+    if (Math.abs(b) > 1e-6) {
+      const pct = (diff / b) * 100;
+      const pSign = pct > 0 ? '+' : '';
+      pctStr = Math.abs(pct) < 0.05 ? '0.0%' : `${pSign}${pct.toFixed(1)}%`;
+    }
+    return `<tr><td>${label}</td><td class="num">${fmt(a, d)}${unit ? ' ' + unit : ''}</td><td class="num">${fmt(b, d)}${unit ? ' ' + unit : ''}</td><td class="num">${diffStr}</td><td class="num">${pctStr}</td></tr>`;
+  };
+  const rows = [
+    row('Length WL', r.length, c.length, 0, 'ft'),
+    row('Beam', r.beam, c.beam, 1, 'ft'),
+    row('Draught', r.draught, c.draught, 1, 'ft'),
+    row('Normal displacement', r.disp_normal, c.disp_normal, 0, 't'),
+    row('Full load displacement', r.disp_full, c.disp_full, 0, 't'),
+    row('Max speed', r.speed_max, c.speed_max, 1, 'kt'),
+    row('Shaft power', r.hp_max, c.hp_max, 0, 'hp'),
+    row('Endurance range', r.range, c.range, 0, 'nm'),
+    row('Main belt armour', r.belt_thick, c.belt_thick, 1, 'in'),
+    row('Main deck armour', r.deck_thick, c.deck_thick, 1, 'in'),
+    row('Main battery calibre', r.g1_calibre, c.g1_calibre, 1, 'in'),
+    row('Broadside throw weight', r.broadside_lbs, c.broadside_lbs, 0, 'lb'),
+    row('Metacentric height GM', r.metacentre, c.metacentre, 2, 'ft'),
+    row('Composite strength', r.strength_comp, c.strength_comp, 2, ''),
+  ];
+  wrap.innerHTML = `<table><tr><th>Metric</th><th class="num">Current (${esc(r.name || 'Design')})</th><th class="num">Baseline (${esc(c.name || 'Compared')})</th><th class="num">Delta (Δ)</th><th class="num">Rel. Diff (%)</th></tr>` +
+    rows.join('') + `</table>`;
 }
 
 // ---- dashboard ----
@@ -700,6 +817,7 @@ function render(r) {
   $('#dBadges').innerHTML = badges.join('');
   renderBlueprint(r);
   renderSpeedPower(r);
+  renderComparison(r);
   const strengthCls = r.strength_comp < 0.5 ? 'bad' : r.strength_comp < 0.995 ? 'warn' : 'good';
   const stabCls = r.metacentre <= 0 ? 'bad' : r.stability < 1 ? 'warn' : '';
   $('#dCards').innerHTML = [
@@ -709,11 +827,11 @@ function render(r) {
     card('Max speed', fmt(r.speed_max, 1), 'kt'),
     card('Power', fmt(r.hp_max), 'hp'),
     card('Range', fmt(r.range), `nm @ ${fmt(r.speed_cruise, 0)} kt`),
+    card('Broadside', fmt(r.broadside_lbs), 'lb'),
     card('Stability', fmt(r.stability, 2), '', stabCls),
     card('Metacentre', fmt(r.metacentre, 2), 'ft', stabCls),
     card('Seakeeping', fmt(r.seakeeping, 2)),
     card('Strength', fmt(r.strength_comp, 2), '', strengthCls),
-    card('Flotation', fmt(r.flotation), 't'),
     card('Cost', '$' + fmt(r.cost_dollars, 2), 'M'),
   ].join('');
   const total = r.disp_normal > 0 ? r.disp_normal : 1;

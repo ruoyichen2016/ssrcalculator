@@ -8,8 +8,11 @@ use eframe::egui;
 
 use springsharp::features::demo_ship;
 use springsharp::io::{load_from_file, save_to_file};
-use springsharp::model::{GunBattery, ResistanceModel, ShipModel};
-use springsharp::{get_preset, PRESET_LIST};
+use springsharp::model::{GunBattery, ResistanceModel, ShipModel, WeaponKind, WeaponMount};
+use springsharp::spaces::{
+    calculate_internal_spaces, suggest_compartment_placement, CompartmentPlacement,
+};
+use springsharp::{get_preset, get_preset_benchmark, PRESET_LIST};
 
 const BOWS: &[&str] = &[
     "Normal bow",
@@ -86,8 +89,10 @@ enum Page {
     Freeboard,
     Armour,
     Guns,
+    Weapons,
     Engine,
     Blueprint,
+    Spaces,
     Calibration,
     Report,
 }
@@ -102,6 +107,8 @@ pub struct SpringSharpApp {
     regime_summary: String,
     selected_preset_index: Option<usize>,
     show_arcs: bool,
+    target_cg: f64,
+    last_placement: Option<CompartmentPlacement>,
 }
 
 impl SpringSharpApp {
@@ -129,6 +136,8 @@ impl SpringSharpApp {
             regime_summary,
             selected_preset_index: None,
             show_arcs: false,
+            target_cg: 0.45,
+            last_placement: None,
         }
     }
 
@@ -146,8 +155,10 @@ impl SpringSharpApp {
             (Page::Freeboard, "Freeboard"),
             (Page::Armour, "Armour"),
             (Page::Guns, "Guns"),
+            (Page::Weapons, "Weapons & Misc"),
             (Page::Engine, "Engine"),
-            (Page::Blueprint, "Blueprint"),
+            (Page::Blueprint, "Blueprint & Power"),
+            (Page::Spaces, "Spaces & Benchmarks"),
             (Page::Calibration, "Calibration"),
             (Page::Report, "Report"),
         ] {
@@ -730,6 +741,235 @@ impl SpringSharpApp {
         });
     }
 
+    fn page_weapons(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Torpedoes, Mines, Depth Charges & Miscellaneous Weights");
+        let w = &mut self.ship.weapons;
+        weapon_mount_ui(ui, "Torpedo set 1", "weap0", &mut w.torpedo1);
+        weapon_mount_ui(ui, "Torpedo set 2", "weap1", &mut w.torpedo2);
+        weapon_mount_ui(ui, "Mines", "weap2", &mut w.mine);
+        weapon_mount_ui(ui, "Depth charges / AS mortars 1", "weap3", &mut w.dc1);
+        weapon_mount_ui(ui, "Depth charges / AS mortars 2", "weap4", &mut w.dc2);
+
+        ui.separator();
+        ui.heading("Miscellaneous weights (tons)");
+        drag_f64(
+            ui,
+            "Vital spaces (tons)",
+            &mut w.misc_weight_vital,
+            1.0,
+            0.0..=50_000.0,
+        );
+        drag_f64(
+            ui,
+            "Hull spaces (tons)",
+            &mut w.misc_weight_hull,
+            1.0,
+            0.0..=50_000.0,
+        );
+        drag_f64(
+            ui,
+            "Deck spaces (tons)",
+            &mut w.misc_weight_deck,
+            1.0,
+            0.0..=50_000.0,
+        );
+        drag_f64(
+            ui,
+            "Above-water spaces (tons)",
+            &mut w.misc_weight_above,
+            1.0,
+            0.0..=50_000.0,
+        );
+        drag_f64(
+            ui,
+            "Void weight (tons)",
+            &mut w.void_weight,
+            1.0,
+            0.0..=50_000.0,
+        );
+    }
+
+    fn page_spaces(&mut self, ui: &mut egui::Ui) {
+        if let Some(bench) = get_preset_benchmark(&self.ship.name) {
+            ui.heading(format!(
+                "Historical Subsystem Weight & Stability Benchmark ({})",
+                bench.name
+            ));
+            ui.label(format!("Source: {}", bench.source));
+            let sim_hull = self.ship.engine.hull_weight;
+            let sim_armour = self.ship.armour.weight
+                + self
+                    .ship
+                    .guns
+                    .batteries
+                    .iter()
+                    .map(|b| b.arm_weight)
+                    .sum::<f64>();
+            let sim_mach = self.ship.engine.engine_weight;
+            let sim_arm =
+                self.ship.guns.borne_weight + self.ship.guns.magazine + self.ship.weapons.weight;
+            let sim_bunker = self.ship.engine.bunker;
+            let sim_gm = self.ship.metacentre;
+
+            egui::Grid::new("bench_grid")
+                .striped(true)
+                .spacing([24.0, 4.0])
+                .show(ui, |ui| {
+                    ui.strong("Subsystem / Metric");
+                    ui.strong("Simulated");
+                    ui.strong("Historical Ref");
+                    ui.strong("Rel. Error");
+                    ui.end_row();
+
+                    let mut row = |label: &str, sim: f64, r: f64, dec: usize, na: bool| {
+                        ui.label(label);
+                        ui.label(format!("{sim:.dec$}"));
+                        ui.label(format!("{r:.dec$}"));
+                        if na || r <= 0.0 {
+                            ui.label("n/a (splinter)");
+                        } else {
+                            let pct = (sim - r) / r * 100.0;
+                            let color = if pct.abs() <= 10.0 {
+                                egui::Color32::from_rgb(95, 211, 141)
+                            } else if pct.abs() <= 20.0 {
+                                egui::Color32::from_rgb(255, 181, 71)
+                            } else {
+                                egui::Color32::from_rgb(255, 107, 107)
+                            };
+                            ui.colored_label(color, format!("{pct:+.1}%"));
+                        }
+                        ui.end_row();
+                    };
+
+                    row(
+                        "Normal displacement (t)",
+                        self.ship.hull.displacement,
+                        bench.ref_displacement_t,
+                        0,
+                        false,
+                    );
+                    row("Hull structure (t)", sim_hull, bench.ref_hull_t, 0, false);
+                    row(
+                        "Armour + barbettes (t)",
+                        sim_armour,
+                        bench.ref_armour_t,
+                        0,
+                        bench.ref_armour_t < 500.0,
+                    );
+                    row("Machinery (t)", sim_mach, bench.ref_machinery_t, 0, false);
+                    row(
+                        "Armament + ammo (t)",
+                        sim_arm,
+                        bench.ref_armament_t,
+                        0,
+                        false,
+                    );
+                    row(
+                        "Normal bunker (t)",
+                        sim_bunker,
+                        bench.ref_bunker_t,
+                        0,
+                        false,
+                    );
+                    row(
+                        "Metacentric height GM (ft)",
+                        sim_gm,
+                        bench.ref_gm_ft,
+                        2,
+                        false,
+                    );
+                });
+            ui.separator();
+        }
+
+        ui.heading("Internal Space Volume Budget");
+        let sp = calculate_internal_spaces(&self.ship);
+        egui::Grid::new("space_grid")
+            .striped(true)
+            .spacing([24.0, 4.0])
+            .show(ui, |ui| {
+                ui.strong("Space Category");
+                ui.strong("Volume (m³)");
+                ui.end_row();
+                for (name, vol) in [
+                    ("Total hull volume", sp.hull_volume_m3),
+                    ("Machinery spaces", sp.machinery_volume_m3),
+                    ("Magazines & handling", sp.magazine_volume_m3),
+                    ("Crew accommodation", sp.accommodation_volume_m3),
+                    ("Fuel bunkerage", sp.fuel_volume_m3),
+                    ("Stores & provisions", sp.stores_volume_m3),
+                    ("Void & access", sp.void_volume_m3),
+                    ("Total required volume", sp.required_volume_m3),
+                ] {
+                    ui.label(name);
+                    ui.label(format!("{vol:.0}"));
+                    ui.end_row();
+                }
+                ui.label("Room ratio (Hull / Required)");
+                ui.label(format!("{:.3}", sp.room_hull_improved));
+                ui.end_row();
+            });
+
+        ui.separator();
+        ui.heading("Multi-Deck General Arrangement Optimizer (GA)");
+        ui.horizontal(|ui| {
+            drag_f64(
+                ui,
+                "Target vertical CG (fraction of depth)",
+                &mut self.target_cg,
+                0.01,
+                0.20..=0.80,
+            );
+            if ui.button("Run arrangement optimizer").clicked() {
+                let placement = suggest_compartment_placement(&self.ship, self.target_cg);
+                self.last_placement = Some(placement);
+                self.status = "Arrangement optimized".to_string();
+            }
+        });
+
+        if let Some(p) = &self.last_placement {
+            ui.label(format!(
+                "Vertical CG: {:.3} (target {:.2}) · Longitudinal CG: {:.3} · Access edges: {} ({}) · Max escape path: {:.1} m · Scantling util: {:.2}",
+                p.cg_vertical,
+                self.target_cg,
+                p.cg_longitudinal,
+                p.access_edges,
+                if p.access_connected { "connected" } else { "disconnected" },
+                p.escape_max_path,
+                p.scantling_utilization,
+            ));
+            let comp_names = [
+                ("Machinery", p.layout.machinery),
+                ("Magazine", p.layout.magazine),
+                ("Accommodation", p.layout.accommodation),
+                ("Fuel", p.layout.fuel),
+                ("Stores", p.layout.stores),
+                ("Void", p.layout.void),
+            ];
+            egui::Grid::new("ga_grid")
+                .striped(true)
+                .spacing([18.0, 4.0])
+                .show(ui, |ui| {
+                    ui.strong("Compartment");
+                    ui.strong("Volume (m³)");
+                    ui.strong("Deck (0..3)");
+                    ui.strong("Long. X (0=stern..1=bow)");
+                    ui.strong("Vert. Z");
+                    ui.strong("Evac Time (s)");
+                    ui.end_row();
+                    for (idx, (cname, cvol)) in comp_names.iter().enumerate() {
+                        ui.label(*cname);
+                        ui.label(format!("{cvol:.0}"));
+                        ui.label(format!("{}", p.decks[idx]));
+                        ui.label(format!("{:.3}", p.longitudinal[idx]));
+                        ui.label(format!("{:.3}", p.centers[idx]));
+                        ui.label(format!("{:.1}", p.evacuation_time_s[idx]));
+                        ui.end_row();
+                    }
+                });
+        }
+    }
+
     fn dashboard_header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.heading(&self.ship.name);
@@ -752,6 +992,8 @@ impl SpringSharpApp {
             ui.label(format!("Speed: {:.1} kt", self.ship.engine.speed_max));
             ui.separator();
             ui.label(format!("Power: {:.0} hp", self.ship.engine.hp_max));
+            ui.separator();
+            ui.label(format!("Broadside: {:.0} lb", self.ship.guns.broadside));
             ui.separator();
             ui.label(format!("GM: {:.1} ft", self.ship.metacentre));
         });
@@ -1084,6 +1326,128 @@ impl SpringSharpApp {
             egui::FontId::monospace(10.0),
             egui::Color32::from_rgb(138, 164, 191),
         );
+
+        ui.separator();
+        ui.heading("Speed & Power Curve");
+        self.draw_speed_power_chart(ui, available_width);
+    }
+
+    fn draw_speed_power_chart(&self, ui: &mut egui::Ui, available_width: f32) {
+        let chart_h = 220.0_f32;
+        let (response, painter) =
+            ui.allocate_painter(egui::vec2(available_width, chart_h), egui::Sense::hover());
+        let rect = response.rect;
+        painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(8, 19, 30));
+
+        let v_top = (self.ship.engine.speed_max + 2.0).max(20.0).ceil();
+        let v_min = 10.0_f64;
+        let mut mod_engine = self.ship.engine.clone();
+        let mut orig_engine = self.ship.engine.clone();
+        orig_engine.resistance_model = ResistanceModel::Original;
+        orig_engine.power_factor = 1.0;
+        orig_engine.original_power_factor = 1.0;
+        orig_engine.blend_weight = 1.0;
+
+        let mut pts = Vec::new();
+        let mut max_hp = 1000.0_f64;
+        let mut v = v_min;
+        while v <= v_top + 1e-6 {
+            let hp_mod = mod_engine.speed_hp_calc(v, &self.ship.hull);
+            let hp_orig = orig_engine.speed_hp_calc(v, &self.ship.hull);
+            if hp_mod > max_hp {
+                max_hp = hp_mod;
+            }
+            if hp_orig > max_hp {
+                max_hp = hp_orig;
+            }
+            pts.push((v as f32, hp_mod as f32, hp_orig as f32));
+            v += 2.0;
+        }
+        max_hp *= 1.12;
+        let max_hp_f = max_hp as f32;
+        let min_v_f = v_min as f32;
+        let max_v_f = (v_top as f32).max(min_v_f + 1.0);
+
+        let pad_l = 65.0_f32;
+        let pad_r = 25.0_f32;
+        let pad_t = 22.0_f32;
+        let pad_b = 30.0_f32;
+        let pw = (rect.width() - pad_l - pad_r).max(100.0);
+        let ph = (rect.height() - pad_t - pad_b).max(60.0);
+
+        let x_at = |spd: f32| rect.left() + pad_l + ((spd - min_v_f) / (max_v_f - min_v_f)) * pw;
+        let y_at = |hp: f32| rect.top() + pad_t + (1.0 - (hp / max_hp_f).clamp(0.0, 1.0)) * ph;
+
+        for i in 0..=4 {
+            let val = max_hp_f * (i as f32 / 4.0);
+            let y = y_at(val);
+            painter.line_segment(
+                [
+                    egui::pos2(rect.left() + pad_l, y),
+                    egui::pos2(rect.left() + pad_l + pw, y),
+                ],
+                egui::Stroke::new(1.0, egui::Color32::from_rgb(28, 45, 66)),
+            );
+            let label = if val >= 1000.0 {
+                format!("{:.0}k hp", val / 1000.0)
+            } else {
+                format!("{val:.0} hp")
+            };
+            painter.text(
+                egui::pos2(rect.left() + pad_l - 6.0, y),
+                egui::Align2::RIGHT_CENTER,
+                label,
+                egui::FontId::monospace(9.5),
+                egui::Color32::from_rgb(138, 164, 191),
+            );
+        }
+
+        for &(spd, _, _) in &pts {
+            let x = x_at(spd);
+            painter.line_segment(
+                [
+                    egui::pos2(x, rect.top() + pad_t),
+                    egui::pos2(x, rect.top() + pad_t + ph),
+                ],
+                egui::Stroke::new(1.0, egui::Color32::from_rgb(22, 35, 52)),
+            );
+            painter.text(
+                egui::pos2(x, rect.top() + pad_t + ph + 12.0),
+                egui::Align2::CENTER_CENTER,
+                format!("{spd:.0} kt"),
+                egui::FontId::monospace(9.0),
+                egui::Color32::from_rgb(138, 164, 191),
+            );
+        }
+
+        let orig_line: Vec<egui::Pos2> = pts
+            .iter()
+            .map(|&(spd, _, hp_o)| egui::pos2(x_at(spd), y_at(hp_o)))
+            .collect();
+        let mod_line: Vec<egui::Pos2> = pts
+            .iter()
+            .map(|&(spd, hp_m, _)| egui::pos2(x_at(spd), y_at(hp_m)))
+            .collect();
+
+        painter.add(egui::Shape::line(
+            orig_line,
+            egui::Stroke::new(1.5, egui::Color32::from_rgb(255, 181, 71)),
+        ));
+        painter.add(egui::Shape::line(
+            mod_line.clone(),
+            egui::Stroke::new(2.2, egui::Color32::from_rgb(79, 179, 255)),
+        ));
+        for pt in mod_line {
+            painter.circle_filled(pt, 2.8, egui::Color32::from_rgb(79, 179, 255));
+        }
+
+        painter.text(
+            egui::pos2(rect.left() + pad_l + 10.0, rect.top() + 8.0),
+            egui::Align2::LEFT_TOP,
+            "■ Current Calibrated Model (cyan)   ■ Original Baseline (amber)",
+            egui::FontId::monospace(10.0),
+            egui::Color32::from_rgb(219, 231, 243),
+        );
     }
 }
 
@@ -1103,13 +1467,51 @@ impl eframe::App for SpringSharpApp {
                 Page::Freeboard => self.page_freeboard(ui),
                 Page::Armour => self.page_armour(ui),
                 Page::Guns => self.page_guns(ui),
+                Page::Weapons => self.page_weapons(ui),
                 Page::Engine => self.page_engine(ui),
                 Page::Blueprint => self.page_blueprint(ui),
+                Page::Spaces => self.page_spaces(ui),
                 Page::Calibration => self.page_calibration(ui),
                 Page::Report => self.page_report(ui),
             });
         });
     }
+}
+
+fn weapon_mount_ui(ui: &mut egui::Ui, title: &str, id_salt: &str, m: &mut WeaponMount) {
+    egui::CollapsingHeader::new(title)
+        .id_salt(id_salt)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Weapon kind:");
+                egui::ComboBox::from_id_salt(format!("{id_salt}_kind"))
+                    .selected_text(match m.kind {
+                        WeaponKind::Torpedo => "Torpedo",
+                        WeaponKind::Mine => "Mine",
+                        WeaponKind::DepthCharge => "Depth charge / AS mortar",
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut m.kind, WeaponKind::Torpedo, "Torpedo");
+                        ui.selectable_value(&mut m.kind, WeaponKind::Mine, "Mine");
+                        ui.selectable_value(
+                            &mut m.kind,
+                            WeaponKind::DepthCharge,
+                            "Depth charge / AS mortar",
+                        );
+                    });
+            });
+            drag_i32(ui, "Number of tubes / weapons", &mut m.number);
+            drag_i32(ui, "Loads / reloads", &mut m.loads);
+            drag_f64(
+                ui,
+                "Size (in diameter / lb charge)",
+                &mut m.size,
+                0.5,
+                0.0..=5000.0,
+            );
+            drag_f64(ui, "Length (ft, torpedo)", &mut m.length, 0.5, 0.0..=100.0);
+            drag_i32(ui, "Location index (0..8)", &mut m.location);
+        });
 }
 
 fn combo_i32(ui: &mut egui::Ui, label: &str, value: &mut i32, options: &[&str]) {
