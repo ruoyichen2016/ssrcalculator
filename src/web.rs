@@ -14,10 +14,10 @@ use crate::model::{ResistanceModel, ShipModel};
 use crate::{
     apply_blend_calibration, apply_regime_calibration, compartment_placement_html,
     compute_planing_calibration, deserialize, external_report_html, fit_reduced_form_with_external,
-    fit_structural_form_with_external, generate_html_report, generate_report, is_planing_eligible,
-    nearest_historical_cases, parse_external_cases, planing_hp_estimate_calibrated,
-    run_loocv_with_external_weighted, serialize, solve_max_speed, solve_range,
-    suggest_compartment_placement,
+    fit_structural_form_with_external, generate_html_report, generate_report, get_preset,
+    is_planing_eligible, nearest_historical_cases, parse_external_cases,
+    planing_hp_estimate_calibrated, run_loocv_with_external_weighted, serialize, solve_max_speed,
+    solve_range, suggest_compartment_placement, PRESET_LIST,
 };
 
 const PAGE_TEMPLATE: &str = include_str!("web_page.html");
@@ -39,6 +39,23 @@ const MOUNT_TYPES: &[&str] = &[
     "Deck and hoist",
     "Deck mount",
     "Casemate",
+];
+const GUNS_IN_MOUNT: &[&str] = &[
+    "Single mount (1)",
+    "2 row twin mount (2)",
+    "4 row quad mount (4)",
+    "Twin mount (2)",
+    "2-gun mount (2)",
+    "2 row quad mount (4)",
+    "Triple mount (3)",
+    "3-gun mount (3)",
+    "2 row sextuple mount (6)",
+    "Quad mount (4)",
+    "4-gun mount (4)",
+    "2 row octuple mount (8)",
+    "Quintuple mount (5)",
+    "5-gun mount (5)",
+    "2 row decuple mount (10)",
 ];
 const LAYOUTS: &[&str] = &[
     "Centreline - distributed",
@@ -348,9 +365,10 @@ fn gun_section(i: usize) -> String {
             "Layout",
             LAYOUTS,
         ));
-        h.push_str(&number_input(
+        h.push_str(&select_input(
             &format!("{p}.guns_in_mount_g{g}"),
-            "Guns-per-mount index",
+            "Barrels per mount",
+            GUNS_IN_MOUNT,
         ));
         h.push_str(&number_input(
             &format!("{p}.mount_super_g{g}"),
@@ -525,6 +543,37 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         ("nearest", format!("[{nearest}]")),
         ("report", json_str(&report)),
         ("ssr", json_str(&serialize(ship))),
+        // Blueprint geometry
+        ("length", json_num(h.length)),
+        ("beam", json_num(h.beam)),
+        ("draught", json_num(h.draught)),
+        ("fc_len", json_num(ship.free.fc_length)),
+        ("fd_len", json_num(ship.free.fd_length)),
+        ("qd_len", json_num(ship.free.qd_length)),
+        ("ffc_fwd", json_num(ship.free.free_fc_for)),
+        ("ffc_aft", json_num(ship.free.free_fc_aft)),
+        ("ffd_fwd", json_num(ship.free.free_fd_for)),
+        ("ffd_aft", json_num(ship.free.free_fd_aft)),
+        ("fad_fwd", json_num(ship.free.free_ad_for)),
+        ("fad_aft", json_num(ship.free.free_ad_aft)),
+        ("fqd_fwd", json_num(ship.free.free_qd_for)),
+        ("fqd_aft", json_num(ship.free.free_qd_aft)),
+        ("belt_len", json_num(ship.armour.belt_main_length)),
+        ("belt_ht", json_num(ship.armour.belt_main_height)),
+        ("belt_thick", json_num(ship.armour.belt_main)),
+        ("deck_thick", json_num(ship.armour.deck)),
+        ("g1_calibre", json_num(g.batteries[0].calibre)),
+        ("g1_mounts", json_num(g.batteries[0].mounts as f64)),
+        ("g1_layout1", json_num(g.batteries[0].layout_g1 as f64)),
+        ("g1_layout2", json_num(g.batteries[0].layout_g2 as f64)),
+        ("g1_m1", json_num(g.batteries[0].mounts_g1 as f64)),
+        ("g1_m2", json_num(g.batteries[0].mounts_g2 as f64)),
+        ("g1_bpm1", json_num(g.batteries[0].per_mount_g1 as f64)),
+        ("g1_bpm2", json_num(g.batteries[0].per_mount_g2 as f64)),
+        ("g2_calibre", json_num(g.batteries[1].calibre)),
+        ("g2_mounts", json_num(g.batteries[1].mounts as f64)),
+        ("g2_layout1", json_num(g.batteries[1].layout_g1 as f64)),
+        ("g2_m1", json_num(g.batteries[1].mounts_g1 as f64)),
     ];
     let body = fields
         .iter()
@@ -660,12 +709,44 @@ fn design_action(path: &str) -> Option<&'static str> {
     })
 }
 
+fn presets_json() -> String {
+    let items = PRESET_LIST
+        .iter()
+        .map(|p| {
+            format!(
+                "{{\"id\":{},\"name\":{},\"country\":{},\"ship_type\":{},\"year\":{},\"displacement\":{}}}",
+                json_str(p.id),
+                json_str(p.name),
+                json_str(p.country),
+                json_str(p.ship_type),
+                p.year,
+                json_num(p.displacement_tons)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{items}]")
+}
+
 fn route(method: &str, path: &str, body_text: &str) -> (u16, &'static str, String) {
     match (method, path) {
         ("GET", "/" | "/index.html") => (200, "text/html; charset=utf-8", html_page()),
         ("GET", "/api/demo") => {
             let ship = crate::features::demo_ship();
             (200, "text/plain; charset=utf-8", serialize(&ship))
+        }
+        ("GET", "/api/presets") => (200, "application/json; charset=utf-8", presets_json()),
+        ("GET", p) if p.starts_with("/api/presets/") => {
+            let id = p.trim_start_matches("/api/presets/");
+            if let Some(ship) = get_preset(id) {
+                (200, "text/plain; charset=utf-8", serialize(&ship))
+            } else {
+                (
+                    404,
+                    "text/plain; charset=utf-8",
+                    "Preset not found".to_string(),
+                )
+            }
         }
         ("GET", "/api/health") => (200, "text/plain; charset=utf-8", "ok".to_string()),
         ("POST", p) if design_action(p).is_some() => {

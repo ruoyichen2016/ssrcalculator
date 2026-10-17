@@ -412,3 +412,29 @@ still 10.36% / blended 9.81%):
   open/save and self-contained static HTML export.
 - Form values are merged over the last full save text, so keys without a form
   field are no longer dropped on recalculation.  4 new web tests.
+
+## Phase 29 — semantic dropdowns & live SVG blueprint (completed 2026-10-17)
+
+- Added mount description mapping (`Single`, `Twin`, `Triple`, `Quad`, etc.)
+  matching original SpringSharp 3.0 mount options for `guns_in_mount_g1` and `guns_in_mount_g2`.
+- Blueprint geometry dimensions exposed in `/api/evaluate`: length, beam, draught,
+  forecastle/fore-deck/quarter-deck lengths, freeboard shear profile heights,
+  main belt armor dimensions, and primary/secondary turret placements.
+- Live interactive SVG ship blueprint in Workbench dashboard:
+  - **Profile view**: Waterline, draught keel line, deck step shear profile,
+    superstructure bridge/funnel silhouette, main belt armor overlay with thickness,
+    and profile turret mounts.
+  - **Plan view**: Beam curvature contour, centerline, main and secondary battery
+    mounts positioned longitudinally according to layout geometry with caliber scaling.
+  - Blueprint SVG is natively retained and embedded in standalone HTML report exports.
+
+## Phase 30 — historical ship presets library (completed 2026-10-17)
+
+- Added `src/presets.rs` containing 8 fully configured historical naval designs:
+  *HMS Dreadnought* (1906), *Bismarck* (1940), *USS Iowa* (1943), *IJN Yamato* (1941),
+  *USS Baltimore* (1943), *HMS Belfast* (1939), *USS Fletcher* (1942), and *IJN Shimakaze* (1943).
+- Verification test `presets_all_calculate_and_converge` guarantees every preset
+  converges weights and yields positive physical displacements and power.
+- REST endpoints `/api/presets` and `/api/presets/{id}` added to `src/web.rs`.
+- Web UI toolbar provides a one-click dropdown to instantly load any historical preset.
+

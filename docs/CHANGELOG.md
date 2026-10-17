@@ -1,5 +1,20 @@
 # Project change log
 
+## Unreleased (Phase 29 & 30) — Presets Library & Interactive SVG Blueprint
+
+- **Built-in historical ship presets library** (`src/presets.rs`):
+  8 fully configured historical models (*HMS Dreadnought*, *Bismarck*, *USS Iowa*,
+  *IJN Yamato*, *USS Baltimore*, *HMS Belfast*, *USS Fletcher*, *IJN Shimakaze*)
+  with guaranteed weight convergence and positive physical characteristics.
+- **REST preset endpoints**: `/api/presets` and `/api/presets/{id}` in `src/web.rs`.
+- **Workbench UI enhancements**:
+  - Semantic mount descriptions for gun battery 1 & 2 (`Single`, `Twin`, `Triple`, etc.).
+  - Instant one-click historical ship preset selector.
+  - Live interactive SVG blueprint rendered in the dashboard (profile view with waterline,
+    freeboard shear profile, draught keel, armor belt, profile turrets; plan view with beam
+    curvature and caliber-scaled turret mounts).
+  - Standalone HTML export embeds the live SVG ship blueprint.
+
 ## 0.3.0 (2026-09-27) — hardening release
 
 No accuracy baseline changed (`validate-regime` 10.36% case-weighted, blended
