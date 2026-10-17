@@ -149,6 +149,7 @@ __FORM__
       <div id="calibOut" class="out"></div>
     </div>
     <div class="tab" data-tab="analysis">
+      <div id="presetBench"></div>
       <h2>Closest historical ships</h2>
       <p class="hint">Context only: ranked by type, displacement, speed and length. Reference power figures are approximate public data.</p>
       <div id="nearest"></div>
@@ -549,6 +550,33 @@ function render(r) {
   $('#dReport').textContent = r.report;
   $('#nearest').innerHTML = r.nearest.length ? `<table><tr><th>Ship</th><th>Type</th><th class="num">Disp. (t)</th><th class="num">Speed (kt)</th><th class="num">Length (ft)</th><th class="num">Power (hp)</th></tr>` +
     r.nearest.map(n => `<tr><td>${esc(n.name)}</td><td>${esc(n.ship_type)}</td><td class="num">${fmt(n.displacement)}</td><td class="num">${fmt(n.speed, 1)}</td><td class="num">${fmt(n.length)}</td><td class="num">${fmt(n.hp)}</td></tr>`).join('') + '</table>' : '';
+  const pb = $('#presetBench');
+  if (pb) {
+    if (r.benchmark) {
+      const b = r.benchmark;
+      const errCell = (sim, ref) => {
+        if (!ref || ref <= 0) return '–';
+        const pct = (sim - ref) / ref * 100;
+        return (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+      };
+      const rows = [
+        ['Normal displacement (t)', fmt(r.disp_normal), fmt(b.ref_disp), errCell(r.disp_normal, b.ref_disp)],
+        ['Hull structure (t)', fmt(b.sim_hull), fmt(b.ref_hull), errCell(b.sim_hull, b.ref_hull)],
+        ['Armour + barbettes (t)', fmt(b.sim_armour), fmt(b.ref_armour), b.ref_armour >= 500 ? errCell(b.sim_armour, b.ref_armour) : 'n/a (splinter)'],
+        ['Machinery (t)', fmt(b.sim_machinery), fmt(b.ref_machinery), errCell(b.sim_machinery, b.ref_machinery)],
+        ['Armament + ammo (t)', fmt(b.sim_armament), fmt(b.ref_armament), errCell(b.sim_armament, b.ref_armament)],
+        ['Normal bunker (t)', fmt(b.sim_bunker), fmt(b.ref_bunker), errCell(b.sim_bunker, b.ref_bunker)],
+        ['Metacentric height GM (ft)', fmt(b.sim_gm, 2), fmt(b.ref_gm, 2), errCell(b.sim_gm, b.ref_gm)],
+      ];
+      pb.innerHTML = `<h2>Historical subsystem weight &amp; stability benchmark (${esc(b.name)})</h2>` +
+        `<p class="hint">Source: ${esc(b.source)}. Compares simulated subsystem breakdown against published naval-architecture weight statements.</p>` +
+        `<table><tr><th>Subsystem / Metric</th><th class="num">Simulated</th><th class="num">Historical Ref</th><th class="num">Rel. Error</th></tr>` +
+        rows.map(([k, s, rf, e]) => `<tr><td>${k}</td><td class="num">${s}</td><td class="num">${rf}</td><td class="num">${e}</td></tr>`).join('') +
+        `</table>`;
+    } else {
+      pb.innerHTML = '';
+    }
+  }
 }
 
 // ---- files ----

@@ -76,6 +76,7 @@ fn run_cli(args: &[String]) -> Result<(), cli::CliError> {
         "accuracy-target" => crate::cli::validation::run(cmd, args)?,
         "validate-types" => crate::cli::validation::run(cmd, args)?,
         "validate-holdout" => crate::cli::validation::run(cmd, args)?,
+        "validate-weights" => crate::cli::validation::run(cmd, args)?,
         "validate" => crate::cli::validation::run(cmd, args)?,
         "web" => crate::cli::web::run(cmd, args)?,
         "savitsky-hp" => crate::cli::planing::run(cmd, args)?,

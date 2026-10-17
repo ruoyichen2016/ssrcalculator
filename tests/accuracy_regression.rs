@@ -241,3 +241,47 @@ fn regime_table_is_well_formed_and_applicable() {
     );
     assert!(ship.engine.power_factor > 0.0);
 }
+
+#[test]
+fn preset_weights_and_stability_do_not_regress() {
+    let report = springsharp::validate_preset_weights();
+    assert_eq!(report.rows.len(), 8);
+    assert_eq!(
+        report.physical_hull_count, 8,
+        "all 8 historical presets must produce positive hull weight (0 < hull < disp)"
+    );
+    assert_eq!(
+        report.positive_magazine_count, 8,
+        "all 8 historical presets must allocate positive magazine volume"
+    );
+    assert_eq!(
+        report.converged_count, 8,
+        "all 8 historical presets must converge in the weight/displacement loop"
+    );
+
+    assert!(
+        report.disp_mape <= 0.05,
+        "normal displacement MAPE {:.2}% exceeded 5% baseline",
+        report.disp_mape * 100.0
+    );
+    assert!(
+        report.armour_mape <= 0.10,
+        "armour weight MAPE {:.2}% (6 armoured ships) exceeded 10% baseline",
+        report.armour_mape * 100.0
+    );
+    assert!(
+        report.gm_mape <= 0.16,
+        "metacentric height GM MAPE {:.2}% exceeded 16% baseline",
+        report.gm_mape * 100.0
+    );
+    assert!(
+        report.hull_armoured_mape <= 0.18,
+        "armoured-ship hull weight MAPE {:.2}% exceeded 18% baseline",
+        report.hull_armoured_mape * 100.0
+    );
+    assert!(
+        report.armament_armoured_mape <= 0.20,
+        "armoured-ship armament+ammo weight MAPE {:.2}% exceeded 20% baseline",
+        report.armament_armoured_mape * 100.0
+    );
+}

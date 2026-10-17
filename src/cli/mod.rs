@@ -140,6 +140,7 @@ COMMANDS:
   validate-types       Show validation errors grouped by ship type
   validate-holdout     Out-of-sample check (calibration fit on training split only)
   validate-regime      Nested-LOOCV comparison of regime model vs original baseline
+  validate-weights     Compare subsystem weights & GM on the 8 full-ship presets
   regime-residuals     Per-case nested-LOOCV residuals (historical speed/power)
   regime-compare       Paired comparison: regime vs original SpringSharp baseline
   validation-audit     Historical data coverage by model family
@@ -196,7 +197,7 @@ COMMANDS:
 
 Grouped aliases (flat names still work):
   calibrate <stats|regime|type|ridge|lasso|structural|external> ...
-  validate  <types|holdout|regime|audit>
+  validate  <types|holdout|regime|weights|audit>
   data      <score|progress|target|targets|tiers|priority|sources|replace-log|version|consistency|outliers>
   regime    <show|apply|validate|residuals|compare>
   accuracy  target [mape]
@@ -231,7 +232,7 @@ pub(crate) fn normalize_grouped_command(mut args: Vec<String>) -> Vec<String> {
             s @ ("score" | "progress" | "target" | "targets" | "tiers" | "priority" | "sources"
             | "replace-log" | "version"),
         ) => Some(format!("data-{s}")),
-        ("validate", s @ ("types" | "holdout")) => Some(format!("validate-{s}")),
+        ("validate", s @ ("types" | "holdout" | "weights")) => Some(format!("validate-{s}")),
         ("validate", "audit") => Some("validation-audit".to_string()),
         ("accuracy", "target") => Some("accuracy-target".to_string()),
         ("regime", "show") => Some("regime-table".to_string()),

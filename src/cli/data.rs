@@ -251,8 +251,12 @@ pub(crate) fn run(cmd: &str, args: &[String]) -> Result<(), CliError> {
             println!("  cases: {}", a.case_count);
             println!("  speed/power references: {}", a.speed_power_cases);
             println!(
-                "  structural-weight references: {}",
+                "  structural-weight references (minimal 146-ship dataset): {}",
                 a.structural_weight_cases
+            );
+            println!(
+                "  full-design preset weight & stability benchmarks: {} (run `validate-weights`)",
+                a.preset_weight_cases
             );
             println!("  internal-space references: {}", a.space_cases);
             println!("  general-arrangement references: {}", a.arrangement_cases);

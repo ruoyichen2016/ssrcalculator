@@ -1,11 +1,19 @@
 # Project change log
 
-## Unreleased (Phase 29 & 30) — Presets Library & Interactive SVG Blueprint
+## Unreleased (Phases 29, 30 & 31) — Presets Library, Live SVG Blueprint & Subsystem Weight Validation
 
 - **Built-in historical ship presets library** (`src/presets.rs`):
   8 fully configured historical models (*HMS Dreadnought*, *Bismarck*, *USS Iowa*,
   *IJN Yamato*, *USS Baltimore*, *HMS Belfast*, *USS Fletcher*, *IJN Shimakaze*)
   with guaranteed weight convergence and positive physical characteristics.
+- **Subsystem weight & stability benchmark validation** (`validate-weights` / `validate_preset_weights`):
+  - Benchmarks simulated displacement, hull structure, armour + barbettes, machinery,
+    armament + ammunition, normal bunker, and transverse metacentric height ($GM$)
+    against published naval-architecture references across all 8 full-design presets.
+  - Achieves **3.59%** normal displacement MAPE, **7.64%** armour weight MAPE (6 armoured
+    warships), **12.95%** $GM$ MAPE, and **14.72%** armoured-ship hull weight MAPE,
+    enforced by `preset_weights_and_stability_do_not_regress` in `tests/accuracy_regression.rs`.
+  - Updated `validation-audit` to report the 8 full-design preset weight & stability benchmarks.
 - **REST preset endpoints**: `/api/presets` and `/api/presets/{id}` in `src/web.rs`.
 - **Workbench UI enhancements**:
   - Semantic mount descriptions for gun battery 1 & 2 (`Single`, `Twin`, `Triple`, etc.).
@@ -13,6 +21,9 @@
   - Live interactive SVG blueprint rendered in the dashboard (profile view with waterline,
     freeboard shear profile, draught keel, armor belt, profile turrets; plan view with beam
     curvature and caliber-scaled turret mounts).
+  - Historical subsystem weight & stability comparison table in the Analysis tab whenever
+    a preset design is evaluated, plus a fix for double-counted gun armour (`g.arm_weight`)
+    in the dashboard weight distribution bar.
   - Standalone HTML export embeds the live SVG ship blueprint.
 
 ## 0.3.0 (2026-09-27) — hardening release

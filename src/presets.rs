@@ -111,7 +111,7 @@ fn preset_dreadnought() -> ShipModel {
     ship.hull.beam = 82.0;
     ship.hull.beam_bulges = 82.0;
     ship.hull.draught = 26.5;
-    ship.hull.block = 0.61;
+    ship.hull.block = 0.56;
     ship.hull.date_hull = 1906;
     ship.hull.date_engine = 1906;
 
@@ -134,18 +134,19 @@ fn preset_dreadnought() -> ShipModel {
     g1.cal_length = 45.0;
     g1.date_gun = 1906;
     g1.gun_type = 1; // Breech loading
-    g1.mount_type = 5; // Deck mount
+    g1.mount_type = 3; // Turret on barbette
     g1.magazine = 80;
     g1.mounts = 5;
     g1.guns_in_mount_g1 = 3; // Twin mount
-    g1.layout_g1 = 1; // Centreline ends
-    g1.mount_super_g1 = 3;
+    g1.layout_g1 = 2; // Centreline ends (aft >= fore: 1 fore, 2 aft)
+    g1.mount_super_g1 = 0;
     g1.guns_in_mount_g2 = 3; // Twin mount
     g1.layout_g2 = 9; // Sides - distributed (wing turrets)
-    g1.mount_super_g2 = 2;
+    g1.mount_deck_g2 = 2;
+    g1.mount_super_g2 = 0;
     g1.arm_face = 11.0;
     g1.arm_back = 8.0;
-    g1.arm_bottom = 4.0;
+    g1.arm_bottom = 8.0;
 
     // 27 x 12-pdr (3") anti-torpedo boat guns
     let g2 = ship.battery_mut(1);
@@ -249,7 +250,7 @@ fn preset_bismarck() -> ShipModel {
     g1.mount_super_g1 = 2; // Superfiring fore & aft
     g1.arm_face = 14.2;
     g1.arm_back = 8.7;
-    g1.arm_bottom = 4.0;
+    g1.arm_bottom = 13.4;
 
     // 12 x 15cm SK C/28 secondary in 6 twin turrets
     let g2 = ship.battery_mut(1);
@@ -816,6 +817,325 @@ fn preset_shimakaze() -> ShipModel {
     ship
 }
 
+/// Published historical subsystem weight & stability reference for a preset ship.
+///
+/// Accounting convention (matching SpringSharp's output groups):
+/// - `ref_hull_t`: hull structure, fittings and general outfit (`engine.hull_weight`).
+/// - `ref_armour_t`: total armour protection including belt, deck, bulkheads,
+///   conning tower and turret/barbette armour (`armour.weight`).
+/// - `ref_machinery_t`: propulsion plant weight (`engine.engine_weight`).
+/// - `ref_armament_t`: guns, mountings, ammunition and torpedo/ASW weights,
+///   excluding heavy turret/barbette armour (`guns.guns_weight + guns.magazine + weapons.weight`).
+/// - `ref_bunker_t`: normal fuel load (`engine.bunker`).
+/// - `ref_gm_ft`: transverse metacentric height GM in feet (`metacentre`).
+#[derive(Clone, Copy, Debug)]
+pub struct PresetWeightBenchmark {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub ship_type: &'static str,
+    pub year: i32,
+    pub ref_displacement_t: f64,
+    pub ref_hull_t: f64,
+    pub ref_armour_t: f64,
+    pub ref_machinery_t: f64,
+    pub ref_armament_t: f64,
+    pub ref_bunker_t: f64,
+    pub ref_gm_ft: f64,
+    pub source: &'static str,
+}
+
+pub const PRESET_WEIGHT_BENCHMARKS: &[PresetWeightBenchmark] = &[
+    PresetWeightBenchmark {
+        id: "dreadnought",
+        name: "HMS Dreadnought",
+        ship_type: "Battleship",
+        year: 1906,
+        ref_displacement_t: 18_110.0,
+        ref_hull_t: 6_660.0,
+        ref_armour_t: 6_050.0,
+        ref_machinery_t: 2_050.0,
+        ref_armament_t: 2_050.0,
+        ref_bunker_t: 900.0,
+        ref_gm_ft: 5.0,
+        source: "Roberts (1992) Anatomy of the Ship: HMS Dreadnought; Conway's 1906-1921",
+    },
+    PresetWeightBenchmark {
+        id: "bismarck",
+        name: "Bismarck",
+        ship_type: "Battleship",
+        year: 1940,
+        ref_displacement_t: 45_950.0,
+        ref_hull_t: 16_800.0,
+        ref_armour_t: 18_700.0,
+        ref_machinery_t: 4_050.0,
+        ref_armament_t: 4_550.0,
+        ref_bunker_t: 3_200.0,
+        ref_gm_ft: 13.1,
+        source: "Garzke & Dulin (1985) Battleships: Axis and Neutral; Gröner",
+    },
+    PresetWeightBenchmark {
+        id: "iowa",
+        name: "USS Iowa",
+        ship_type: "Battleship",
+        year: 1943,
+        ref_displacement_t: 55_000.0,
+        ref_hull_t: 21_500.0,
+        ref_armour_t: 18_400.0,
+        ref_machinery_t: 4_900.0,
+        ref_armament_t: 5_200.0,
+        ref_bunker_t: 4_000.0,
+        ref_gm_ft: 7.5,
+        source: "Friedman (1985) U.S. Battleships; Garzke & Dulin (1995)",
+    },
+    PresetWeightBenchmark {
+        id: "yamato",
+        name: "IJN Yamato",
+        ship_type: "Battleship",
+        year: 1941,
+        ref_displacement_t: 65_000.0,
+        ref_hull_t: 23_500.0,
+        ref_armour_t: 22_895.0,
+        ref_machinery_t: 5_215.0,
+        ref_armament_t: 7_800.0,
+        ref_bunker_t: 4_200.0,
+        ref_gm_ft: 11.0,
+        source: "Garzke & Dulin (1985); Lengerer",
+    },
+    PresetWeightBenchmark {
+        id: "baltimore",
+        name: "USS Baltimore",
+        ship_type: "Heavy cruiser",
+        year: 1943,
+        ref_displacement_t: 15_500.0,
+        ref_hull_t: 6_900.0,
+        ref_armour_t: 3_700.0,
+        ref_machinery_t: 2_100.0,
+        ref_armament_t: 1_550.0,
+        ref_bunker_t: 1_100.0,
+        ref_gm_ft: 5.5,
+        source: "Friedman (1984) U.S. Cruisers",
+    },
+    PresetWeightBenchmark {
+        id: "belfast",
+        name: "HMS Belfast",
+        ship_type: "Light cruiser",
+        year: 1939,
+        ref_displacement_t: 11_550.0,
+        ref_hull_t: 5_350.0,
+        ref_armour_t: 2_550.0,
+        ref_machinery_t: 1_550.0,
+        ref_armament_t: 1_050.0,
+        ref_bunker_t: 950.0,
+        ref_gm_ft: 5.1,
+        source: "Raven & Roberts (1980) British Cruisers; Watton",
+    },
+    PresetWeightBenchmark {
+        id: "fletcher",
+        name: "USS Fletcher",
+        ship_type: "Destroyer",
+        year: 1942,
+        ref_displacement_t: 2_500.0,
+        ref_hull_t: 980.0,
+        ref_armour_t: 140.0,
+        ref_machinery_t: 690.0,
+        ref_armament_t: 260.0,
+        ref_bunker_t: 350.0,
+        ref_gm_ft: 3.6,
+        source: "Friedman (1982) U.S. Destroyers",
+    },
+    PresetWeightBenchmark {
+        id: "shimakaze",
+        name: "IJN Shimakaze",
+        ship_type: "Destroyer",
+        year: 1943,
+        ref_displacement_t: 2_900.0,
+        ref_hull_t: 1_150.0,
+        ref_armour_t: 80.0,
+        ref_machinery_t: 820.0,
+        ref_armament_t: 360.0,
+        ref_bunker_t: 420.0,
+        ref_gm_ft: 3.4,
+        source: "Conway's All the World's Fighting Ships 1922-1946; Stille",
+    },
+];
+
+/// Look up the historical weight/stability benchmark for a preset by ID or ship name.
+pub fn get_preset_benchmark(id_or_name: &str) -> Option<&'static PresetWeightBenchmark> {
+    let q = id_or_name.trim();
+    PRESET_WEIGHT_BENCHMARKS
+        .iter()
+        .find(|b| b.id.eq_ignore_ascii_case(q) || b.name.eq_ignore_ascii_case(q))
+}
+
+/// Per-ship comparison between SpringSharp's simulated subsystem weights/GM and
+/// published naval-architecture references.
+#[derive(Clone, Debug)]
+pub struct PresetWeightValidationRow {
+    pub benchmark: PresetWeightBenchmark,
+    pub sim_displacement_t: f64,
+    pub sim_hull_t: f64,
+    pub sim_armour_t: f64,
+    pub sim_hull_armour_t: f64,
+    pub sim_gun_armour_t: f64,
+    pub sim_machinery_t: f64,
+    pub sim_armament_t: f64,
+    pub sim_bunker_t: f64,
+    pub sim_gm_ft: f64,
+    pub sim_strength_comp: f64,
+    pub sim_magazine_vol_m3: f64,
+    pub sim_room_ratio: f64,
+    pub converged: bool,
+    pub disp_err_pct: f64,
+    pub hull_err_pct: f64,
+    /// `Some(pct)` for armoured ships (`ref_armour_t >= 500.0`), `None` for
+    /// unarmoured destroyers where splinter plating is negligible.
+    pub armour_err_pct: Option<f64>,
+    pub machinery_err_pct: f64,
+    pub armament_err_pct: f64,
+    pub gm_err_pct: f64,
+}
+
+/// Summary of subsystem weight, stability and space validation across all built-in presets.
+#[derive(Clone, Debug)]
+pub struct WeightValidationReport {
+    pub rows: Vec<PresetWeightValidationRow>,
+    pub disp_mape: f64,
+    pub hull_mape: f64,
+    pub hull_armoured_mape: f64,
+    pub armour_mape: f64,
+    pub machinery_mape: f64,
+    pub machinery_armoured_mape: f64,
+    pub armament_mape: f64,
+    pub armament_armoured_mape: f64,
+    pub gm_mape: f64,
+    pub physical_hull_count: usize,
+    pub positive_magazine_count: usize,
+    pub converged_count: usize,
+}
+
+fn rel_err_pct(sim: f64, reference: f64) -> f64 {
+    if reference.abs() > f64::EPSILON {
+        (sim - reference) / reference * 100.0
+    } else {
+        0.0
+    }
+}
+
+fn mean_abs_pct(values: impl Iterator<Item = f64>) -> f64 {
+    let mut sum = 0.0;
+    let mut n = 0_usize;
+    for v in values {
+        sum += v.abs() / 100.0;
+        n += 1;
+    }
+    if n > 0 {
+        sum / n as f64
+    } else {
+        0.0
+    }
+}
+
+/// Run subsystem weight, stability ($GM$) and internal-space validation across
+/// all 8 complete historical ship presets.
+pub fn validate_preset_weights() -> WeightValidationReport {
+    let mut rows = Vec::with_capacity(PRESET_WEIGHT_BENCHMARKS.len());
+    let mut physical_hull_count = 0_usize;
+    let mut positive_magazine_count = 0_usize;
+    let mut converged_count = 0_usize;
+
+    for &b in PRESET_WEIGHT_BENCHMARKS {
+        let ship = get_preset(b.id).expect("benchmark id must match a built-in preset");
+        let spaces = crate::spaces::calculate_internal_spaces(&ship);
+
+        let sim_displacement_t = ship.hull.displacement;
+        let sim_hull_t = ship.engine.hull_weight;
+        let sim_armour_t = ship.armour.weight;
+        let sim_gun_armour_t = ship.guns.arm_weight;
+        let sim_hull_armour_t = (sim_armour_t - sim_gun_armour_t).max(0.0);
+        let sim_machinery_t = ship.engine.engine_weight;
+        let sim_armament_t = ship.guns.guns_weight + ship.guns.magazine + ship.weapons.weight;
+        let sim_bunker_t = ship.engine.bunker;
+        let sim_gm_ft = ship.metacentre;
+
+        if sim_hull_t.is_finite() && sim_hull_t > 0.0 && sim_hull_t < sim_displacement_t {
+            physical_hull_count += 1;
+        }
+        if spaces.magazine_volume_m3 > 0.0 {
+            positive_magazine_count += 1;
+        }
+        if ship.converged {
+            converged_count += 1;
+        }
+
+        let armour_err_pct = if b.ref_armour_t >= 500.0 {
+            Some(rel_err_pct(sim_armour_t, b.ref_armour_t))
+        } else {
+            None
+        };
+
+        rows.push(PresetWeightValidationRow {
+            benchmark: b,
+            sim_displacement_t,
+            sim_hull_t,
+            sim_armour_t,
+            sim_hull_armour_t,
+            sim_gun_armour_t,
+            sim_machinery_t,
+            sim_armament_t,
+            sim_bunker_t,
+            sim_gm_ft,
+            sim_strength_comp: ship.strength_comp,
+            sim_magazine_vol_m3: spaces.magazine_volume_m3,
+            sim_room_ratio: spaces.room_hull_improved,
+            converged: ship.converged,
+            disp_err_pct: rel_err_pct(sim_displacement_t, b.ref_displacement_t),
+            hull_err_pct: rel_err_pct(sim_hull_t, b.ref_hull_t),
+            armour_err_pct,
+            machinery_err_pct: rel_err_pct(sim_machinery_t, b.ref_machinery_t),
+            armament_err_pct: rel_err_pct(sim_armament_t, b.ref_armament_t),
+            gm_err_pct: rel_err_pct(sim_gm_ft, b.ref_gm_ft),
+        });
+    }
+
+    let disp_mape = mean_abs_pct(rows.iter().map(|r| r.disp_err_pct));
+    let hull_mape = mean_abs_pct(rows.iter().map(|r| r.hull_err_pct));
+    let hull_armoured_mape = mean_abs_pct(
+        rows.iter()
+            .filter(|r| r.armour_err_pct.is_some())
+            .map(|r| r.hull_err_pct),
+    );
+    let armour_mape = mean_abs_pct(rows.iter().filter_map(|r| r.armour_err_pct));
+    let machinery_mape = mean_abs_pct(rows.iter().map(|r| r.machinery_err_pct));
+    let machinery_armoured_mape = mean_abs_pct(
+        rows.iter()
+            .filter(|r| r.armour_err_pct.is_some())
+            .map(|r| r.machinery_err_pct),
+    );
+    let armament_mape = mean_abs_pct(rows.iter().map(|r| r.armament_err_pct));
+    let armament_armoured_mape = mean_abs_pct(
+        rows.iter()
+            .filter(|r| r.armour_err_pct.is_some())
+            .map(|r| r.armament_err_pct),
+    );
+    let gm_mape = mean_abs_pct(rows.iter().map(|r| r.gm_err_pct));
+
+    WeightValidationReport {
+        rows,
+        disp_mape,
+        hull_mape,
+        hull_armoured_mape,
+        armour_mape,
+        machinery_mape,
+        machinery_armoured_mape,
+        armament_mape,
+        armament_armoured_mape,
+        gm_mape,
+        physical_hull_count,
+        positive_magazine_count,
+        converged_count,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -841,5 +1161,36 @@ mod tests {
                 info.id
             );
         }
+    }
+
+    #[test]
+    fn preset_weight_validation_runs_and_is_physical() {
+        let report = validate_preset_weights();
+        assert_eq!(report.rows.len(), PRESET_LIST.len());
+        assert_eq!(report.physical_hull_count, PRESET_LIST.len());
+        assert_eq!(report.positive_magazine_count, PRESET_LIST.len());
+        assert_eq!(report.converged_count, PRESET_LIST.len());
+        assert!(
+            report.armour_mape < 0.15,
+            "armour MAPE {:.2}% exceeded 15%",
+            report.armour_mape * 100.0
+        );
+        assert!(
+            report.gm_mape < 0.20,
+            "GM MAPE {:.2}% exceeded 20%",
+            report.gm_mape * 100.0
+        );
+        println!(
+            "disp_mape={:.2}% hull_arm={:.2}% hull_all={:.2}% arm={:.2}% mach_arm={:.2}% mach_all={:.2}% wpn_arm={:.2}% wpn_all={:.2}% gm={:.2}%",
+            report.disp_mape * 100.0,
+            report.hull_armoured_mape * 100.0,
+            report.hull_mape * 100.0,
+            report.armour_mape * 100.0,
+            report.machinery_armoured_mape * 100.0,
+            report.machinery_mape * 100.0,
+            report.armament_armoured_mape * 100.0,
+            report.armament_mape * 100.0,
+            report.gm_mape * 100.0,
+        );
     }
 }

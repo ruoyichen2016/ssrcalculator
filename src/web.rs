@@ -15,7 +15,7 @@ use crate::{
     apply_blend_calibration, apply_regime_calibration, compartment_placement_html,
     compute_planing_calibration, deserialize, external_report_html, fit_reduced_form_with_external,
     fit_structural_form_with_external, generate_html_report, generate_report, get_preset,
-    is_planing_eligible, nearest_historical_cases, parse_external_cases,
+    get_preset_benchmark, is_planing_eligible, nearest_historical_cases, parse_external_cases,
     planing_hp_estimate_calibrated, run_loocv_with_external_weighted, serialize, solve_max_speed,
     solve_range, suggest_compartment_placement, PRESET_LIST,
 };
@@ -485,7 +485,7 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         ("Hull", e.hull_weight),
         ("Armour", ship.armour.weight),
         ("Machinery", e.engine_weight),
-        ("Armament", g.guns_weight + g.arm_weight + w.weight),
+        ("Armament", g.borne_weight + w.weight),
         ("Magazine", g.magazine),
         ("Bunker", e.bunker),
         (
@@ -516,6 +516,28 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(",");
+    let benchmark_json = if let Some(b) = get_preset_benchmark(&ship.name) {
+        format!(
+            "{{\"name\":{},\"ref_disp\":{},\"ref_hull\":{},\"ref_armour\":{},\"ref_machinery\":{},\"ref_armament\":{},\"ref_bunker\":{},\"ref_gm\":{},\"sim_hull\":{},\"sim_armour\":{},\"sim_machinery\":{},\"sim_armament\":{},\"sim_bunker\":{},\"sim_gm\":{},\"source\":{}}}",
+            json_str(b.name),
+            json_num(b.ref_displacement_t),
+            json_num(b.ref_hull_t),
+            json_num(b.ref_armour_t),
+            json_num(b.ref_machinery_t),
+            json_num(b.ref_armament_t),
+            json_num(b.ref_bunker_t),
+            json_num(b.ref_gm_ft),
+            json_num(e.hull_weight),
+            json_num(ship.armour.weight),
+            json_num(e.engine_weight),
+            json_num(g.guns_weight + g.magazine + w.weight),
+            json_num(e.bunker),
+            json_num(ship.metacentre),
+            json_str(b.source)
+        )
+    } else {
+        "null".to_string()
+    };
     let fields: Vec<(&str, String)> = vec![
         ("message", json_str(message)),
         ("name", json_str(&ship.name)),
@@ -541,6 +563,7 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         ("weights", format!("[{weights}]")),
         ("alerts", format!("[{}]", alerts.join(","))),
         ("nearest", format!("[{nearest}]")),
+        ("benchmark", benchmark_json),
         ("report", json_str(&report)),
         ("ssr", json_str(&serialize(ship))),
         // Blueprint geometry

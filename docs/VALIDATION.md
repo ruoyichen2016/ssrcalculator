@@ -188,7 +188,7 @@ or `synthetic` (a 3-column row defaults to `synthetic`).  Only
   the empirical planing model) to exercise the pipeline.  It is **not** evidence,
   and the project currently has **0 measured CFD samples**.
 
-## Historical data coverage (audited 2026-09-27)
+## Historical data coverage (audited 2026-10-17)
 
 `validation-audit` reports which model families can actually be checked against
 the built-in historical data:
@@ -197,11 +197,11 @@ the built-in historical data:
 |---|---|---|
 | Speed/power (regime) | 146 cases (37 curated) | validated; nested LOOCV 10.36% case-weighted, curated core 7.97%; blended 9.81% |
 | Planing (Savitsky vs empirical) | 8 public planing cases | validated; both 23.3% calibrated |
-| Structural weight | 0 | **cannot be validated** with the current dataset |
-| Internal spaces (machinery/magazine/accommodation) | 0 | **cannot be validated** |
+| Subsystem weights & stability (`validate-weights`) | 8 full-design presets | validated on 8 full-ship presets (disp MAPE 3.59%, armour MAPE 7.64%, GM MAPE 12.95%, armoured hull MAPE 14.72%); minimal 146-ship speed/power cases remain 0 |
+| Internal spaces (machinery/magazine/accommodation) | 8 full-design presets (physical checks) | 8/8 presets yield positive magazine & machinery volumes; minimal 146-ship cases remain 0 |
 | General arrangement / evacuation / scantlings | 0 | plausibility checks only |
 
-The built-in dataset stores only length/beam/draught/block/speed/power
+The 146-case speed/power dataset stores only length/beam/draught/block/speed/power
 references.  A validation attempt using `simulate_case` showed the minimal
 ships are non-physical for weight/space work:
 
@@ -209,10 +209,50 @@ ships are non-physical for weight/space work:
 - **146/146** cases give zero magazine volume (no guns are configured);
 - accommodation volume fractions are 40-90% of hull volume (implausible).
 
-`simulate_case` is therefore used only for speed/power validation.  Validating
-the weight, space, evacuation and scantling models needs per-ship structural
-weight, compartment-volume and general-arrangement references (or a full
-historical design file), none of which are in the current dataset.
+`simulate_case` is therefore used only for speed/power validation.  To validate
+subsystem weights, transverse metacentric height ($GM$) and internal-space
+feasibility without polluting the minimal speed/power cases, Phase 31 added
+`validate-weights` (`validate_preset_weights`) against the **8 full-design
+historical ship presets** in `src/presets.rs`:
+
+### Subsystem weight & stability validation (`validate-weights`)
+
+Compared against published naval-architecture weight breakdowns and stability
+records (Roberts *The Battleship Dreadnought*; Garzke & Dulin *Battleships*;
+Friedman *U.S. Cruisers* & *U.S. Destroyers*; Raven & Roberts *British Cruisers*;
+Conway's *All the World's Fighting Ships*):
+
+| Ship | Normal Disp (sim / ref) | Hull (sim / ref, err) | Armour (sim / ref, err) | Machinery (sim / ref, err) | Armament+Ammo (sim / ref, err) | GM ft (sim / ref, err) |
+|---|---|---|---|---|---|---|
+| *HMS Dreadnought* (1906) | 18,323 / 18,110 t | 7,513 / 6,660 t (+13%) | 6,563 / 6,050 t (+8%) | 1,663 / 2,050 t (-19%) | 2,444 / 2,050 t (+19%) | 4.8 / 5.0 ft (-5%) |
+| *Bismarck* (1940) | 47,392 / 45,950 t | 20,545 / 16,800 t (+22%) | 16,458 / 18,700 t (-12%) | 3,573 / 4,050 t (-12%) | 5,212 / 4,550 t (+15%) | 9.7 / 13.1 ft (-26%) |
+| *USS Iowa* (1943) | 57,320 / 55,000 t | 25,864 / 21,500 t (+20%) | 17,892 / 18,400 t (-3%) | 5,624 / 4,900 t (+15%) | 6,180 / 5,200 t (+19%) | 7.6 / 7.5 ft (+2%) |
+| *IJN Yamato* (1941) | 64,871 / 65,000 t | 29,014 / 23,500 t (+23%) | 24,557 / 22,895 t (+7%) | 3,245 / 5,215 t (-38%) | 7,464 / 7,800 t (-4%) | 10.5 / 11.0 ft (-5%) |
+| *USS Baltimore* (1943) | 15,919 / 15,500 t | 6,716 / 6,900 t (-3%) | 3,775 / 3,700 t (+2%) | 3,385 / 2,100 t (+61%) | 1,330 / 1,550 t (-14%) | 4.7 / 5.5 ft (-15%) |
+| *HMS Belfast* (1939) | 12,022 / 11,550 t | 5,712 / 5,350 t (+7%) | 2,210 / 2,550 t (-13%) | 2,875 / 1,550 t (+85%) | 746 / 1,050 t (-29%) | 4.3 / 5.1 ft (-16%) |
+| *USS Fletcher* (1942) | 2,681 / 2,500 t | 767 / 980 t (-22%) | 109 / 140 t (n/a) | 1,418 / 690 t (+106%) | 136 / 260 t (-48%) | 3.1 / 3.6 ft (-14%) |
+| *IJN Shimakaze* (1943) | 3,074 / 2,900 t | 389 / 1,150 t (-66%) | 4 / 80 t (n/a) | 2,046 / 820 t (+150%) | 203 / 360 t (-44%) | 4.1 / 3.4 ft (+21%) |
+
+Summary MAPE and physical feasibility across the 8 presets (enforced by
+`preset_weights_and_stability_do_not_regress` in `tests/accuracy_regression.rs`):
+
+- **Physical feasibility:** `8/8` positive hull weight (`0 < hull < disp`), `8/8`
+  positive magazine volume, `8/8` weight-loop convergence (`<= 50` iterations).
+- **Normal displacement MAPE:** **3.59%** (`<= 5.0%` regression gate).
+- **Armour + barbette weight MAPE (6 armoured warships):** **7.64%** (`<= 10.0%` gate).
+- **Transverse metacentric height ($GM$) MAPE (all 8 ships):** **12.95%** (`<= 16.0%` gate).
+- **Hull structural weight MAPE:** **14.72%** on the 6 armoured ships (`<= 18.0%` gate),
+  **22.03%** across all 8.
+- **Armament + ammunition weight MAPE:** **16.68%** on the 6 armoured ships (`<= 20.0%` gate),
+  **23.92%** across all 8.
+- **Machinery weight diagnosis:** **38.32%** on the 6 armoured ships, **60.63%** across
+  all 8.  SpringSharp 3.0 uses a single empirical specific-weight curve tuned to
+  capital-ship steam plants (~35-50 shp/ton in 1940), whereas WWII fleet
+  destroyers achieved ~80-100 shp/ton using compact high-pressure/high-temperature
+  boilers and higher shaft RPM.  Because SpringSharp computes hull weight as the
+  residual (`disp - armour - machinery - armament - load`), the ~2x destroyer
+  machinery over-estimate directly squeezes residual hull weight on *Fletcher*
+  and *Shimakaze*.
 
 Per-case speed/power residuals are available with `regime-residuals`.
 

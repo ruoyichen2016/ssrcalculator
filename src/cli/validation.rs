@@ -271,6 +271,94 @@ pub(crate) fn run(cmd: &str, args: &[String]) -> Result<(), CliError> {
                 "\nNote: Train MAPE is in-sample/diagnostic. Use `validate-regime` for nested LOOCV."
             );
         }
+        "validate-weights" => {
+            let report = validate_preset_weights();
+            println!(
+                "Subsystem Weight & Stability Validation across {} Full-Design Historical Presets",
+                report.rows.len()
+            );
+            println!(
+                "{:<16} {:>13} {:>15} {:>15} {:>15} {:>15} {:>13}",
+                "Ship",
+                "Disp (s/r)",
+                "Hull (s/r %)",
+                "Armour (s/r %)",
+                "Mach (s/r %)",
+                "Arm+Am (s/r %)",
+                "GM ft (s/r %)"
+            );
+            for r in &report.rows {
+                let b = &r.benchmark;
+                let armour_cell = match r.armour_err_pct {
+                    Some(pct) => {
+                        format!("{:.0}/{:.0} {:+.0}%", r.sim_armour_t, b.ref_armour_t, pct)
+                    }
+                    None => format!("{:.0}/{:.0} (n/a)", r.sim_armour_t, b.ref_armour_t),
+                };
+                println!(
+                    "{:<16} {:>13} {:>15} {:>15} {:>15} {:>15} {:>13}",
+                    b.name,
+                    format!("{:.0}/{:.0}", r.sim_displacement_t, b.ref_displacement_t),
+                    format!(
+                        "{:.0}/{:.0} {:+.0}%",
+                        r.sim_hull_t, b.ref_hull_t, r.hull_err_pct
+                    ),
+                    armour_cell,
+                    format!(
+                        "{:.0}/{:.0} {:+.0}%",
+                        r.sim_machinery_t, b.ref_machinery_t, r.machinery_err_pct
+                    ),
+                    format!(
+                        "{:.0}/{:.0} {:+.0}%",
+                        r.sim_armament_t, b.ref_armament_t, r.armament_err_pct
+                    ),
+                    format!(
+                        "{:.1}/{:.1} {:+.0}%",
+                        r.sim_gm_ft, b.ref_gm_ft, r.gm_err_pct
+                    ),
+                );
+            }
+            println!("\nSummary MAPE & Physical Feasibility:");
+            println!(
+                "  Normal displacement MAPE (all 8)         : {:.2}%",
+                report.disp_mape * 100.0
+            );
+            println!(
+                "  Armour weight MAPE (6 armoured warships) : {:.2}%",
+                report.armour_mape * 100.0
+            );
+            println!(
+                "  Metacentric height GM MAPE (all 8)       : {:.2}%",
+                report.gm_mape * 100.0
+            );
+            println!(
+                "  Hull weight MAPE (6 armoured / all 8)    : {:.2}% / {:.2}%",
+                report.hull_armoured_mape * 100.0,
+                report.hull_mape * 100.0
+            );
+            println!(
+                "  Armament+Ammo MAPE (6 armoured / all 8)  : {:.2}% / {:.2}%",
+                report.armament_armoured_mape * 100.0,
+                report.armament_mape * 100.0
+            );
+            println!(
+                "  Machinery weight MAPE (6 armoured / all 8): {:.2}% / {:.2}%",
+                report.machinery_armoured_mape * 100.0,
+                report.machinery_mape * 100.0
+            );
+            println!(
+                "  Physical feasibility                     : {}/{} positive hull, {}/{} positive magazine, {}/{} converged",
+                report.physical_hull_count,
+                report.rows.len(),
+                report.positive_magazine_count,
+                report.rows.len(),
+                report.converged_count,
+                report.rows.len()
+            );
+            println!(
+                "\nNote: SpringSharp 3.0 computes hull weight as the residual (disp - armour - machinery - armament - load)\n      and uses a single capital-ship steam specific-weight curve, which over-estimates high-speed destroyer\n      machinery weight (~2x on Fletcher/Shimakaze) and correspondingly squeezes destroyer residual hull weight."
+            );
+        }
         _ => unreachable!("validation::run called with unexpected command {cmd}"),
     }
     Ok(())

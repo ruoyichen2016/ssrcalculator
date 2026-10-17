@@ -438,3 +438,28 @@ still 10.36% / blended 9.81%):
 - REST endpoints `/api/presets` and `/api/presets/{id}` added to `src/web.rs`.
 - Web UI toolbar provides a one-click dropdown to instantly load any historical preset.
 
+## Phase 31 — subsystem weight & stability validation on historical presets (completed 2026-10-17)
+
+- Added `PresetWeightBenchmark`, `PRESET_WEIGHT_BENCHMARKS` (8 full-ship historical
+  references from Roberts, Garzke & Dulin, Friedman, Raven & Roberts, and Conway's)
+  and `validate_preset_weights()` in `src/presets.rs`.
+- Refined `preset_dreadnought` (12" turrets on 8" barbettes, `Cb = 0.56`) and
+  `preset_bismarck` (13.4" barbettes) so turret and barbette armour match historical
+  specifications.
+- Added CLI command `validate-weights` (and grouped alias `validate weights`),
+  and updated `validation-audit` to report the 8 full-design preset weight &
+  stability benchmarks alongside the 146 speed/power cases.
+- Measured baseline accuracy across the 8 presets:
+  - Physical feasibility: `8/8` positive hull weight, `8/8` positive magazine
+    volume, `8/8` weight-loop convergence.
+  - Normal displacement MAPE: **3.59%**.
+  - Armour + barbette weight MAPE (6 armoured warships): **7.64%**.
+  - Transverse metacentric height ($GM$) MAPE (all 8 ships): **12.95%**.
+  - Hull structural weight MAPE (6 armoured warships): **14.72%** (22.03% all 8).
+  - Armament + ammunition weight MAPE (6 armoured warships): **16.68%** (23.92% all 8).
+  - Documented SpringSharp 3.0's capital-ship steam specific-weight curve limitation
+    on high-speed WWII destroyers (*Fletcher* / *Shimakaze*).
+- Fixed double-counted turret/barbette armour (`g.arm_weight`) in the Web Workbench's
+  `"Armament"` weight slice (`src/web.rs`), and added a live historical subsystem
+  weight & stability benchmark comparison table in the Analysis tab (`src/web_page.html`).
+- Frozen in `tests/accuracy_regression.rs` (`preset_weights_and_stability_do_not_regress`).
