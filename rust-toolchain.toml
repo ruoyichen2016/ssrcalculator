@@ -1,5 +1,5 @@
-# Pin the toolchain so CI (`-D warnings`) and local builds cannot break when a
-# new stable/clippy release lands.  Bump deliberately, in its own commit.
+# Pin the toolchain so CI (`-D warnings`) and local builds use stable.
+# Minimum supported rust version is enforced by `rust-version = "1.80"` in Cargo.toml.
 [toolchain]
-channel = "1.98.0"
+channel = "stable"
 components = ["rustfmt", "clippy"]

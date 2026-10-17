@@ -147,4 +147,4 @@ explicit propulsive coefficient; summaries/reports state that no QPC applies and
 - Nested-LOOCV regime accuracy (`validate-regime`, `accuracy-target`) is the primary metric;
   in-sample fits are diagnostic only
 - `tests/accuracy_regression.rs` freezes overall/per-type LOOCV and holdout baselines
-- 112 unit tests + 8 accuracy-regression + 2 CLI-surface integration tests
+- 116 unit tests + 8 accuracy-regression + 2 CLI-surface integration tests

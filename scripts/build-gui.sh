@@ -11,5 +11,6 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
+export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-gui}"
 exec cargo build --manifest-path gui/Cargo.toml "$@"

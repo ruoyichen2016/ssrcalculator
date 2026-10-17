@@ -377,7 +377,7 @@ still 10.36% / blended 9.81%):
 - CFD-surrogate correction framework + CSV fitting + R²/RMSE + LOOCV/holdout + Ridge/λ selection + `cfd-apply` + HTML report + propulsion breakdown in reports
 - Global GA general-arrangement optimizer + calibre/rounds/mounts-scaled magazine volume + structural continuity + maintenance void constraints
 - 52 built-in historical cases + multiple example CSV datasets + replacement-priority + source-summary + quality-score + progress/target/tier + replacement-log + version + multi-target reports
-- 112 unit tests + 8 accuracy-regression + 2 CLI-surface integration tests (the
+- 116 unit tests + 8 accuracy-regression + 2 CLI-surface integration tests (the
   GA suite exercises the capacity/escape checks)
 
 ## Remaining
@@ -397,3 +397,18 @@ still 10.36% / blended 9.81%):
   per-connection timeouts and per-connection threads are done; a connection cap
   is not)
 - More literature cases for carriers and cruisers
+
+## Phase 28 — web console workbench (completed 2026-10-17)
+
+- `src/web.rs` now serves a single-page workbench (`src/web_page.html`,
+  embedded with `include_str!`, still zero dependencies): tabbed inputs, gun
+  sub-tabs, and labelled selects for gun type, mount, layout, bow and stern
+  (option values remain the numeric `.ssr` indices).
+- Sticky dashboard: key metrics, design-failure/convergence badges, weight
+  distribution bar, live recalculation and the full text report.
+- New endpoints `/api/evaluate`, `/api/calibrate/{regime,blend}`,
+  `/api/solve/{speed,range}`, `/api/compartments`; the page adds closest
+  historical ships, the arrangement optimizer, a raw `.ssr` editor, `.ssr`
+  open/save and self-contained static HTML export.
+- Form values are merged over the last full save text, so keys without a form
+  field are no longer dropped on recalculation.  4 new web tests.

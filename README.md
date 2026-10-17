@@ -404,6 +404,8 @@ Metric conversions (`Conversion` / `metric_calc`) are provided for reports.
 - `docs/VALIDATION.md` defines provenance, LOOCV/holdout baselines and the composite quality gate.
 - `docs/ROADMAP.md` lists completed work and remaining items.
 - `docs/CHANGELOG.md` is the cumulative implementation log.
+- `docs/LOOP_PROMPT.md` is the reusable one-item-per-iteration improvement
+  prompt (invariants, verification gate, backlog and stop rules).
 - Native GUI uses eframe/egui behind the optional `gui` feature:
   `scripts/build-gui.sh` (or `cd gui && cargo run`, which `gui/.cargo/config.toml`
   redirects to the same cache).

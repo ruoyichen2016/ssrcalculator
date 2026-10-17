@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpringSharp Workbench</title>
+<style>
+:root {
+  --bg: #0b1622; --panel: #112233; --panel2: #16293d; --line: #24405c;
+  --text: #dbe7f3; --muted: #8aa4bf; --accent: #4fb3ff; --accent2: #7ee0c3;
+  --warn: #ffb547; --bad: #ff6b6b; --good: #5fd38d;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text);
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(rgba(79,179,255,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79,179,255,.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+header {
+  display: flex; align-items: center; gap: 1rem; padding: .6rem 1.2rem;
+  background: rgba(10,22,34,.92); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 10; backdrop-filter: blur(6px); flex-wrap: wrap;
+}
+header h1 { font-size: 1.05rem; margin: 0; letter-spacing: .06em; font-weight: 600; }
+header h1 span { color: var(--accent); }
+.toolbar { display: flex; gap: .4rem; flex-wrap: wrap; margin-left: auto; }
+button, .btn {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: .38rem .8rem; cursor: pointer; font: inherit; font-size: .85rem;
+}
+button:hover, .btn:hover { border-color: var(--accent); color: #fff; }
+button.primary { background: #1d5b8c; border-color: #2a77b5; }
+button.primary:hover { background: #2470ab; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 1rem; padding: 1rem 1.2rem; }
+@media (max-width: 1100px) { main { grid-template-columns: 1fr; } aside { position: static !important; max-height: none !important; } }
+.panel { background: rgba(17,34,51,.94); border: 1px solid var(--line); border-radius: 10px; }
+.tabs { display: flex; gap: 2px; padding: .4rem .4rem 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tabs button { border: none; border-radius: 6px 6px 0 0; background: transparent; color: var(--muted); padding: .5rem .9rem; }
+.tabs button.active { background: var(--panel2); color: #fff; box-shadow: inset 0 -2px 0 var(--accent); }
+.tab { display: none; padding: 1rem 1.1rem 1.2rem; }
+.tab.active { display: block; }
+h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; color: var(--accent2); margin: 1.1rem 0 .5rem; font-weight: 600; }
+h2:first-child { margin-top: 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .55rem .9rem; }
+label { display: flex; flex-direction: column; gap: 3px; font-size: .74rem; color: var(--muted); }
+label.check { flex-direction: row; align-items: center; gap: .45rem; color: var(--text); font-size: .82rem; }
+input, select, textarea {
+  background: #0c1b2a; color: var(--text); border: 1px solid var(--line); border-radius: 5px;
+  padding: .32rem .45rem; font: inherit; font-size: .86rem;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(79,179,255,.18); }
+input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+textarea { width: 100%; font-family: var(--mono); font-size: .8rem; }
+.pills { display: flex; gap: .3rem; flex-wrap: wrap; margin-bottom: .8rem; }
+.pills button.active { background: #1d5b8c; border-color: var(--accent); }
+.sub { display: none; } .sub.active { display: block; }
+fieldset { border: 1px solid var(--line); border-radius: 8px; padding: .7rem .8rem .9rem; margin: 0 0 .8rem; }
+legend { color: var(--accent); font-size: .8rem; padding: 0 .3rem; }
+.row { display: flex; gap: .5rem; align-items: end; flex-wrap: wrap; margin: .5rem 0; }
+.hint { color: var(--muted); font-size: .78rem; }
+aside { position: sticky; top: 64px; align-self: start; max-height: calc(100vh - 80px); overflow: auto; }
+.dash { padding: 1rem; }
+.title { font-size: 1.1rem; font-weight: 600; }
+.subtitle { color: var(--muted); font-size: .8rem; margin-bottom: .6rem; }
+.badges { display: flex; gap: .3rem; flex-wrap: wrap; margin: .3rem 0 .7rem; }
+.badge { font-size: .7rem; padding: .15rem .5rem; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+.badge.good { color: var(--good); border-color: rgba(95,211,141,.4); }
+.badge.warn { color: var(--warn); border-color: rgba(255,181,71,.45); }
+.badge.bad { color: var(--bad); border-color: rgba(255,107,107,.5); background: rgba(255,107,107,.08); }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: .45rem; }
+.card { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: .45rem .55rem; }
+.card .k { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.card .v { font-size: 1.02rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.card .u { font-size: .7rem; color: var(--muted); font-weight: 400; }
+.card.good .v { color: var(--good); } .card.warn .v { color: var(--warn); } .card.bad .v { color: var(--bad); }
+.bar { display: flex; height: 16px; border-radius: 5px; overflow: hidden; background: #0c1b2a; border: 1px solid var(--line); margin: .3rem 0 .4rem; }
+.bar div { height: 100%; }
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: .15rem .8rem; font-size: .76rem; }
+.legend span.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: .35rem; }
+.legend .n { float: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.alerts div { font-size: .78rem; padding: .35rem .5rem; border-radius: 6px; margin: .25rem 0; }
+.alerts .bad { background: rgba(255,107,107,.1); color: var(--bad); border: 1px solid rgba(255,107,107,.35); }
+.alerts .warn { background: rgba(255,181,71,.08); color: var(--warn); border: 1px solid rgba(255,181,71,.35); }
+pre.report { background: #0a1724; border: 1px solid var(--line); border-radius: 8px; padding: .8rem; font: .76rem/1.45 var(--mono); white-space: pre-wrap; overflow-x: auto; margin: 0; }
+table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+th, td { text-align: left; padding: .35rem .45rem; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 500; font-size: .72rem; text-transform: uppercase; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+iframe { width: 100%; height: 640px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.out { margin-top: .6rem; } .out pre { background: #0a1724; padding: .6rem; border-radius: 6px; font-family: var(--mono); font-size: .78rem; white-space: pre-wrap; }
+.out table { background: #fff; color: #111; }
+#toast { position: fixed; right: 1rem; bottom: 1rem; background: var(--panel2); border: 1px solid var(--accent); padding: .55rem .9rem; border-radius: 8px; opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 420px; font-size: .84rem; }
+#toast.show { opacity: 1; } #toast.err { border-color: var(--bad); color: var(--bad); }
+.spin { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-left: .3rem; }
+.spin.busy { background: var(--accent); animation: pulse .8s infinite alternate; }
+@keyframes pulse { from { opacity: .3; } to { opacity: 1; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>SPRING<span>SHARP</span> · Workbench <span id="busy" class="spin" title="calculation status"></span></h1>
+  <div class="toolbar">
+    <button class="primary" onclick="evaluate()">Calculate</button>
+    <button onclick="loadDemo()">Demo design</button>
+    <label class="btn" style="flex-direction:row;color:var(--text);font-size:.85rem">Open .ssr<input type="file" id="fileIn" accept=".ssr,.txt" hidden></label>
+    <button onclick="downloadSsr()">Save .ssr</button>
+    <button onclick="exportHtml()">Export HTML</button>
+    <label class="check" title="Recalculate automatically after each edit"><input type="checkbox" id="auto" checked> Live</label>
+  </div>
+</header>
+<main>
+  <section class="panel">
+    <nav class="tabs" id="tabs">
+      <button data-tab="hull" class="active">Hull &amp; Freeboard</button>
+      <button data-tab="armour">Armour</button>
+      <button data-tab="guns">Guns</button>
+      <button data-tab="weapons">Torpedoes &amp; Mines</button>
+      <button data-tab="engine">Machinery</button>
+      <button data-tab="calib">Calibration &amp; Solvers</button>
+      <button data-tab="analysis">Analysis</button>
+      <button data-tab="raw">Raw .ssr</button>
+    </nav>
+    <form id="design" onsubmit="return false">
+__FORM__
+    </form>
+    <div class="tab" data-tab="calib">
+      <h2>Resistance calibration</h2>
+      <p class="hint">Both models set the power factors for the design's ship type (Type must contain battleship, carrier, cruiser or destroyer). Factors are fitted on public-reference historical data; nested LOOCV ≈10.4% (regime) / ≈9.8% (blended). Not validated against trial data.</p>
+      <div class="row">
+        <button class="primary" onclick="calibrate('regime')">Apply regime model (Holtrop + type factor)</button>
+        <button class="primary" onclick="calibrate('blend')">Apply blended model (Holtrop / original)</button>
+        <button onclick="resetModel()">Reset to original model</button>
+      </div>
+      <h2>Solvers</h2>
+      <div class="row">
+        <label>Available power (hp)<input id="solveHp" type="number" step="any" value="50000"></label>
+        <button onclick="solve('speed')">Solve max speed</button>
+        <label>Bunker tonnage (t)<input id="solveBunker" type="number" step="any" value="1500"></label>
+        <button onclick="solve('range')">Solve range</button>
+      </div>
+      <div id="calibOut" class="out"></div>
+    </div>
+    <div class="tab" data-tab="analysis">
+      <h2>Closest historical ships</h2>
+      <p class="hint">Context only: ranked by type, displacement, speed and length. Reference power figures are approximate public data.</p>
+      <div id="nearest"></div>
+      <h2>Internal spaces &amp; general arrangement</h2>
+      <div class="row">
+        <label>Target CG (fraction of depth)<input id="targetCg" type="number" step="0.01" value="0.45"></label>
+        <button onclick="compartments()">Run arrangement optimizer</button>
+        <span class="hint">Planning-level model, not validated against historical arrangements.</span>
+      </div>
+      <div id="gaOut"></div>
+      <h2>External data</h2>
+      <textarea id="external" rows="6" spellcheck="false" placeholder="name,type,length,beam,draught,displacement,block,speed,hp,confidence,source"></textarea>
+      <div class="row">
+        <button onclick="postTo('/api/external', 'external', 'externalOut')">Validate external data</button>
+        <button onclick="postTo('/api/external-calibrate', 'external', 'externalOut')">Calibrate with external data</button>
+      </div>
+      <div id="externalOut" class="out"></div>
+      <h2>Planing estimator</h2>
+      <div class="row">
+        <label>Length (ft)<input id="pLen" type="number" value="80"></label>
+        <label>Beam (ft)<input id="pBeam" type="number" value="20"></label>
+        <label>Displacement (lbs)<input id="pDisp" type="number" value="112000"></label>
+        <label>Speed (kt)<input id="pSpeed" type="number" value="40"></label>
+        <label>Factor<input id="pFactor" type="number" step="any" value="0.668"></label>
+        <button onclick="planingEstimate()">Estimate hp</button>
+        <button onclick="calibratePlaning()">Factor from external CSV</button>
+      </div>
+      <div id="planingOut" class="out"></div>
+    </div>
+    <div class="tab" data-tab="raw">
+      <h2>Raw save text</h2>
+      <p class="hint">The exact <code>.ssr</code> format used by the CLI. Edit or paste, then apply; the server performs the same validation as <code>springsharp load</code>.</p>
+      <textarea id="rawText" rows="28" spellcheck="false"></textarea>
+      <div class="row">
+        <button class="primary" onclick="applyRaw()">Apply text to form</button>
+        <button onclick="refreshRaw()">Refresh from form</button>
+      </div>
+    </div>
+  </section>
+  <aside class="panel">
+    <div class="dash" id="dash">
+      <div class="title" id="dName">–</div>
+      <div class="subtitle" id="dSub"></div>
+      <div class="badges" id="dBadges"></div>
+      <div class="cards" id="dCards"></div>
+      <h2>Weight distribution <span class="hint" id="dDisp"></span></h2>
+      <div class="bar" id="dBar"></div>
+      <div class="legend" id="dLegend"></div>
+      <div class="alerts" id="dAlerts"></div>
+      <h2>Report</h2>
+      <pre class="report" id="dReport"></pre>
+    </div>
+  </aside>
+</main>
+<div id="toast"></div>
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+let base = new Map();      // full key/value map of the last known design
+let last = null;           // last evaluation result
+let timer = null;
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(msg, err) { const t = $('#toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : ''); clearTimeout(t._h); t._h = setTimeout(() => t.className = '', 3500); }
+function fmt(v, d = 0) { return (v === null || v === undefined || !isFinite(v)) ? '–' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
+// ---- tabs ----
+$$('#tabs button').forEach(b => b.onclick = () => {
+  $$('#tabs button').forEach(x => x.classList.toggle('active', x === b));
+  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === b.dataset.tab));
+  if (b.dataset.tab === 'raw') refreshRaw();
+});
+$$('.pills').forEach(p => $$('button', p).forEach(b => b.onclick = () => {
+  $$('button', p).forEach(x => x.classList.toggle('active', x === b));
+  $$('.sub', p.parentElement).forEach(s => s.classList.toggle('active', s.dataset.sub === b.dataset.sub));
+}));
+
+// ---- form <-> save text ----
+function parseText(text) {
+  const m = new Map();
+  text.split('\n').forEach(line => {
+    const i = line.indexOf('=');
+    if (i > 0) m.set(line.slice(0, i).trim(), line.slice(i + 1).trim());
+  });
+  return m;
+}
+function collect() {
+  const m = new Map(base);
+  $$('[data-key]').forEach(el => m.set(el.dataset.key, el.type === 'checkbox' ? String(el.checked) : el.value));
+  let out = 'SpringSharp Rust Save 1.0\n';
+  m.forEach((v, k) => out += k + '=' + v + '\n');
+  return out;
+}
+function applyText(text) {
+  base = parseText(text);
+  base.forEach((value, key) => {
+    const el = document.querySelector(`[data-key="${CSS.escape(key)}"]`);
+    if (!el) return;
+    if (el.type === 'checkbox') el.checked = value === 'true' || value === 'True';
+    else if (el.tagName === 'SELECT' && ![...el.options].some(o => o.value === value)) {
+      const o = document.createElement('option'); o.value = value; o.textContent = value; el.appendChild(o); el.value = value;
+    } else el.value = value;
+  });
+}
+
+// ---- server calls ----
+async function post(path, body) {
+  $('#busy').classList.add('busy');
+  try {
+    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body });
+    const text = await r.text();
+    if (!r.ok) throw new Error(text);
+    return text;
+  } finally { $('#busy').classList.remove('busy'); }
+}
+async function runDesign(path, prefix = '') {
+  try {
+    const res = JSON.parse(await post(path, prefix + collect()));
+    applyText(res.ssr);
+    render(res);
+    if (res.message) toast(res.message);
+    return res;
+  } catch (e) { toast(e.message, true); }
+}
+const evaluate = () => runDesign('/api/evaluate');
+async function loadDemo() {
+  const r = await fetch('/api/demo'); applyText(await r.text()); evaluate();
+}
+function calibrate(kind) { runDesign('/api/calibrate/' + kind).then(r => { if (r) $('#calibOut').innerHTML = `<pre>${esc(r.message)}</pre>`; }); }
+function resetModel() {
+  const set = (k, v) => { const el = document.querySelector(`[data-key="${k}"]`); if (el) el.value = v; base.set(k, v); };
+  set('engine.resistance_model', 'original'); set('engine.power_factor', '1'); set('engine.original_power_factor', '1'); set('engine.blend_weight', '1');
+  evaluate();
+}
+function solve(kind) {
+  const target = kind === 'speed' ? $('#solveHp').value : $('#solveBunker').value;
+  runDesign('/api/solve/' + kind, target + '\n').then(r => { if (r) $('#calibOut').innerHTML = `<pre>${esc(r.message)}</pre>`; });
+}
+async function compartments() {
+  $('#gaOut').innerHTML = '<p class="hint">Optimizing…</p>';
+  try {
+    const html = await post('/api/compartments', $('#targetCg').value + '\n' + collect());
+    const f = document.createElement('iframe'); f.srcdoc = html; $('#gaOut').replaceChildren(f);
+  } catch (e) { $('#gaOut').innerHTML = `<pre>${esc(e.message)}</pre>`; }
+}
+async function postTo(path, src, dst) {
+  try { $('#' + dst).innerHTML = await post(path, $('#' + src).value); }
+  catch (e) { $('#' + dst).innerHTML = `<pre>${esc(e.message)}</pre>`; }
+}
+async function planingEstimate() {
+  const body = ['pLen', 'pBeam', 'pDisp', 'pSpeed', 'pFactor'].map(id => $('#' + id).value || '1').join(',');
+  try { $('#planingOut').innerHTML = `<pre>Planing power: ${esc(await post('/api/planing', body))} hp</pre>`; }
+  catch (e) { toast(e.message, true); }
+}
+async function calibratePlaning() {
+  try {
+    const t = await post('/api/planing-calibrate', $('#external').value);
+    $('#pFactor').value = t.split(' ')[0];
+    $('#planingOut').innerHTML = `<pre>Planing calibration factor: ${esc(t)}</pre>`;
+  } catch (e) { toast(e.message, true); }
+}
+
+// ---- dashboard ----
+const PALETTE = { Hull: '#4f8fd6', Armour: '#9b7bea', Machinery: '#e0864f', Armament: '#e05d6f', Magazine: '#d6b54f', Bunker: '#4fc7b4', Miscellaneous: '#7f93a8', 'Other load': '#3a5068' };
+function card(k, v, u = '', cls = '') { return `<div class="card ${cls}"><div class="k">${k}</div><div class="v">${v} <span class="u">${u}</span></div></div>`; }
+function render(r) {
+  last = r;
+  $('#dName').textContent = r.name || 'Unnamed design';
+  $('#dSub').textContent = [r.country, r.ship_type, r.date_hull ? 'laid down ' + r.date_hull : ''].filter(Boolean).join(' · ');
+  const failures = r.alerts.filter(a => a.startsWith('DESIGN FAILURE'));
+  const badges = [
+    failures.length ? `<span class="badge bad">${failures.length} design failure${failures.length > 1 ? 's' : ''}</span>` : '<span class="badge good">design feasible</span>',
+    `<span class="badge">${esc(r.model)}</span>`,
+    r.converged ? '<span class="badge good">weights converged</span>' : '<span class="badge warn">weights not converged</span>',
+  ];
+  $('#dBadges').innerHTML = badges.join('');
+  const strengthCls = r.strength_comp < 0.5 ? 'bad' : r.strength_comp < 0.995 ? 'warn' : 'good';
+  const stabCls = r.metacentre <= 0 ? 'bad' : r.stability < 1 ? 'warn' : '';
+  $('#dCards').innerHTML = [
+    card('Normal disp.', fmt(r.disp_normal), 't'),
+    card('Full load', fmt(r.disp_full), 't'),
+    card('Standard', fmt(r.disp_standard), 't'),
+    card('Max speed', fmt(r.speed_max, 1), 'kt'),
+    card('Power', fmt(r.hp_max), 'hp'),
+    card('Range', fmt(r.range), `nm @ ${fmt(r.speed_cruise, 0)} kt`),
+    card('Stability', fmt(r.stability, 2), '', stabCls),
+    card('Metacentre', fmt(r.metacentre, 2), 'ft', stabCls),
+    card('Seakeeping', fmt(r.seakeeping, 2)),
+    card('Strength', fmt(r.strength_comp, 2), '', strengthCls),
+    card('Flotation', fmt(r.flotation), 't'),
+    card('Cost', '$' + fmt(r.cost_dollars, 2), 'M'),
+  ].join('');
+  const total = r.disp_normal > 0 ? r.disp_normal : 1;
+  const parts = [...r.weights];
+  const used = parts.reduce((s, p) => s + Math.max(p[1], 0), 0);
+  if (total - used > 0.5) parts.push(['Other load', total - used]);
+  $('#dDisp').textContent = `(of ${fmt(r.disp_normal)} t normal)`;
+  $('#dBar').innerHTML = parts.filter(p => p[1] > 0).map(([n, w]) => `<div title="${n}: ${fmt(w)} t" style="width:${Math.min(100, w / total * 100)}%;background:${PALETTE[n] || '#888'}"></div>`).join('');
+  $('#dLegend').innerHTML = parts.map(([n, w]) => `<div><span class="sw" style="background:${PALETTE[n] || '#888'}"></span>${n}<span class="n">${fmt(w)} t · ${fmt(w / total * 100, 1)}%</span></div>`).join('');
+  $('#dAlerts').innerHTML = r.alerts.map(a => `<div class="${a.startsWith('DESIGN FAILURE') ? 'bad' : 'warn'}">${esc(a)}</div>`).join('');
+  $('#dReport').textContent = r.report;
+  $('#nearest').innerHTML = r.nearest.length ? `<table><tr><th>Ship</th><th>Type</th><th class="num">Disp. (t)</th><th class="num">Speed (kt)</th><th class="num">Length (ft)</th><th class="num">Power (hp)</th></tr>` +
+    r.nearest.map(n => `<tr><td>${esc(n.name)}</td><td>${esc(n.ship_type)}</td><td class="num">${fmt(n.displacement)}</td><td class="num">${fmt(n.speed, 1)}</td><td class="num">${fmt(n.length)}</td><td class="num">${fmt(n.hp)}</td></tr>`).join('') + '</table>' : '';
+}
+
+// ---- files ----
+function download(name, text, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const fileName = ext => ((last && last.name) || 'design').replace(/[^\w.-]+/g, '_') + ext;
+function downloadSsr() { download(fileName('.ssr'), collect(), 'text/plain'); }
+$('#fileIn').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  applyText(await f.text()); e.target.value = ''; evaluate(); toast('Loaded ' + f.name);
+};
+function refreshRaw() { $('#rawText').value = collect(); }
+function applyRaw() { applyText($('#rawText').value); evaluate(); }
+function exportHtml() {
+  if (!last) return toast('Calculate first', true);
+  const css = document.querySelector('style').textContent;
+  const doc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(last.name)} – SpringSharp</title><style>${css}
+    body{padding:1.5rem} .wrap{max-width:900px;margin:auto} aside{position:static;max-height:none}</style></head>
+    <body><div class="wrap"><aside class="panel">${$('#dash').outerHTML}</aside>
+    <section class="panel" style="margin-top:1rem;padding:1rem"><h2>Design parameters (.ssr)</h2><pre class="report">${esc(collect())}</pre></section>
+    <p class="hint">Exported from SpringSharp Workbench on ${new Date().toISOString().slice(0, 10)}.</p></div></body></html>`;
+  download(fileName('.html'), doc, 'text/html');
+}
+
+// ---- live recalculation ----
+$('#design').addEventListener('input', () => {
+  if (!$('#auto').checked) return;
+  clearTimeout(timer); timer = setTimeout(evaluate, 350);
+});
+window.addEventListener('DOMContentLoaded', loadDemo);
+</script>
+</body>
+</html>

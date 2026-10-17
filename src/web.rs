@@ -1,355 +1,282 @@
 //! A small zero-dependency web front-end for the Rust SpringSharp engine.
 //!
-//! This is intentionally simple: it serves one HTML page and one calculation
-//! endpoint.  The design is edited as `.ssr` save text in a textarea, exactly
-//! what `io::save_to_file` writes, so the web UI and the file format stay in
-//! sync.
+//! It serves one single-page "workbench" (`src/web_page.html`, embedded with
+//! `include_str!`) plus a handful of JSON/text endpoints.  The design travels
+//! between browser and server as `.ssr` save text, exactly what
+//! `io::save_to_file` writes, so the web UI and the file format stay in sync.
+//! Enumerated inputs (gun type, mount, layout, bow/stern) are rendered as
+//! labelled selects that still submit the numeric index the engine expects.
 
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 
-use crate::model::ShipModel;
+use crate::model::{ResistanceModel, ShipModel};
 use crate::{
+    apply_blend_calibration, apply_regime_calibration, compartment_placement_html,
     compute_planing_calibration, deserialize, external_report_html, fit_reduced_form_with_external,
-    fit_structural_form_with_external, generate_html_report, is_planing_eligible,
-    parse_external_cases, planing_hp_estimate_calibrated, run_loocv_with_external_weighted,
-    serialize,
+    fit_structural_form_with_external, generate_html_report, generate_report, is_planing_eligible,
+    nearest_historical_cases, parse_external_cases, planing_hp_estimate_calibrated,
+    run_loocv_with_external_weighted, serialize, solve_max_speed, solve_range,
+    suggest_compartment_placement,
 };
 
+const PAGE_TEMPLATE: &str = include_str!("web_page.html");
+
+const GUN_TYPES: &[&str] = &[
+    "Muzzle loading gun",
+    "Breech loading gun",
+    "Quick firing gun",
+    "Anti-air gun",
+    "Dual purpose gun",
+    "Auto rapid fire gun",
+    "Machine gun",
+];
+const MOUNT_TYPES: &[&str] = &[
+    "Broadside",
+    "Coles/Ericsson turret",
+    "Open barbette",
+    "Turret on barbette",
+    "Deck and hoist",
+    "Deck mount",
+    "Casemate",
+];
+const LAYOUTS: &[&str] = &[
+    "Centreline - distributed",
+    "Centreline - ends (fore >= aft)",
+    "Centreline - ends (aft >= fore)",
+    "Centreline - fore deck forward",
+    "Centreline - fore deck",
+    "Centreline - fore deck aft",
+    "Centreline - aft deck forward",
+    "Centreline - aft deck",
+    "Centreline - aft deck aft",
+    "Sides - distributed",
+    "Sides - ends (fore >= aft)",
+    "Sides - ends (aft >= fore)",
+    "Sides - fore deck forward",
+    "Sides - fore deck",
+    "Sides - fore deck aft",
+    "Sides - aft deck forward",
+    "Sides - aft deck",
+    "Sides - aft deck aft",
+    "None",
+];
+const BOWS: &[&str] = &[
+    "Normal bow",
+    "Bulbous bow - straight",
+    "Bulbous bow - forward",
+    "Ram bow",
+];
+const STERNS: &[&str] = &["Cruiser stern", "Transom stern", "Round stern"];
+const FUELS: &[&str] = &[
+    "Coal fired boilers",
+    "Oil fired boilers",
+    "Diesel motors",
+    "Petrol motors",
+    "Batteries",
+];
+const ENGINES: &[&str] = &[
+    "Simple reciprocating",
+    "Complex reciprocating",
+    "Steam turbines",
+];
+const DRIVES: &[&str] = &["Direct", "Geared", "Electric", "Hydraulic"];
+
 fn html_page() -> String {
+    PAGE_TEMPLATE.replace("__FORM__", &form_html())
+}
+
+fn grid(fields: &[(&str, &str)]) -> String {
+    let mut s = String::from("<div class='grid'>");
+    for (key, label) in fields {
+        s.push_str(&number_input(key, label));
+    }
+    s.push_str("</div>");
+    s
+}
+
+fn form_html() -> String {
     let mut f = String::new();
 
-    f.push_str("<h2>Ship</h2><div class='grid'>");
+    // ---- Hull & freeboard ----
+    f.push_str("<div class='tab active' data-tab='hull'><h2>Ship</h2><div class='grid'>");
     f.push_str(&text_input("meta.name", "Name"));
     f.push_str(&text_input("meta.country", "Country"));
-    f.push_str(&text_input("meta.type", "Type"));
-    f.push_str("</div>");
-
-    f.push_str("<h2>Hull</h2><div class='grid'>");
-    for (key, label) in [
-        ("hull.length", "Length (ft)"),
+    f.push_str(
+        r#"<label>Type<input data-key="meta.type" list="shipTypes" value=""></label><datalist id="shipTypes"><option value="Battleship"><option value="Battlecruiser"><option value="Carrier"><option value="Heavy cruiser"><option value="Light cruiser"><option value="Destroyer"></datalist>"#,
+    );
+    f.push_str("</div><h2>Hull</h2>");
+    f.push_str(&grid(&[
+        ("hull.length", "Length WL (ft)"),
         ("hull.beam", "Beam (ft)"),
         ("hull.beam_bulges", "Beam over bulges (ft)"),
         ("hull.draught", "Draught (ft)"),
         ("hull.block", "Block coefficient"),
         ("hull.date_hull", "Hull year"),
         ("hull.date_engine", "Engine year"),
+    ]));
+    f.push_str("<h2>Hull form (resistance detail, 0 = auto)</h2>");
+    f.push_str(&grid(&[
         ("hull.lcb_percent", "LCB (% L, + fwd)"),
-        ("hull.midship_coefficient", "Midship coeff Cm (0=auto)"),
+        ("hull.midship_coefficient", "Midship coeff Cm"),
         ("hull.bulb_area_sqft", "Bulb area (sq ft)"),
         ("hull.bulb_centre_height_ft", "Bulb centre height (ft)"),
         ("hull.transom_area_sqft", "Transom area (sq ft)"),
-        ("hull.appendage_area_sqft", "Appendage wetted area (sq ft)"),
+        ("hull.appendage_area_sqft", "Appendage area (sq ft)"),
         ("hull.stern_shape", "Stern shape Cstern"),
+    ]));
+    f.push_str("<h2>Ends</h2><div class='grid'>");
+    f.push_str(&select_input("free.bow", "Bow", BOWS));
+    f.push_str(&select_input("free.stern", "Stern", STERNS));
+    for (key, label) in [
+        ("free.transom_width", "Transom width (fraction)"),
+        ("free.length_bow", "Bow angle (deg)"),
+        ("free.length_ram", "Ram length (ft)"),
+        ("free.length_stern", "Stern overhang (ft)"),
     ] {
         f.push_str(&number_input(key, label));
     }
-    f.push_str("</div>");
-
-    f.push_str("<h2>Freeboard</h2><div class='grid'>");
-    for (key, label) in [
+    f.push_str("</div><h2>Freeboard</h2>");
+    f.push_str(&grid(&[
         ("free.fc_length", "Forecastle length (fraction)"),
         ("free.fd_length", "Forward deck length (fraction)"),
         ("free.qd_length", "Quarter deck length (fraction)"),
-        ("free.free_fc_for", "FC freeboard forward (ft)"),
-        ("free.free_fc_aft", "FC freeboard aft (ft)"),
-        ("free.free_fd_for", "FD freeboard forward (ft)"),
-        ("free.free_fd_aft", "FD freeboard aft (ft)"),
-        ("free.free_ad_for", "AD freeboard forward (ft)"),
-        ("free.free_ad_aft", "AD freeboard aft (ft)"),
-        ("free.free_qd_for", "QD freeboard forward (ft)"),
-        ("free.free_qd_aft", "QD freeboard aft (ft)"),
-        ("free.length_bow", "Bow overhang length (ft)"),
-        ("free.length_ram", "Ram length (ft)"),
-        ("free.length_stern", "Stern overhang length (ft)"),
-        ("free.bow", "Bow shape (0-...)"),
-        ("free.stern", "Stern shape (0-...)"),
-        ("free.transom_width", "Transom width (fraction)"),
+        ("free.free_fc_for", "Forecastle fwd (ft)"),
+        ("free.free_fc_aft", "Forecastle aft (ft)"),
+        ("free.free_fd_for", "Forward deck fwd (ft)"),
+        ("free.free_fd_aft", "Forward deck aft (ft)"),
+        ("free.free_ad_for", "Aft deck fwd (ft)"),
+        ("free.free_ad_aft", "Aft deck aft (ft)"),
+        ("free.free_qd_for", "Quarter deck fwd (ft)"),
+        ("free.free_qd_aft", "Quarter deck aft (ft)"),
+    ]));
+    f.push_str("</div>");
+
+    // ---- Armour ----
+    f.push_str("<div class='tab' data-tab='armour'>");
+    for (title, fields) in [
+        (
+            "Belts",
+            &[
+                ("arm.belt_main", "Main belt (in)"),
+                ("arm.belt_main_length", "Main belt length (ft)"),
+                ("arm.belt_main_height", "Main belt height (ft)"),
+                ("arm.belt_ends", "Ends belt (in)"),
+                ("arm.belt_ends_length", "Ends belt length (ft)"),
+                ("arm.belt_ends_height", "Ends belt height (ft)"),
+                ("arm.belt_upper", "Upper belt (in)"),
+                ("arm.belt_upper_length", "Upper belt length (ft)"),
+                ("arm.belt_upper_height", "Upper belt height (ft)"),
+                ("arm.belts_incline", "Belt incline (deg)"),
+            ][..],
+        ),
+        (
+            "Torpedo bulkhead & bulges",
+            &[
+                ("arm.bulkhead", "Bulkhead (in)"),
+                ("arm.bulkhead_length", "Bulkhead length (ft)"),
+                ("arm.bulkhead_height", "Bulkhead height (ft)"),
+                ("arm.bulkhead_beam", "Beam between bulkheads (ft)"),
+                ("arm.bulkhead_type", "Bulkhead type (0/1)"),
+                ("arm.bulge", "Bulge (in)"),
+                ("arm.bulge_length", "Bulge length (ft)"),
+                ("arm.bulge_height", "Bulge height (ft)"),
+            ][..],
+        ),
+        (
+            "Decks & conning tower",
+            &[
+                ("arm.deck", "Main deck (in)"),
+                ("arm.deck_fc", "Forecastle deck (in)"),
+                ("arm.deck_qd", "Quarter deck (in)"),
+                ("arm.deck_coverage", "Deck coverage mode"),
+                ("arm.conning_for", "Conning tower fwd (in)"),
+                ("arm.conning_aft", "Conning tower aft (in)"),
+            ][..],
+        ),
     ] {
-        f.push_str(&number_input(key, label));
+        f.push_str(&format!("<h2>{title}</h2>"));
+        f.push_str(&grid(fields));
     }
     f.push_str("</div>");
 
-    f.push_str("<h2>Armour</h2><div class='grid'>");
-    for (key, label) in [
-        ("arm.belt_main", "Main belt (in)"),
-        ("arm.belt_main_length", "Main belt length (ft)"),
-        ("arm.belt_main_height", "Main belt height (ft)"),
-        ("arm.belt_ends", "Belt ends (in)"),
-        ("arm.belt_ends_length", "Belt ends length (ft)"),
-        ("arm.belt_ends_height", "Belt ends height (ft)"),
-        ("arm.belt_upper", "Upper belt (in)"),
-        ("arm.belt_upper_length", "Upper belt length (ft)"),
-        ("arm.belt_upper_height", "Upper belt height (ft)"),
-        ("arm.belts_incline", "Belt incline (deg)"),
-        ("arm.bulkhead", "Bulkhead (in)"),
-        ("arm.bulkhead_length", "Bulkhead length (ft)"),
-        ("arm.bulkhead_height", "Bulkhead height (ft)"),
-        ("arm.bulkhead_beam", "Beam between bulkheads (ft)"),
-        ("arm.bulkhead_type", "Bulkhead type (0/1)"),
-        ("arm.bulge", "Bulge (in)"),
-        ("arm.bulge_length", "Bulge length (ft)"),
-        ("arm.bulge_height", "Bulge height (ft)"),
-        ("arm.deck", "Deck armour (in)"),
-        ("arm.deck_fc", "FC deck armour (in)"),
-        ("arm.deck_qd", "QD deck armour (in)"),
-        ("arm.deck_coverage", "Deck coverage mode"),
-        ("arm.conning_for", "Conning forward (in)"),
-        ("arm.conning_aft", "Conning aft (in)"),
-    ] {
-        f.push_str(&number_input(key, label));
+    // ---- Guns (sub-tabs) ----
+    f.push_str("<div class='tab' data-tab='guns'><div class='pills'>");
+    for i in 0..5 {
+        f.push_str(&format!(
+            "<button type='button' data-sub='gun{i}'{}>{}</button>",
+            if i == 0 { " class='active'" } else { "" },
+            battery_title(i)
+        ));
     }
     f.push_str("</div>");
-
     for i in 0..5 {
         f.push_str(&gun_section(i));
     }
+    f.push_str("</div>");
 
+    // ---- Weapons & misc ----
+    f.push_str("<div class='tab' data-tab='weapons'>");
     for i in 0..5 {
         f.push_str(&weapon_section(i));
     }
-
-    f.push_str("<h2>Miscellaneous weights</h2><div class='grid'>");
-    for (key, label) in [
-        ("misc.vital", "Vital spaces (tons)"),
-        ("misc.hull", "Hull spaces (tons)"),
-        ("misc.deck", "Deck spaces (tons)"),
-        ("misc.above", "Above-water spaces (tons)"),
-        ("misc.void", "Void spaces (tons)"),
-    ] {
-        f.push_str(&number_input(key, label));
-    }
+    f.push_str("<h2>Miscellaneous weights (tons)</h2>");
+    f.push_str(&grid(&[
+        ("misc.vital", "Vital spaces"),
+        ("misc.hull", "Hull spaces"),
+        ("misc.deck", "Deck spaces"),
+        ("misc.above", "Above-water"),
+        ("misc.void", "Void"),
+    ]));
     f.push_str("</div>");
 
-    f.push_str("<h2>Internal space overrides</h2><div class='grid'>");
-    f.push_str(&number_input(
-        "spaces.crew_volume_per_person",
-        "Crew volume/person (0=auto)",
-    ));
-    f.push_str(&number_input(
-        "spaces.machinery_volume_per_kw",
-        "Machinery volume/kW (0=auto)",
-    ));
-    f.push_str(&number_input(
-        "spaces.stores_volume_per_ton",
-        "Stores volume/ton (0=auto)",
-    ));
-    f.push_str("</div>");
-
-    f.push_str(&number_input(
-        "planing.calibration_factor",
-        "Planing calibration factor",
-    ));
-    f.push_str(&number_input(
-        "planing.min_speed_kt",
-        "Planing min speed (kt)",
-    ));
-    f.push_str(&number_input(
-        "planing.max_displacement_tons",
-        "Planing max displacement (tons)",
-    ));
-    f.push_str(&checkbox_input("cfd_proxy.enabled", "CFD proxy enabled"));
-    f.push_str(&number_input(
-        "cfd_proxy.viscous",
-        "CFD proxy viscous coefficient",
-    ));
-    f.push_str(&number_input(
-        "cfd_proxy.wave",
-        "CFD proxy wave coefficient",
-    ));
-    f.push_str(&number_input("cfd_proxy.fn_ref", "CFD proxy Fn reference"));
-    f.push_str("<h2>Machinery</h2><div class='grid'>");
-    for (key, label) in [
+    // ---- Machinery ----
+    f.push_str("<div class='tab' data-tab='engine'><h2>Performance</h2>");
+    f.push_str(&grid(&[
         ("engine.speed_max", "Max speed (kt)"),
         ("engine.speed_cruise", "Cruise speed (kt)"),
         ("engine.range", "Range (nm)"),
-        ("engine.pct_coal", "Coal percentage"),
+        ("engine.pct_coal", "Coal share (%)"),
         ("engine.screws", "Screws"),
-        ("engine.power_factor", "Power calibration factor"),
-        ("perf.steadiness", "Trim/steadiness"),
+        ("perf.steadiness", "Trim / steadiness"),
+    ]));
+    f.push_str("<h2>Fuel</h2><div class='grid'>");
+    for (i, name) in FUELS.iter().enumerate() {
+        f.push_str(&checkbox_input(&format!("engine.fuel{i}"), name));
+    }
+    f.push_str("</div><h2>Engines</h2><div class='grid'>");
+    for (i, name) in ENGINES.iter().enumerate() {
+        f.push_str(&checkbox_input(&format!("engine.engine{i}"), name));
+    }
+    f.push_str("</div><h2>Drive</h2><div class='grid'>");
+    for (i, name) in DRIVES.iter().enumerate() {
+        f.push_str(&checkbox_input(&format!("engine.drive{i}"), name));
+    }
+    f.push_str("</div><h2>Resistance model</h2><div class='grid'>");
+    f.push_str(
+        r#"<label>Model<select data-key="engine.resistance_model"><option value="original">Original SpringSharp</option><option value="holtrop">Holtrop-Mennen</option></select></label>"#,
+    );
+    for (key, label) in [
+        ("engine.power_factor", "Power factor"),
+        ("engine.original_power_factor", "Original-model factor"),
+        ("engine.blend_weight", "Holtrop blend weight (1 = none)"),
+        ("engine.holtrop_viscous_factor", "Holtrop viscous factor"),
+        ("engine.holtrop_wave_factor", "Holtrop wave factor"),
+        (
+            "engine.holtrop_correlation_factor",
+            "Holtrop correlation factor",
+        ),
     ] {
         f.push_str(&number_input(key, label));
     }
+    f.push_str("</div><h2>Internal-space overrides (0 = auto)</h2>");
+    f.push_str(&grid(&[
+        ("spaces.crew_volume_per_person", "Crew m³/person"),
+        ("spaces.machinery_volume_per_kw", "Machinery m³/kW"),
+        ("spaces.stores_volume_per_ton", "Stores m³/ton"),
+    ]));
     f.push_str("</div>");
-    f.push_str(
-        r#"<label>Resistance model<select data-key="engine.resistance_model"><option value="original">Original SpringSharp</option><option value="holtrop">Holtrop-Mennen</option></select></label>"#
-    );
-    f.push_str(&number_input(
-        "engine.holtrop_viscous_factor",
-        "Holtrop viscous factor",
-    ));
-    f.push_str(&number_input(
-        "engine.holtrop_wave_factor",
-        "Holtrop wave factor",
-    ));
-    f.push_str(&number_input(
-        "engine.holtrop_correlation_factor",
-        "Holtrop correlation factor",
-    ));
-    f.push_str(&number_input(
-        "engine.ensemble_reduced_weight",
-        "Ensemble reduced weight",
-    ));
-    f.push_str(&number_input(
-        "engine.ensemble_structural_weight",
-        "Ensemble structural weight",
-    ));
-
-    f.push_str("<h2>Fuels / engine types / drives</h2><div class='grid'>");
-    for i in 0..5 {
-        f.push_str(&checkbox_input(
-            &format!("engine.fuel{i}"),
-            &format!("Fuel {i}"),
-        ));
-    }
-    for i in 0..3 {
-        f.push_str(&checkbox_input(
-            &format!("engine.engine{i}"),
-            &format!("Engine type {i}"),
-        ));
-    }
-    for i in 0..4 {
-        f.push_str(&checkbox_input(
-            &format!("engine.drive{i}"),
-            &format!("Drive {i}"),
-        ));
-    }
-    f.push_str("</div>");
-
-    format!(
-        r#"<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>SpringSharp Rust</title>
-<style>
-  body {{ font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 1200px; padding: 0 1rem; }}
-  .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.5rem 1rem; margin-bottom: 1rem; }}
-  label {{ display: flex; flex-direction: column; font-size: 0.8rem; }}
-  input, select {{ margin-top: 2px; padding: 0.3rem; }}
-  fieldset {{ border: 1px solid #ccc; border-radius: 6px; margin: 0.75rem 0; padding: 0.75rem; }}
-  legend {{ font-weight: bold; }}
-  button {{ margin: 0.5rem 0.5rem 0.5rem 0; padding: 0.5rem 1rem; }}
-  #result {{ margin-top: 1rem; }}
-  #result pre {{ background: #f5f5f5; padding: 1rem; overflow-x: auto; }}
-  h1 {{ font-size: 1.4rem; }}
-</style>
-</head>
-<body>
-<h1>SpringSharp Rust - Web Console</h1>
-<p>Use the form below to edit a design, then click <strong>Calculate</strong>.</p>
-<form id="design"> {f} </form>
-<br>
-<button onclick="calculate()">Calculate</button>
-<button onclick="loadDemo()">Load demo design</button>
-<button onclick="clearResult()">Clear result</button>
-<div id="result"></div>
-<h2>External Data Validation</h2>
-<textarea id="external" rows="8" cols="100" spellcheck="false" placeholder="Paste external CSV: name,type,length,beam,draught,displacement,block,speed,hp,confidence,source"></textarea>
-<br>
-<button onclick="validateExternal()">Validate External Data</button>
-<button onclick="calibrateExternal()">Calibrate with External Data</button>
-<div id="externalResult"></div>
-<h2>Planing Estimator</h2>
-<div>
-  <input id="pLen" type="number" placeholder="Length ft" value="80">
-  <input id="pBeam" type="number" placeholder="Beam ft" value="20">
-  <input id="pDisp" type="number" placeholder="Displacement lbs" value="112000">
-  <input id="pSpeed" type="number" placeholder="Speed kn" value="40">
-  <input id="pFactor" type="number" placeholder="Factor" value="0.668">
-  <button onclick="planingEstimate()">Estimate Planing HP</button>
-  <button onclick="calibratePlaning()">Calibrate Planing from External CSV</button>
-</div>
-<div id="planingResult"></div>
-<script>
-function collect() {{
-  const lines = [];
-  document.querySelectorAll('[data-key]').forEach(el => {{
-    const key = el.dataset.key;
-    const value = el.type === 'checkbox' ? el.checked : el.value;
-    lines.push(key + '=' + value);
-  }});
-  return lines.join('\n') + '\n';
-}}
-function applyText(text) {{
-  text.trim().split('\n').forEach(line => {{
-    const i = line.indexOf('=');
-    if (i < 0) return;
-    const key = line.slice(0, i).trim();
-    const value = line.slice(i + 1).trim();
-    const el = document.querySelector(`[data-key="${{key}}"]`);
-    if (!el) return;
-    if (el.type === 'checkbox') el.checked = value === 'true' || value === 'True';
-    else el.value = value;
-  }});
-}}
-async function loadDemo() {{
-  const r = await fetch('/api/demo');
-  applyText(await r.text());
-}}
-async function calculate() {{
-  const r = await fetch('/api/calculate', {{
-    method: 'POST',
-    headers: {{ 'Content-Type': 'text/plain' }},
-    body: collect()
-  }});
-  document.getElementById('result').innerHTML = await r.text();
-}}
-async function validateExternal() {{
-  const text = document.getElementById('external').value;
-  const r = await fetch('/api/external', {{
-    method: 'POST',
-    headers: {{ 'Content-Type': 'text/plain' }},
-    body: text
-  }});
-  document.getElementById('externalResult').innerHTML = await r.text();
-}}
-async function calibrateExternal() {{
-  const text = document.getElementById('external').value;
-  const r = await fetch('/api/external-calibrate', {{
-    method: 'POST',
-    headers: {{ 'Content-Type': 'text/plain' }},
-    body: text
-  }});
-  document.getElementById('externalResult').innerHTML = await r.text();
-}}
-async function calibratePlaning() {{
-  const text = document.getElementById('external').value;
-  const r = await fetch('/api/planing-calibrate', {{
-    method: 'POST',
-    headers: {{ 'Content-Type': 'text/plain' }},
-    body: text
-  }});
-  const factorText = await r.text();
-  const factor = factorText.split(' ')[0];
-  document.getElementById('pFactor').value = factor;
-  document.getElementById('planingResult').innerHTML = `<pre>Planing calibration factor: ${{factorText}}</pre>`;
-}}
-async function planingEstimate() {{
-  const body = [
-    document.getElementById('pLen').value,
-    document.getElementById('pBeam').value,
-    document.getElementById('pDisp').value,
-    document.getElementById('pSpeed').value,
-    document.getElementById('pFactor').value || '1'
-  ].join(',');
-  const r = await fetch('/api/planing', {{
-    method: 'POST',
-    headers: {{ 'Content-Type': 'text/plain' }},
-    body
-  }});
-  const hp = await r.text();
-  document.getElementById('planingResult').innerHTML = `<pre>Planing HP: ${{hp}} hp</pre>`;
-}}
-function clearResult() {{
-  document.getElementById('result').innerHTML = '';
-}}
-window.addEventListener('DOMContentLoaded', loadDemo);
-</script>
-</body>
-</html>
-"#
-    )
+    f
 }
 
 fn text_input(key: &str, label: &str) -> String {
@@ -361,52 +288,101 @@ fn number_input(key: &str, label: &str) -> String {
 }
 
 fn checkbox_input(key: &str, label: &str) -> String {
-    format!(r#"<label><input data-key="{key}" type="checkbox"> {label}</label>"#)
+    format!(r#"<label class="check"><input data-key="{key}" type="checkbox"> {label}</label>"#)
 }
 
-fn gun_section(i: usize) -> String {
-    let title = match i {
+/// A select whose option values are the numeric indices stored in `.ssr`.
+fn select_input(key: &str, label: &str, options: &[&str]) -> String {
+    let mut s = format!(r#"<label>{label}<select data-key="{key}">"#);
+    for (i, name) in options.iter().enumerate() {
+        s.push_str(&format!(
+            r#"<option value="{i}">{i} · {}</option>"#,
+            crate::features::html_escape(name)
+        ));
+    }
+    s.push_str("</select></label>");
+    s
+}
+
+fn battery_title(i: usize) -> &'static str {
+    match i {
         0 => "Main battery",
         1 => "2nd battery",
         2 => "3rd battery",
         3 => "4th battery",
-        4 => "5th battery",
-        _ => "Battery",
-    };
+        _ => "5th battery",
+    }
+}
+
+fn gun_section(i: usize) -> String {
     let p = format!("gun{i}");
-    let mut h = format!(r#"<fieldset><legend>{title} (gun{i})</legend><div class='grid'>"#);
+    let mut h = format!(
+        "<div class='sub{}' data-sub='{p}'><h2>Guns</h2><div class='grid'>",
+        if i == 0 { " active" } else { "" }
+    );
     for (key, label) in [
         ("barrels", "Barrels"),
         ("calibre", "Calibre (in)"),
-        ("cal_length", "Calibre length"),
-        ("date_gun", "Year"),
-        ("gun_type", "Gun type"),
-        ("mount_type", "Mount type"),
-        ("magazine", "Magazine rounds"),
-        ("mounts", "Mounts"),
-        ("guns_in_mount_g1", "Guns/mount G1"),
-        ("guns_in_mount_g2", "Guns/mount G2"),
-        ("layout_g1", "Layout G1"),
-        ("layout_g2", "Layout G2"),
-        ("mount_super_g1", "Super mounts G1"),
-        ("mount_sub_g1", "Sub mounts G1"),
-        ("mount_super_g2", "Super mounts G2"),
-        ("mount_deck_g2", "Deck mounts G2"),
-        ("mount_sub_g2", "Sub mounts G2"),
-        ("arm_face", "Armour face (in)"),
-        ("arm_back", "Armour back (in)"),
-        ("arm_bottom", "Armour bottom (in)"),
-        ("weight_adj_g1", "Weight adj G1"),
-        ("weight_adj_g2", "Weight adj G2"),
+        ("cal_length", "Barrel length (cal)"),
+        ("date_gun", "Model year"),
+        ("magazine", "Rounds per gun"),
+    ] {
+        h.push_str(&number_input(&format!("{p}.{key}"), label));
+    }
+    h.push_str(&select_input(
+        &format!("{p}.gun_type"),
+        "Gun type",
+        GUN_TYPES,
+    ));
+    h.push_str(&select_input(
+        &format!("{p}.mount_type"),
+        "Mount type",
+        MOUNT_TYPES,
+    ));
+    h.push_str(&number_input(&format!("{p}.mounts"), "Mounts"));
+    h.push_str("</div>");
+    for g in 1..=2 {
+        h.push_str(&format!("<h2>Group {g}</h2><div class='grid'>"));
+        h.push_str(&select_input(
+            &format!("{p}.layout_g{g}"),
+            "Layout",
+            LAYOUTS,
+        ));
+        h.push_str(&number_input(
+            &format!("{p}.guns_in_mount_g{g}"),
+            "Guns-per-mount index",
+        ));
+        h.push_str(&number_input(
+            &format!("{p}.mount_super_g{g}"),
+            "Superfiring mounts",
+        ));
+        if g == 2 {
+            h.push_str(&number_input(&format!("{p}.mount_deck_g2"), "Deck mounts"));
+        }
+        h.push_str(&number_input(&format!("{p}.mount_sub_g{g}"), "Hull mounts"));
+        h.push_str(&number_input(
+            &format!("{p}.weight_adj_g{g}"),
+            "Weight adjustment",
+        ));
+        h.push_str("</div>");
+    }
+    h.push_str("<h2>Mount armour (in)</h2><div class='grid'>");
+    for (key, label) in [
+        ("arm_face", "Face"),
+        ("arm_back", "Back / barbette"),
+        ("arm_bottom", "Bottom / hoist"),
     ] {
         h.push_str(&number_input(&format!("{p}.{key}"), label));
     }
     h.push_str(&checkbox_input(
         &format!("{p}.super_super_chk"),
-        "Super-super",
+        "Super-superfiring",
     ));
-    h.push_str(&checkbox_input(&format!("{p}.sub_sub_chk"), "Sub-sub"));
-    h.push_str("</div></fieldset>");
+    h.push_str(&checkbox_input(
+        &format!("{p}.sub_sub_chk"),
+        "Lower casemates",
+    ));
+    h.push_str("</div></div>");
     h
 }
 
@@ -415,18 +391,17 @@ fn weapon_section(i: usize) -> String {
         0 => "Torpedo set 1",
         1 => "Torpedo set 2",
         2 => "Mines",
-        3 => "DC/AS mortars 1",
-        4 => "DC/AS mortars 2",
-        _ => "Weapon",
+        3 => "DC / AS mortars 1",
+        _ => "DC / AS mortars 2",
     };
     let p = format!("weap{i}");
-    let mut h = format!(r#"<fieldset><legend>{title} (weap{i})</legend><div class='grid'>"#);
+    let mut h = format!(r#"<fieldset><legend>{title}</legend><div class='grid'>"#);
     h.push_str(&format!(
         r#"<label>Kind<select data-key="{p}.kind"><option value="torpedo">Torpedo</option><option value="mine">Mine</option><option value="dc">Depth charge</option></select></label>"#
     ));
     for (key, label) in [
         ("number", "Number"),
-        ("loads", "Loads/reloads"),
+        ("loads", "Loads / reloads"),
         ("size", "Size"),
         ("length", "Length (ft, torpedo)"),
         ("location", "Location index"),
@@ -437,6 +412,205 @@ fn weapon_section(i: usize) -> String {
     h
 }
 
+// ---------------------------------------------------------------------------
+// JSON helpers (hand-rolled; the core crate has no dependencies)
+// ---------------------------------------------------------------------------
+
+fn json_str(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+fn json_num(v: f64) -> String {
+    if v.is_finite() {
+        format!("{v}")
+    } else {
+        "null".to_string()
+    }
+}
+
+/// Full evaluation of a calculated design, consumed by the workbench page.
+fn evaluation_json(ship: &ShipModel, message: &str) -> String {
+    let h = &ship.hull;
+    let e = &ship.engine;
+    let g = &ship.guns;
+    let w = &ship.weapons;
+    let report = generate_report(ship);
+    let alerts: Vec<String> = report
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("DESIGN FAILURE") || l.starts_with("WARNING"))
+        .map(json_str)
+        .collect();
+    let model = if e.blend_weight < 1.0 {
+        "blended Holtrop/original"
+    } else {
+        match e.resistance_model {
+            ResistanceModel::Original => "original SpringSharp model",
+            ResistanceModel::HoltropMennen => "Holtrop-Mennen model",
+        }
+    };
+    let weights = [
+        ("Hull", e.hull_weight),
+        ("Armour", ship.armour.weight),
+        ("Machinery", e.engine_weight),
+        ("Armament", g.guns_weight + g.arm_weight + w.weight),
+        ("Magazine", g.magazine),
+        ("Bunker", e.bunker),
+        (
+            "Miscellaneous",
+            w.misc_weight_vital
+                + w.misc_weight_hull
+                + w.misc_weight_deck
+                + w.misc_weight_above
+                + w.void_weight,
+        ),
+    ]
+    .iter()
+    .map(|(n, v)| format!("[{},{}]", json_str(n), json_num(*v)))
+    .collect::<Vec<_>>()
+    .join(",");
+    let nearest = nearest_historical_cases(ship, 6)
+        .iter()
+        .map(|c| {
+            format!(
+                "{{\"name\":{},\"ship_type\":{},\"displacement\":{},\"speed\":{},\"length\":{},\"hp\":{}}}",
+                json_str(c.name),
+                json_str(c.ship_type),
+                json_num(c.displacement_tons),
+                json_num(c.speed_kt),
+                json_num(c.length_ft),
+                json_num(c.reference_hp)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let fields: Vec<(&str, String)> = vec![
+        ("message", json_str(message)),
+        ("name", json_str(&ship.name)),
+        ("country", json_str(&ship.country)),
+        ("ship_type", json_str(&ship.ship_type)),
+        ("date_hull", h.date_hull.to_string()),
+        ("model", json_str(model)),
+        ("converged", ship.converged.to_string()),
+        ("disp_light", json_num(ship.disp_light)),
+        ("disp_standard", json_num(ship.disp_standard)),
+        ("disp_normal", json_num(h.displacement)),
+        ("disp_full", json_num(ship.disp_max_load)),
+        ("speed_max", json_num(e.speed_max)),
+        ("speed_cruise", json_num(e.speed_cruise)),
+        ("hp_max", json_num(e.hp_max)),
+        ("range", json_num(e.range)),
+        ("stability", json_num(ship.stability_adj)),
+        ("metacentre", json_num(ship.metacentre)),
+        ("seakeeping", json_num(ship.seakeeping)),
+        ("strength_comp", json_num(ship.strength_comp)),
+        ("flotation", json_num(ship.flotation)),
+        ("cost_dollars", json_num(ship.cost_dollars)),
+        ("weights", format!("[{weights}]")),
+        ("alerts", format!("[{}]", alerts.join(","))),
+        ("nearest", format!("[{nearest}]")),
+        ("report", json_str(&report)),
+        ("ssr", json_str(&serialize(ship))),
+    ];
+    let body = fields
+        .iter()
+        .map(|(k, v)| format!("{}:{v}", json_str(k)))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("{{{body}}}")
+}
+
+fn parse_design(text: &str) -> Result<ShipModel, String> {
+    let mut ship = ShipModel::new();
+    deserialize(&mut ship, text)?;
+    ship.calculate();
+    Ok(ship)
+}
+
+/// Split `"<number>\n<ssr text>"` bodies used by the solver/arrangement routes.
+fn split_target(body: &str) -> Result<(f64, &str), String> {
+    let (first, rest) = body.split_once('\n').unwrap_or((body, ""));
+    let v: f64 = first
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid target value '{}'", first.trim()))?;
+    if !v.is_finite() || v <= 0.0 {
+        return Err("target value must be a positive number".to_string());
+    }
+    Ok((v, rest))
+}
+
+fn design_route(body: &str, action: &str) -> Result<String, String> {
+    match action {
+        "evaluate" => parse_design(body).map(|s| evaluation_json(&s, "")),
+        "regime" => {
+            let mut ship = parse_design(body)?;
+            let entry = apply_regime_calibration(&mut ship).ok_or_else(|| {
+                format!(
+                    "No regime factor for ship type '{}'; use battleship, carrier, cruiser or destroyer",
+                    ship.ship_type
+                )
+            })?;
+            let msg = format!(
+                "Regime model applied: Holtrop-Mennen x {:.3} ({} factor). Max power now {:.0} hp.",
+                entry.factor, entry.ship_type, ship.engine.hp_max
+            );
+            Ok(evaluation_json(&ship, &msg))
+        }
+        "blend" => {
+            let mut ship = parse_design(body)?;
+            apply_blend_calibration(&mut ship).ok_or_else(|| {
+                format!(
+                    "No blend weights for ship type '{}'; use battleship, carrier, cruiser or destroyer",
+                    ship.ship_type
+                )
+            })?;
+            let msg = format!(
+                "Blended model applied: Holtrop weight {:.2}, Holtrop factor {:.3}, original factor {:.3}. Max power now {:.0} hp.",
+                ship.engine.blend_weight,
+                ship.engine.power_factor,
+                ship.engine.original_power_factor,
+                ship.engine.hp_max
+            );
+            Ok(evaluation_json(&ship, &msg))
+        }
+        "speed" => {
+            let (hp, rest) = split_target(body)?;
+            let mut ship = parse_design(rest)?;
+            let v = solve_max_speed(&mut ship, hp);
+            let msg = format!("Max speed for {hp:.0} hp: {v:.2} kt");
+            Ok(evaluation_json(&ship, &msg))
+        }
+        "range" => {
+            let (bunker, rest) = split_target(body)?;
+            let mut ship = parse_design(rest)?;
+            let r = solve_range(&mut ship, bunker);
+            let msg = format!("Range for {bunker:.0} t normal bunker: {r:.0} nm");
+            Ok(evaluation_json(&ship, &msg))
+        }
+        "compartments" => {
+            let (cg, rest) = split_target(body)?;
+            let ship = parse_design(rest)?;
+            let placement = suggest_compartment_placement(&ship, cg);
+            Ok(compartment_placement_html(&ship, &placement))
+        }
+        _ => Err("unknown action".to_string()),
+    }
+}
 /// Maximum accepted HTTP request body.
 ///
 /// The console is meant for hand-pasted `.ssr`/CSV text; anything larger is a
@@ -474,6 +648,18 @@ pub fn run_server(port: u16) -> io::Result<()> {
     Ok(())
 }
 
+fn design_action(path: &str) -> Option<&'static str> {
+    Some(match path {
+        "/api/evaluate" => "evaluate",
+        "/api/calibrate/regime" => "regime",
+        "/api/calibrate/blend" => "blend",
+        "/api/solve/speed" => "speed",
+        "/api/solve/range" => "range",
+        "/api/compartments" => "compartments",
+        _ => return None,
+    })
+}
+
 fn route(method: &str, path: &str, body_text: &str) -> (u16, &'static str, String) {
     match (method, path) {
         ("GET", "/" | "/index.html") => (200, "text/html; charset=utf-8", html_page()),
@@ -482,6 +668,18 @@ fn route(method: &str, path: &str, body_text: &str) -> (u16, &'static str, Strin
             (200, "text/plain; charset=utf-8", serialize(&ship))
         }
         ("GET", "/api/health") => (200, "text/plain; charset=utf-8", "ok".to_string()),
+        ("POST", p) if design_action(p).is_some() => {
+            let action = design_action(p).unwrap_or_default();
+            let ctype = if action == "compartments" {
+                "text/html; charset=utf-8"
+            } else {
+                "application/json; charset=utf-8"
+            };
+            match design_route(body_text, action) {
+                Ok(out) => (200, ctype, out),
+                Err(e) => (400, "text/plain; charset=utf-8", e),
+            }
+        }
         ("POST", "/api/calculate") => {
             let mut ship = ShipModel::new();
             match deserialize(&mut ship, body_text) {
@@ -666,6 +864,67 @@ fn write_plain(stream: &mut TcpStream, status: u16, message: &str) -> io::Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn demo_ssr() -> String {
+        serialize(&crate::features::demo_ship())
+    }
+
+    #[test]
+    fn page_has_tabs_and_labelled_selects() {
+        let (status, _, page) = route("GET", "/", "");
+        assert_eq!(status, 200);
+        assert!(!page.contains("__FORM__"));
+        for needle in [
+            "data-tab='guns'",
+            "Turret on barbette",
+            "Steam turbines",
+            "Transom stern",
+            "data-key=\"gun4.layout_g2\"",
+            "data-key=\"engine.blend_weight\"",
+        ] {
+            assert!(page.contains(needle), "page is missing {needle}");
+        }
+    }
+
+    #[test]
+    fn evaluate_returns_dashboard_json() {
+        let (status, ctype, json) = route("POST", "/api/evaluate", &demo_ssr());
+        assert_eq!(status, 200, "{json}");
+        assert!(ctype.contains("json"));
+        for key in [
+            "\"disp_normal\":",
+            "\"weights\":[[",
+            "\"nearest\":[{",
+            "\"ssr\":",
+        ] {
+            assert!(json.contains(key), "missing {key}");
+        }
+        assert!(!json.contains(":NaN") && !json.contains(":inf"));
+    }
+
+    #[test]
+    fn calibration_and_solver_routes_work() {
+        let (s, _, json) = route("POST", "/api/calibrate/regime", &demo_ssr());
+        assert_eq!(s, 200, "{json}");
+        assert!(json.contains("engine.resistance_model=holtrop"));
+        let (s, _, json) = route("POST", "/api/calibrate/blend", &demo_ssr());
+        assert_eq!(s, 200, "{json}");
+        let (s, _, json) = route(
+            "POST",
+            "/api/solve/speed",
+            &format!("40000\n{}", demo_ssr()),
+        );
+        assert_eq!(s, 200, "{json}");
+        assert!(json.contains("Max speed for 40000 hp"));
+        let (s, _, _) = route("POST", "/api/solve/range", "abc\nmeta.name=x\n");
+        assert_eq!(s, 400);
+    }
+
+    #[test]
+    fn json_strings_are_escaped() {
+        assert_eq!(json_str("a\"b\\c\nd"), "\"a\\\"b\\\\c\\nd\"");
+        assert_eq!(json_num(f64::NAN), "null");
+    }
 
     #[test]
     fn health_route_ok() {
