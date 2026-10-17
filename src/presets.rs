@@ -98,6 +98,22 @@ pub const PRESET_LIST: &[PresetInfo] = &[
         year: 1943,
         displacement_tons: 31_500.0,
     },
+    PresetInfo {
+        id: "kgv",
+        name: "HMS King George V",
+        country: "United Kingdom",
+        ship_type: "Battleship",
+        year: 1940,
+        displacement_tons: 38_000.0,
+    },
+    PresetInfo {
+        id: "scharnhorst",
+        name: "Scharnhorst",
+        country: "Germany",
+        ship_type: "Battleship",
+        year: 1939,
+        displacement_tons: 34_850.0,
+    },
 ];
 
 /// Get preset ship model by identifier.
@@ -113,6 +129,8 @@ pub fn get_preset(id: &str) -> Option<ShipModel> {
         "shimakaze" => preset_shimakaze(),
         "hood" => preset_hood(),
         "essex" => preset_essex(),
+        "kgv" => preset_kgv(),
+        "scharnhorst" => preset_scharnhorst(),
         _ => return None,
     };
     ship.calculate();
@@ -1076,6 +1094,240 @@ fn preset_essex() -> ShipModel {
     ship
 }
 
+fn preset_kgv() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "HMS King George V".into();
+    ship.country = "United Kingdom".into();
+    ship.ship_type = "Battleship".into();
+
+    ship.hull.length = 740.0;
+    ship.hull.beam = 103.0;
+    ship.hull.beam_bulges = 103.0;
+    ship.hull.draught = 29.0;
+    ship.hull.block = 0.59;
+    ship.hull.date_hull = 1940;
+    ship.hull.date_engine = 1940;
+
+    ship.free.fc_length = 0.35;
+    ship.free.fd_length = 0.25;
+    ship.free.qd_length = 0.20;
+    ship.free.free_fc_for = 28.0;
+    ship.free.free_fc_aft = 25.0;
+    ship.free.free_fd_for = 22.0;
+    ship.free.free_fd_aft = 20.0;
+    ship.free.free_ad_for = 18.0;
+    ship.free.free_ad_aft = 17.0;
+    ship.free.free_qd_for = 17.0;
+    ship.free.free_qd_aft = 16.5;
+
+    // 10 x 14"/45 BL Mk VII in 2 quadruple turrets (A, Y) and 1 superfiring twin turret (B)
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 10;
+    g1.calibre = 14.0;
+    g1.cal_length = 45.0;
+    g1.date_gun = 1940;
+    g1.gun_type = 1; // BL
+    g1.mount_type = 3; // Turret on barbette
+    g1.magazine = 100;
+    g1.mounts = 3;
+    g1.guns_in_mount_g1 = 9; // Quad mount (2 mounts = 8 guns)
+    g1.layout_g1 = 1; // Ends
+    g1.mounts_g1 = 2;
+    g1.per_mount_g1 = 4;
+    g1.guns_in_mount_g2 = 3; // Twin mount (1 mount = 2 guns)
+    g1.layout_g2 = 3; // Fore deck forward
+    g1.mounts_g2 = 1;
+    g1.per_mount_g2 = 2;
+    g1.mount_super_g2 = 1;
+    g1.arm_face = 12.8;
+    g1.arm_back = 7.0;
+    g1.arm_bottom = 12.8;
+
+    // 16 x 5.25"/50 QF Mk I DP in 8 twin mounts
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 16;
+    g2.calibre = 5.25;
+    g2.cal_length = 50.0;
+    g2.date_gun = 1940;
+    g2.gun_type = 4; // DP
+    g2.mount_type = 5;
+    g2.magazine = 300;
+    g2.mounts = 8;
+    g2.guns_in_mount_g1 = 3; // Twin
+    g2.layout_g1 = 9; // Sides
+    g2.mount_super_g1 = 4;
+    g2.arm_face = 1.5;
+    g2.arm_back = 1.0;
+    g2.arm_bottom = 1.0;
+
+    // Heavy vertical belt (14.7" main belt + 5.5" upper strake)
+    ship.armour.belt_main = 14.7;
+    ship.armour.belt_main_length = 396.0;
+    ship.armour.belt_main_height = 15.0;
+    ship.armour.belt_upper = 5.5;
+    ship.armour.belt_upper_length = 396.0;
+    ship.armour.belt_upper_height = 8.5;
+    ship.armour.belts_incline = 0.0; // Vertical cemented belt
+    ship.armour.deck = 5.9;
+    ship.armour.deck_fc = 4.9;
+    ship.armour.deck_qd = 4.9;
+    ship.armour.deck_coverage = 6;
+    ship.armour.bulkhead = 11.8;
+    ship.armour.bulkhead_length = 396.0;
+    ship.armour.bulkhead_height = 15.0;
+    ship.armour.bulkhead_beam = 90.0;
+    ship.armour.bulge = 1.5;
+    ship.armour.conning_for = 4.0;
+
+    ship.engine.fuel[1] = true;
+    ship.engine.engine_types[2] = true;
+    ship.engine.drive[1] = true;
+    ship.engine.speed_max = 28.0;
+    ship.engine.speed_cruise = 14.0;
+    ship.engine.range = 14000.0;
+    ship.engine.screws = 4;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.767;
+    // Admiralty 3-drum boilers + Parsons geared turbines (110,000 shp in 2,720t => ~40.4 shp/ton)
+    ship.engine.machinery_weight_factor = 1.016;
+
+    ship.weapons = WeaponAggregate {
+        misc_weight_vital: 2200.0,
+        ..Default::default()
+    };
+    ship
+}
+
+fn preset_scharnhorst() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "Scharnhorst".into();
+    ship.country = "Germany".into();
+    ship.ship_type = "Battleship".into();
+
+    ship.hull.length = 741.5;
+    ship.hull.beam = 98.4;
+    ship.hull.beam_bulges = 98.4;
+    ship.hull.draught = 29.5;
+    ship.hull.block = 0.565;
+    ship.hull.date_hull = 1939;
+    ship.hull.date_engine = 1939;
+
+    ship.free.fc_length = 0.40;
+    ship.free.fd_length = 0.25;
+    ship.free.qd_length = 0.15;
+    ship.free.free_fc_for = 27.5;
+    ship.free.free_fc_aft = 23.0;
+    ship.free.free_fd_for = 19.5;
+    ship.free.free_fd_aft = 18.0;
+    ship.free.free_ad_for = 16.5;
+    ship.free.free_ad_aft = 16.0;
+    ship.free.free_qd_for = 16.0;
+    ship.free.free_qd_aft = 15.5;
+
+    // 9 x 11.1"/54.5 (28.3 cm) SK C/34 in 3 triple turrets
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 9;
+    g1.calibre = 11.1;
+    g1.cal_length = 54.5;
+    g1.date_gun = 1934;
+    g1.gun_type = 1; // BL
+    g1.mount_type = 3; // Turret on barbette
+    g1.magazine = 150;
+    g1.mounts = 3;
+    g1.guns_in_mount_g1 = 6; // Triple mount
+    g1.layout_g1 = 1; // Ends
+    g1.mounts_g1 = 2;
+    g1.per_mount_g1 = 3;
+    g1.guns_in_mount_g2 = 6; // Triple mount
+    g1.layout_g2 = 3; // Fore deck forward
+    g1.mounts_g2 = 1;
+    g1.per_mount_g2 = 3;
+    g1.mount_super_g2 = 1;
+    g1.arm_face = 14.2;
+    g1.arm_back = 7.1;
+    g1.arm_bottom = 13.8;
+
+    // 12 x 5.9"/55 (15 cm) SK C/28 in 4 twin + 4 single mounts
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 12;
+    g2.calibre = 5.9;
+    g2.cal_length = 55.0;
+    g2.date_gun = 1934;
+    g2.gun_type = 2; // QF
+    g2.mount_type = 3;
+    g2.magazine = 150;
+    g2.mounts = 8;
+    g2.guns_in_mount_g1 = 3; // Twin
+    g2.layout_g1 = 9;
+    g2.mount_super_g1 = 4;
+    g2.arm_face = 1.5;
+    g2.arm_back = 1.0;
+    g2.arm_bottom = 1.0;
+
+    // 14 x 4.1"/65 (10.5 cm) SK C/33 heavy AA in 7 twin mounts
+    let g3 = ship.battery_mut(2);
+    g3.barrels = 14;
+    g3.calibre = 4.1;
+    g3.cal_length = 65.0;
+    g3.date_gun = 1935;
+    g3.gun_type = 4; // DP
+    g3.mount_type = 5;
+    g3.magazine = 400;
+    g3.mounts = 7;
+    g3.guns_in_mount_g1 = 3; // Twin
+    g3.layout_g1 = 9;
+    g3.mount_super_g1 = 4;
+
+    // Thick main belt (13.8" / 350 mm) + 1.8" upper belt + 3.1" ends belt
+    ship.armour.belt_main = 13.8;
+    ship.armour.belt_main_length = 492.0;
+    ship.armour.belt_main_height = 14.8;
+    ship.armour.belt_upper = 1.8;
+    ship.armour.belt_upper_length = 492.0;
+    ship.armour.belt_upper_height = 12.0;
+    ship.armour.belt_ends = 3.1;
+    ship.armour.belt_ends_length = 120.0;
+    ship.armour.belt_ends_height = 10.0;
+    ship.armour.deck = 4.5; // 95-105 mm effective over vital spaces
+    ship.armour.deck_fc = 2.0;
+    ship.armour.deck_qd = 2.0;
+    ship.armour.deck_coverage = 6;
+    ship.armour.bulkhead = 5.9;
+    ship.armour.bulkhead_length = 492.0;
+    ship.armour.bulkhead_height = 15.0;
+    ship.armour.bulkhead_beam = 85.0;
+    ship.armour.bulge = 1.5;
+    ship.armour.conning_for = 13.8;
+
+    ship.engine.fuel[1] = true;
+    ship.engine.engine_types[2] = true;
+    ship.engine.drive[1] = true;
+    ship.engine.speed_max = 31.5;
+    ship.engine.speed_cruise = 19.0;
+    ship.engine.range = 8800.0;
+    ship.engine.screws = 3;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.767;
+    // 12 Wagner high-pressure boilers + 3 Brown-Boveri geared turbines (160,000 shp in 2,580t => ~62 shp/ton)
+    ship.engine.machinery_weight_factor = 0.708;
+
+    // 6 x 21" (53.3 cm) torpedo tubes in 2 triple deck mounts
+    ship.weapons = WeaponAggregate {
+        torpedo1: WeaponMount {
+            kind: WeaponKind::Torpedo,
+            number: 6,
+            loads: 2,
+            size: 21.0,
+            length: 23.0,
+            location: 4,
+            ..Default::default()
+        },
+        misc_weight_vital: 1400.0,
+        ..Default::default()
+    };
+    ship
+}
+
 /// Published historical subsystem weight & stability reference for a preset ship.
 ///
 /// Accounting convention (matching SpringSharp's output groups):
@@ -1243,6 +1495,34 @@ pub const PRESET_WEIGHT_BENCHMARKS: &[PresetWeightBenchmark] = &[
         ref_bunker_t: 3_000.0,
         ref_gm_ft: 6.5,
         source: "Friedman (1983) U.S. Aircraft Carriers; Raven (1998) Essex-Class Carriers",
+    },
+    PresetWeightBenchmark {
+        id: "kgv",
+        name: "HMS King George V",
+        ship_type: "Battleship",
+        year: 1940,
+        ref_displacement_t: 38_000.0,
+        ref_hull_t: 13_830.0,
+        ref_armour_t: 12_500.0,
+        ref_machinery_t: 2_720.0,
+        ref_armament_t: 7_400.0,
+        ref_bunker_t: 1_500.0,
+        ref_gm_ft: 6.1,
+        source: "Raven & Roberts (1976) British Battleships of World War Two; Friedman",
+    },
+    PresetWeightBenchmark {
+        id: "scharnhorst",
+        name: "Scharnhorst",
+        ship_type: "Battleship",
+        year: 1939,
+        ref_displacement_t: 34_850.0,
+        ref_hull_t: 12_400.0,
+        ref_armour_t: 14_245.0,
+        ref_machinery_t: 2_580.0,
+        ref_armament_t: 4_990.0,
+        ref_bunker_t: 1_500.0,
+        ref_gm_ft: 7.2,
+        source: "Garzke & Dulin (1985) Battleships: Axis and Neutral; Gröner (1990)",
     },
 ];
 

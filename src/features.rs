@@ -64,6 +64,65 @@ pub fn solve_range(ship: &mut ShipModel, target_bunker: f64) -> f64 {
     best
 }
 
+/// Scale ship hull dimensions (length, beam, draught, belt dimensions) proportionally
+/// to achieve a target normal displacement (tons).
+pub fn solve_displacement_scale(ship: &mut ShipModel, target_disp: f64) -> f64 {
+    if target_disp <= 0.0 || !target_disp.is_finite() {
+        return ship.hull.displacement;
+    }
+    let orig_l = ship.hull.length;
+    let orig_b = ship.hull.beam;
+    let orig_bb = ship.hull.beam_bulges;
+    let orig_t = ship.hull.draught;
+    let orig_bl = ship.armour.belt_main_length;
+    let orig_bh = ship.armour.belt_main_height;
+
+    let mut lo = 0.2_f64;
+    let mut hi = 5.0_f64;
+    let mut best_s = 1.0_f64;
+    let mut iter = 0_u32;
+
+    while hi - lo > 1e-5 && iter < 100 {
+        let mid = (lo + hi) * 0.5;
+        ship.hull.length = orig_l * mid;
+        ship.hull.beam = orig_b * mid;
+        ship.hull.beam_bulges = orig_bb * mid;
+        ship.hull.draught = orig_t * mid;
+        if orig_bl > 0.0 {
+            ship.armour.belt_main_length = orig_bl * mid;
+        }
+        if orig_bh > 0.0 {
+            ship.armour.belt_main_height = orig_bh * mid;
+        }
+        ship.calculate();
+        let disp = ship.hull.displacement;
+        if disp.is_finite() {
+            best_s = mid;
+            if disp < target_disp {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        } else {
+            hi = mid;
+        }
+        iter += 1;
+    }
+
+    ship.hull.length = orig_l * best_s;
+    ship.hull.beam = orig_b * best_s;
+    ship.hull.beam_bulges = orig_bb * best_s;
+    ship.hull.draught = orig_t * best_s;
+    if orig_bl > 0.0 {
+        ship.armour.belt_main_length = orig_bl * best_s;
+    }
+    if orig_bh > 0.0 {
+        ship.armour.belt_main_height = orig_bh * best_s;
+    }
+    ship.calculate();
+    ship.hull.displacement
+}
+
 fn gun_type_name(idx: i32) -> &'static str {
     match idx {
         0 => "Muzzle loading gun",

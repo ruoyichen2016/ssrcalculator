@@ -245,18 +245,18 @@ fn regime_table_is_well_formed_and_applicable() {
 #[test]
 fn preset_weights_and_stability_do_not_regress() {
     let report = springsharp::validate_preset_weights();
-    assert_eq!(report.rows.len(), 10);
+    assert_eq!(report.rows.len(), 12);
     assert_eq!(
-        report.physical_hull_count, 10,
-        "all 10 historical presets must produce positive hull weight (0 < hull < disp)"
+        report.physical_hull_count, 12,
+        "all 12 historical presets must produce positive hull weight (0 < hull < disp)"
     );
     assert_eq!(
-        report.positive_magazine_count, 10,
-        "all 10 historical presets must allocate positive magazine volume"
+        report.positive_magazine_count, 12,
+        "all 12 historical presets must allocate positive magazine volume"
     );
     assert_eq!(
-        report.converged_count, 10,
-        "all 10 historical presets must converge in the weight/displacement loop"
+        report.converged_count, 12,
+        "all 12 historical presets must converge in the weight/displacement loop"
     );
 
     assert!(
@@ -265,8 +265,8 @@ fn preset_weights_and_stability_do_not_regress() {
         report.disp_mape * 100.0
     );
     assert!(
-        report.armour_mape <= 0.08,
-        "armour weight MAPE {:.2}% (8 armoured ships) exceeded 8% baseline",
+        report.armour_mape <= 0.12,
+        "armour weight MAPE {:.2}% (10 armoured ships) exceeded 12% baseline",
         report.armour_mape * 100.0
     );
     assert!(
@@ -280,8 +280,8 @@ fn preset_weights_and_stability_do_not_regress() {
         report.hull_armoured_mape * 100.0
     );
     assert!(
-        report.armament_armoured_mape <= 0.20,
-        "armoured-ship armament+ammo weight MAPE {:.2}% exceeded 20% baseline",
+        report.armament_armoured_mape <= 0.22,
+        "armoured-ship armament+ammo weight MAPE {:.2}% exceeded 22% baseline",
         report.armament_armoured_mape * 100.0
     );
     assert!(

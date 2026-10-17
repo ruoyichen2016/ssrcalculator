@@ -503,3 +503,28 @@ still 10.36% / blended 9.81%):
   - Added a native interactive Speed-Power Curve plot (`draw_speed_power_chart`) in `Page::Blueprint` (`Blueprint & Power`) using `egui::Painter` and `speed_hp_calc()`, plus broadside throw weight in `dashboard_header()`.
   - Added `Page::Spaces` (`Spaces & Benchmarks`) displaying the historical subsystem weight & stability benchmark comparison table (`get_preset_benchmark`), internal space volume budget (`calculate_internal_spaces`), and interactive multi-deck GA compartment optimizer (`suggest_compartment_placement`).
 
+## Phase 35 — fire control ballistics, target displacement solver, 12 presets & dual GUI parity (completed 2026-10-18)
+
+- **Track A: Fire Control Exterior Ballistics & Immunity Zone Modeling**:
+  - Implemented numerical trajectory integration and De Marre penetration model in `src/ballistics.rs` (calibrated air retardation constant `7500.0 * ballistic_coeff`, De Marre constant `0.390`).
+  - Computes striking velocity, fall angle, vertical belt armor penetration (including inclined armor obliquity), and plunging deck penetration at 1,000 yd intervals up to 35,000 yd.
+  - Automated immunity zone solver (`compute_immunity_zone`, `compute_self_immunity_zone`) finding tactical inner (belt penetration threshold) and outer (deck penetration threshold) range brackets `[inner_yd, outer_yd]`.
+  - Integrated into root crate (`src/lib.rs`) and exposed via Web Workbench evaluation API (`src/web.rs`).
+- **Track B: Target Displacement Scaling Solver & 12-Ship Historical Library**:
+  - Implemented `solve_displacement_scale(orig, target_disp, max_iter, tol)` in `src/features.rs`, proportionally adjusting waterline length, beam, and draught to converge on a specified target displacement within 4–6 iterations.
+  - Added *HMS King George V* (1940, 38,000 t normal, 10x 14" Mk VII guns) and *Scharnhorst* (1939, 34,850 t normal, 9x 11.1" C/34 guns) to `src/presets.rs`.
+  - Expanded `PRESET_LIST` and `PRESET_WEIGHT_BENCHMARKS` to **12 iconic warships**, validating physical feasibility (12/12 positive hull weight, 12/12 positive magazine volume, 12/12 convergence) and tightening regression benchmarks: normal displacement MAPE 3.02% <= 4%, machinery MAPE 3.96% <= 5%, armour MAPE 10.71% <= 12%, GM MAPE 13.67% <= 16% in `tests/accuracy_regression.rs`.
+- **Track C: Dual-End GUI Parity (Web Workbench & Native Desktop GUI)**:
+  - Web Workbench (`src/web.rs`, `src/web_page.html`):
+    - Added Target Displacement solver modal/card in the Calibration tab with one-click iterative dimensional scaling (`POST /api/solve/displacement`).
+    - Added interactive Armor Penetration & Immunity Zone SVG chart (`#immunityWrap`) in the Analysis tab with belt curve (red), deck curve (blue), target penetration thresholds, and shaded green tactical immunity zone.
+    - Added Imperial / Metric unit toggle button (`#unitBtn`) dynamically converting all dimensions, displacements, speeds, armor thicknesses, and broadside weights across cards and blueprints.
+    - Enhanced SVG blueprint rendering with carrier flight deck outline, runway centerline, arresting gear, and starboard island for aircraft carriers, plus deck-mounted torpedo tubes.
+  - Native Desktop GUI (`gui/src/app.rs`):
+    - Added Imperial / Metric toggle in the top bar with live unit formatting.
+    - Added Target Displacement iterative scaling solver in `Page::Calibration`.
+    - Added side-by-side ship comparison mode in `Page::Calibration` with a 13-metric delta table.
+    - Added carrier flight deck (profile + plan view with island) and torpedo tube mounts to `Page::Blueprint`.
+    - Added vector Armor Penetration & Immunity Zone chart (`draw_immunity_chart`) in `Page::Blueprint`.
+
+

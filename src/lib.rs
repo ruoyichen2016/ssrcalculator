@@ -8,6 +8,7 @@
 )]
 
 pub mod accuracy;
+pub mod ballistics;
 pub mod calibration;
 pub mod cfd_proxy;
 pub mod features;
@@ -23,6 +24,7 @@ pub mod spaces;
 pub mod web;
 
 pub use accuracy::*;
+pub use ballistics::*;
 pub use calibration::*;
 pub use cfd_proxy::*;
 pub use features::*;

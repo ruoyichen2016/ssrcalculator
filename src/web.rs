@@ -15,10 +15,11 @@ use std::sync::Arc;
 use crate::model::{ResistanceModel, ShipModel};
 use crate::{
     apply_blend_calibration, apply_regime_calibration, compartment_placement_html,
-    compute_planing_calibration, deserialize, external_report_html, fit_reduced_form_with_external,
-    fit_structural_form_with_external, generate_html_report, generate_report, get_preset,
-    get_preset_benchmark, is_planing_eligible, nearest_historical_cases, parse_external_cases,
-    planing_hp_estimate_calibrated, run_loocv_with_external_weighted, serialize, solve_max_speed,
+    compute_planing_calibration, compute_self_immunity_zone, deserialize, external_report_html,
+    fit_reduced_form_with_external, fit_structural_form_with_external, generate_html_report,
+    generate_report, get_preset, get_preset_benchmark, is_planing_eligible,
+    nearest_historical_cases, parse_external_cases, planing_hp_estimate_calibrated,
+    run_loocv_with_external_weighted, serialize, solve_displacement_scale, solve_max_speed,
     solve_range, suggest_compartment_placement, PRESET_LIST,
 };
 
@@ -584,6 +585,42 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         .collect::<Vec<_>>()
         .join(",");
 
+    let immunity_json = if g.batteries[0].calibre > 0.0 && g.batteries[0].barrels > 0 {
+        let iz = compute_self_immunity_zone(
+            &g.batteries[0],
+            ship.armour.belt_main,
+            ship.armour.belts_incline,
+            ship.armour.deck,
+        );
+        let curve_pts: Vec<String> = iz
+            .curve
+            .iter()
+            .map(|p| {
+                format!(
+                    "[{},{},{},{},{}]",
+                    json_num(p.range_yd),
+                    json_num(p.striking_vel_fps),
+                    json_num(p.fall_angle_deg),
+                    json_num(p.belt_pen_in),
+                    json_num(p.deck_pen_in)
+                )
+            })
+            .collect();
+        format!(
+            "{{\"calibre\":{},\"belt\":{},\"deck\":{},\"incline\":{},\"inner\":{},\"outer\":{},\"has_zone\":{},\"curve\":[{}]}}",
+            json_num(iz.gun_calibre),
+            json_num(iz.target_belt_in),
+            json_num(iz.target_deck_in),
+            json_num(iz.target_belt_incline),
+            iz.inner_limit_yd.map(json_num).unwrap_or_else(|| "null".to_string()),
+            iz.outer_limit_yd.map(json_num).unwrap_or_else(|| "null".to_string()),
+            iz.has_zone,
+            curve_pts.join(",")
+        )
+    } else {
+        "null".to_string()
+    };
+
     let fields: Vec<(&str, String)> = vec![
         ("message", json_str(message)),
         ("name", json_str(&ship.name)),
@@ -660,6 +697,23 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
             "g1_broadside_lbs",
             json_num(g.batteries[0].broadside_weight),
         ),
+        (
+            "torpedo_count",
+            json_num((w.torpedo1.number + w.torpedo2.number) as f64),
+        ),
+        (
+            "torpedo_calibre",
+            json_num(w.torpedo1.size.max(w.torpedo2.size)),
+        ),
+        ("torpedo1_num", json_num(w.torpedo1.number as f64)),
+        ("torpedo1_loads", json_num(w.torpedo1.loads as f64)),
+        ("torpedo1_size", json_num(w.torpedo1.size)),
+        ("torpedo1_loc", json_num(w.torpedo1.location as f64)),
+        ("torpedo2_num", json_num(w.torpedo2.number as f64)),
+        ("torpedo2_loads", json_num(w.torpedo2.loads as f64)),
+        ("torpedo2_size", json_num(w.torpedo2.size)),
+        ("torpedo2_loc", json_num(w.torpedo2.location as f64)),
+        ("immunity", immunity_json),
     ];
     let body = fields
         .iter()
@@ -735,6 +789,16 @@ fn design_route(body: &str, action: &str) -> Result<String, String> {
             let mut ship = parse_design(rest)?;
             let r = solve_range(&mut ship, bunker);
             let msg = format!("Range for {bunker:.0} t normal bunker: {r:.0} nm");
+            Ok(evaluation_json(&ship, &msg))
+        }
+        "displacement" => {
+            let (target_disp, rest) = split_target(body)?;
+            let mut ship = parse_design(rest)?;
+            let achieved = solve_displacement_scale(&mut ship, target_disp);
+            let msg = format!(
+                "Displacement scaled to {achieved:.0} t (target: {target_disp:.0} t). Length={:.1} ft, Beam={:.1} ft, Draught={:.1} ft.",
+                ship.hull.length, ship.hull.beam, ship.hull.draught
+            );
             Ok(evaluation_json(&ship, &msg))
         }
         "compartments" => {
@@ -819,6 +883,7 @@ fn design_action(path: &str) -> Option<&'static str> {
         "/api/calibrate/blend" => "blend",
         "/api/solve/speed" => "speed",
         "/api/solve/range" => "range",
+        "/api/solve/displacement" => "displacement",
         "/api/compartments" => "compartments",
         _ => return None,
     })
@@ -1115,6 +1180,8 @@ mod tests {
             "\"g1_cal_len\":",
             "\"g1_arm_face\":",
             "\"broadside_lbs\":",
+            "\"immunity\":",
+            "\"torpedo_count\":",
         ] {
             assert!(json.contains(key), "missing {key}");
         }
@@ -1124,6 +1191,7 @@ mod tests {
         assert_eq!(s_hood, 200);
         assert!(ct_hood.contains("json"));
         assert!(json_hood.contains("\"HMS Hood\""));
+        assert!(json_hood.contains("\"immunity\":{"));
     }
 
     #[test]
@@ -1140,6 +1208,13 @@ mod tests {
         );
         assert_eq!(s, 200, "{json}");
         assert!(json.contains("Max speed for 40000 hp"));
+        let (s, _, json) = route(
+            "POST",
+            "/api/solve/displacement",
+            &format!("45000\n{}", demo_ssr()),
+        );
+        assert_eq!(s, 200, "{json}");
+        assert!(json.contains("Displacement scaled to"));
         let (s, _, _) = route("POST", "/api/solve/range", "abc\nmeta.name=x\n");
         assert_eq!(s, 400);
     }

@@ -130,6 +130,7 @@ iframe { width: 100%; height: 640px; border: 1px solid var(--line); border-radiu
     <label class="btn" style="flex-direction:row;color:var(--text);font-size:.85rem">Open .ssr<input type="file" id="fileIn" accept=".ssr,.txt" hidden></label>
     <button onclick="downloadSsr()">Save .ssr</button>
     <button onclick="exportHtml()">Export HTML</button>
+    <button id="unitBtn" onclick="toggleUnits()" style="font-size:.8rem" title="Toggle between Imperial and Metric units">Units: Imperial</button>
     <label class="check" title="Recalculate automatically after each edit"><input type="checkbox" id="auto" checked> Live</label>
   </div>
 </header>
@@ -162,10 +163,15 @@ __FORM__
         <button onclick="solve('speed')">Solve max speed</button>
         <label>Bunker tonnage (t)<input id="solveBunker" type="number" step="any" value="1500"></label>
         <button onclick="solve('range')">Solve range</button>
+        <label>Target displacement (t)<input id="solveDisp" type="number" step="any" value="35000"></label>
+        <button onclick="solve('displacement')">Scale to displacement</button>
       </div>
       <div id="calibOut" class="out"></div>
     </div>
     <div class="tab" data-tab="analysis">
+      <h2>Armor Penetration &amp; Immunity Zone</h2>
+      <p class="hint">De Marre Krupp-cemented penetration curves across 5,000–35,000 yards for main battery gunfire against own belt (red) and deck (blue). The green shaded band highlights the combat immunity zone.</p>
+      <div id="immunityWrap" style="overflow-x:auto;margin-bottom:1.2rem;"></div>
       <h2>Side-by-Side Ship Comparison</h2>
       <p class="hint">Pin your current design as a baseline or compare against any historical warship preset across dimensions, displacement, speed, power, protection, firepower, and stability.</p>
       <div class="row">
@@ -408,7 +414,9 @@ function resetModel() {
   evaluate();
 }
 function solve(kind) {
-  const target = kind === 'speed' ? $('#solveHp').value : $('#solveBunker').value;
+  let target = $('#solveHp').value;
+  if (kind === 'range') target = $('#solveBunker').value;
+  else if (kind === 'displacement') target = $('#solveDisp').value;
   runDesign('/api/solve/' + kind, target + '\n').then(r => { if (r) $('#calibOut').innerHTML = `<pre>${esc(r.message)}</pre>`; });
 }
 async function compartments() {
@@ -603,6 +611,49 @@ function renderBlueprint(r) {
                       `<circle cx="${tx2.toFixed(1)}" cy="${(yCl + sOffset).toFixed(1)}" r="2.6" fill="#d6b54f" stroke="#fff" stroke-width="0.6" class="bp-interactive" data-tip="${esc(g2Tip)}"/>`;
   }
 
+  const isCarrier = r.ship_type && r.ship_type.toLowerCase().includes('carrier');
+  let carrierProfSvg = '';
+  let carrierPlanSvg = '';
+  if (isCarrier) {
+    const fdY = yFcFor - 8;
+    carrierProfSvg = `<line x1="${(x0 + 4).toFixed(1)}" y1="${fdY.toFixed(1)}" x2="${(x1 - 4).toFixed(1)}" y2="${fdY.toFixed(1)}" stroke="#5fd38d" stroke-width="2.2" stroke-linecap="round"/>` +
+      `<line x1="${(x0 + 12).toFixed(1)}" y1="${fdY.toFixed(1)}" x2="${(x0 + 12).toFixed(1)}" y2="${yFcFor.toFixed(1)}" stroke="#5fd38d" stroke-width="1"/>` +
+      `<line x1="${(x1 - 12).toFixed(1)}" y1="${fdY.toFixed(1)}" x2="${(x1 - 12).toFixed(1)}" y2="${yQdAft.toFixed(1)}" stroke="#5fd38d" stroke-width="1"/>`;
+
+    const fW = drawW - 8;
+    const fH = hb * 2.2;
+    const fX = x0 + 4;
+    const fY = yCl - fH / 2;
+    const islTip = `Flight Deck & Starboard Island\nFull-length carrier flight deck\nIsland navigating bridge & flight control`;
+    carrierPlanSvg = `<rect x="${fX.toFixed(1)}" y="${fY.toFixed(1)}" width="${fW.toFixed(1)}" height="${fH.toFixed(1)}" rx="4" fill="rgba(95,211,141,0.18)" stroke="#5fd38d" stroke-width="1.2" class="bp-interactive" data-tip="${esc(islTip)}"/>` +
+      `<line x1="${fX + 10}" y1="${yCl}" x2="${fX + fW - 10}" y2="${yCl}" stroke="rgba(255,255,255,0.4)" stroke-width="1" stroke-dasharray="6,4"/>` +
+      `<line x1="${fX + fW * 0.75}" y1="${fY + 2}" x2="${fX + fW * 0.75}" y2="${fY + fH - 2}" stroke="rgba(255,255,255,0.35)" stroke-width="0.8"/>` +
+      `<line x1="${fX + fW * 0.80}" y1="${fY + 2}" x2="${fX + fW * 0.80}" y2="${fY + fH - 2}" stroke="rgba(255,255,255,0.35)" stroke-width="0.8"/>` +
+      `<line x1="${fX + fW * 0.85}" y1="${fY + 2}" x2="${fX + fW * 0.85}" y2="${fY + fH - 2}" stroke="rgba(255,255,255,0.35)" stroke-width="0.8"/>` +
+      `<rect x="${(fX + fW * 0.42).toFixed(1)}" y="${(fY - 2).toFixed(1)}" width="22" height="7" rx="1.5" fill="#e0864f" stroke="#fff" stroke-width="0.7"/>` +
+      `<text x="${(fX + fW * 0.42 + 11).toFixed(1)}" y="${(fY + 3.5).toFixed(1)}" fill="#fff" font-size="5.5" font-family="var(--mono)" text-anchor="middle" pointer-events="none">ISLAND</text>`;
+  }
+
+  let torpedoSvg = '';
+  if (r.torpedo_count > 0) {
+    const tCount = r.torpedo_count;
+    const tCal = r.torpedo_calibre || 21;
+    const tTip = `Torpedo Tubes\nTotal: ${tCount} tubes (${tCal}" / ${(tCal * 25.4).toFixed(0)} mm)\nMounts: Midships & deck bank`;
+    const tPositions = [x0 + drawW * 0.58, x0 + drawW * 0.68];
+    tPositions.forEach(tx => {
+      torpedoSvg += `<g class="bp-interactive" data-tip="${esc(tTip)}">` +
+        `<circle cx="${tx.toFixed(1)}" cy="${yCl}" r="4" fill="#38ef7d" stroke="#11998e" stroke-width="0.8"/>` +
+        `<line x1="${(tx - 4).toFixed(1)}" y1="${(yCl - 3).toFixed(1)}" x2="${(tx + 4).toFixed(1)}" y2="${(yCl - 3).toFixed(1)}" stroke="#fff" stroke-width="1.2"/>` +
+        `<line x1="${(tx - 4).toFixed(1)}" y1="${yCl.toFixed(1)}" x2="${(tx + 4).toFixed(1)}" y2="${yCl.toFixed(1)}" stroke="#fff" stroke-width="1.2"/>` +
+        `<line x1="${(tx - 4).toFixed(1)}" y1="${(yCl + 3).toFixed(1)}" x2="${(tx + 4).toFixed(1)}" y2="${(yCl + 3).toFixed(1)}" stroke="#fff" stroke-width="1.2"/>` +
+        `</g>`;
+    });
+  }
+
+  const dimStr = window._metric
+    ? `${fmt(L * 0.3048, 0)}m × ${fmt(B * 0.3048, 1)}m × ${fmt(T * 0.3048, 1)}m`
+    : `${fmt(L, 0)}′ × ${fmt(B, 0)}′ × ${fmt(T, 1)}′`;
+
   const svgInner = `
     <defs>
       <pattern id="bpGrid" width="20" height="20" patternUnits="userSpaceOnUse">
@@ -612,10 +663,11 @@ function renderBlueprint(r) {
     <rect width="100%" height="100%" fill="url(#bpGrid)" />
     <text x="10" y="14" fill="#8aa4bf" font-size="8" font-family="var(--mono)" font-weight="600" letter-spacing="0.08em">PROFILE</text>
     <text x="10" y="86" fill="#8aa4bf" font-size="8" font-family="var(--mono)" font-weight="600" letter-spacing="0.08em">PLAN</text>
-    <text x="410" y="14" fill="#8aa4bf" font-size="8" font-family="var(--mono)" text-anchor="end">${fmt(L,0)}′ × ${fmt(B,0)}′ × ${fmt(T,1)}′</text>
+    <text x="410" y="14" fill="#8aa4bf" font-size="8" font-family="var(--mono)" text-anchor="end">${dimStr}</text>
     <line x1="16" y1="${yWl}" x2="404" y2="${yWl}" stroke="#4fb3ff" stroke-width="0.8" stroke-dasharray="4 3" opacity="0.45"/>
     <text x="410" y="${yWl - 2}" fill="#4fb3ff" font-size="7" font-family="var(--mono)" text-anchor="end" opacity="0.75">WL</text>
     <path d="${hullProfileD}" fill="rgba(79,179,255,0.07)" stroke="#4fb3ff" stroke-width="1.2" stroke-linejoin="round"/>
+    ${carrierProfSvg}
     <path d="${bridgeD}" fill="rgba(138,164,191,0.25)" stroke="#8aa4bf" stroke-width="0.8" class="bp-interactive" data-tip="${esc(bridgeTip)}"/>
     <path d="${funnelD}" fill="rgba(138,164,191,0.3)" stroke="#8aa4bf" stroke-width="0.8" class="bp-interactive" data-tip="${esc(funnelTip)}"/>
     ${beltSvg}
@@ -623,6 +675,8 @@ function renderBlueprint(r) {
     <line x1="16" y1="${yCl}" x2="404" y2="${yCl}" stroke="rgba(255,255,255,0.12)" stroke-width="0.8" stroke-dasharray="5 3"/>
     ${arcsSvg}
     <path d="${planHullD}" fill="rgba(79,179,255,0.09)" stroke="#4fb3ff" stroke-width="1.2"/>
+    ${carrierPlanSvg}
+    ${torpedoSvg}
     ${planTurretsSvg}
   `;
   svg.innerHTML = svgInner;
@@ -801,6 +855,129 @@ function renderComparison(r) {
     rows.join('') + `</table>`;
 }
 
+window._metric = false;
+function toggleUnits() {
+  window._metric = !window._metric;
+  const b = $('#unitBtn');
+  if (b) b.textContent = window._metric ? 'Units: Metric' : 'Units: Imperial';
+  if (last) render(last);
+  toast(window._metric ? 'Switched to Metric units' : 'Switched to Imperial units');
+}
+
+function renderImmunity(r) {
+  const wrap = $('#immunityWrap');
+  if (!wrap) return;
+  if (!r || !r.immunity || !r.immunity.curve || !r.immunity.curve.length) {
+    wrap.innerHTML = '<p class="hint">No immunity zone data available (requires active main battery guns and armor belt/deck).</p>';
+    return;
+  }
+  const iz = r.immunity;
+  const pts = iz.curve; // [range_yd, striking_v, fall_angle, belt_pen, deck_pen]
+  const svgW = 660, svgH = 260;
+  const pL = 65, pR = 30, pT = 28, pB = 42;
+  const pw = svgW - pL - pR, ph = svgH - pT - pB;
+
+  const minR = pts[0][0], maxR = pts[pts.length - 1][0];
+  let maxPen = Math.max(iz.belt, iz.deck);
+  pts.forEach(p => {
+    if (p[3] > maxPen) maxPen = p[3];
+    if (p[4] > maxPen) maxPen = p[4];
+  });
+  if (maxPen <= 0) maxPen = 20;
+  maxPen *= 1.15;
+
+  const xAt = rng => pL + ((rng - minR) / Math.max(1, maxR - minR)) * pw;
+  const yAt = pen => pT + (1.0 - (pen / maxPen)) * ph;
+
+  let svg = `<svg viewBox="0 0 ${svgW} ${svgH}" class="sp-chart">`;
+
+  // Horizontal grid lines (Penetration in inches or mm)
+  const ySteps = 4;
+  for (let i = 0; i <= ySteps; i++) {
+    const val = (maxPen / ySteps) * i;
+    const y = yAt(val);
+    svg += `<line x1="${pL}" y1="${y.toFixed(1)}" x2="${pL + pw}" y2="${y.toFixed(1)}" stroke="#1c2d42" stroke-dasharray="3,3"/>`;
+    const label = window._metric ? `${(val * 25.4).toFixed(0)} mm` : `${val.toFixed(1)}"`;
+    svg += `<text x="${pL - 8}" y="${(y + 3.5).toFixed(1)}" fill="#8b949e" font-size="9" text-anchor="end">${label}</text>`;
+  }
+
+  // Vertical grid lines (Range in yards or km)
+  pts.forEach(p => {
+    const rng = p[0];
+    const x = xAt(rng);
+    svg += `<line x1="${x.toFixed(1)}" y1="${pT}" x2="${x.toFixed(1)}" y2="${pT + ph}" stroke="#162334" stroke-dasharray="2,2"/>`;
+    const rLabel = window._metric ? `${(rng * 0.0009144).toFixed(1)}k` : `${(rng / 1000).toFixed(0)}k`;
+    svg += `<text x="${x.toFixed(1)}" y="${pT + ph + 14}" fill="#8b949e" font-size="9" text-anchor="middle">${rLabel}</text>`;
+  });
+  const xUnitLabel = window._metric ? 'Range (km)' : 'Range (k yd)';
+  svg += `<text x="${pL + pw}" y="${pT + ph + 28}" fill="#8b949e" font-size="8.5" text-anchor="end">${xUnitLabel}</text>`;
+
+  // Immunity zone shaded band
+  if (iz.has_zone && iz.inner && iz.outer) {
+    const xIn = xAt(iz.inner);
+    const xOut = xAt(iz.outer);
+    const bandW = Math.max(2, xOut - xIn);
+    svg += `<rect x="${xIn.toFixed(1)}" y="${pT}" width="${bandW.toFixed(1)}" height="${ph}" fill="rgba(95,211,141,0.18)" stroke="#5fd38d" stroke-width="1.2" stroke-dasharray="4,2"/>`;
+    const midX = (xIn + xOut) / 2;
+    const inStr = window._metric ? `${(iz.inner * 0.9144).toFixed(0)} m` : `${fmt(iz.inner)} yd`;
+    const outStr = window._metric ? `${(iz.outer * 0.9144).toFixed(0)} m` : `${fmt(iz.outer)} yd`;
+    svg += `<text x="${midX.toFixed(1)}" y="${pT - 8}" fill="#5fd38d" font-size="9" font-weight="600" text-anchor="middle">Immunity Zone: ${inStr} – ${outStr}</text>`;
+  } else {
+    let reason = 'No immunity zone';
+    if (iz.inner && iz.outer && iz.inner > iz.outer) {
+      reason += ` (Belt penetrates to ${fmt(iz.inner)} yd, Deck breaches from ${fmt(iz.outer)} yd)`;
+    }
+    svg += `<text x="${pL + pw / 2}" y="${pT - 8}" fill="#ffb547" font-size="8.5" font-weight="600" text-anchor="middle">${reason}</text>`;
+  }
+
+  // Target belt threshold (dashed red)
+  if (iz.belt > 0) {
+    const yBelt = yAt(iz.belt);
+    svg += `<line x1="${pL}" y1="${yBelt.toFixed(1)}" x2="${pL + pw}" y2="${yBelt.toFixed(1)}" stroke="#ff6b6b" stroke-width="1.4" stroke-dasharray="5,4" opacity="0.8"/>`;
+    const beltLabel = window._metric ? `Belt ${(iz.belt * 25.4).toFixed(0)}mm` : `Belt ${iz.belt.toFixed(1)}"`;
+    svg += `<text x="${pL + pw - 4}" y="${(yBelt - 4).toFixed(1)}" fill="#ff6b6b" font-size="8.5" text-anchor="end">${beltLabel}</text>`;
+  }
+
+  // Target deck threshold (dashed blue)
+  if (iz.deck > 0) {
+    const yDeck = yAt(iz.deck);
+    svg += `<line x1="${pL}" y1="${yDeck.toFixed(1)}" x2="${pL + pw}" y2="${yDeck.toFixed(1)}" stroke="#4fb3ff" stroke-width="1.4" stroke-dasharray="5,4" opacity="0.8"/>`;
+    const deckLabel = window._metric ? `Deck ${(iz.deck * 25.4).toFixed(0)}mm` : `Deck ${iz.deck.toFixed(1)}"`;
+    svg += `<text x="${pL + pw - 4}" y="${(yDeck - 4).toFixed(1)}" fill="#4fb3ff" font-size="8.5" text-anchor="end">${deckLabel}</text>`;
+  }
+
+  // Belt penetration curve (solid red)
+  const beltD = pts.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${xAt(p[0]).toFixed(1)} ${yAt(p[3]).toFixed(1)}`).join(' ');
+  svg += `<path d="${beltD}" fill="none" stroke="#ff6b6b" stroke-width="2.4"/>`;
+
+  // Deck penetration curve (solid blue)
+  const deckD = pts.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${xAt(p[0]).toFixed(1)} ${yAt(p[4]).toFixed(1)}`).join(' ');
+  svg += `<path d="${deckD}" fill="none" stroke="#4fb3ff" stroke-width="2.4"/>`;
+
+  // Data points with tooltips
+  pts.forEach(p => {
+    const x = xAt(p[0]);
+    const yB = yAt(p[3]);
+    const yD = yAt(p[4]);
+    const bTip = `Belt Penetration @ ${fmt(p[0])} yd\nStriking: ${fmt(p[1])} fps | Fall: ${p[2].toFixed(1)}°\nPenetration: ${p[3].toFixed(2)}" (${(p[3] * 25.4).toFixed(0)} mm)`;
+    const dTip = `Deck Penetration @ ${fmt(p[0])} yd\nFall Angle: ${p[2].toFixed(1)}°\nPenetration: ${p[4].toFixed(2)}" (${(p[4] * 25.4).toFixed(0)} mm)`;
+    svg += `<circle cx="${x.toFixed(1)}" cy="${yB.toFixed(1)}" r="2.8" fill="#ff6b6b" stroke="#08131e" stroke-width="1.2" class="bp-interactive" data-tip="${esc(bTip)}"/>`;
+    svg += `<circle cx="${x.toFixed(1)}" cy="${yD.toFixed(1)}" r="2.8" fill="#4fb3ff" stroke="#08131e" stroke-width="1.2" class="bp-interactive" data-tip="${esc(dTip)}"/>`;
+  });
+
+  // Legend
+  const calLabel = `${iz.calibre}" Main Gun`;
+  svg += `<g transform="translate(${pL + 12}, ${pT + 8})">` +
+    `<line x1="0" y1="4" x2="16" y2="4" stroke="#ff6b6b" stroke-width="2.4"/>` +
+    `<text x="22" y="7" fill="#ff6b6b" font-size="8.5">Belt Penetration (${calLabel})</text>` +
+    `<line x1="0" y1="16" x2="16" y2="16" stroke="#4fb3ff" stroke-width="2.4"/>` +
+    `<text x="22" y="19" fill="#4fb3ff" font-size="8.5">Deck Penetration (${calLabel})</text>` +
+    `</g>`;
+
+  svg += `</svg>`;
+  wrap.innerHTML = svg;
+}
+
 // ---- dashboard ----
 const PALETTE = { Hull: '#4f8fd6', Armour: '#9b7bea', Machinery: '#e0864f', Armament: '#e05d6f', Magazine: '#d6b54f', Bunker: '#4fc7b4', Miscellaneous: '#7f93a8', 'Other load': '#3a5068' };
 function card(k, v, u = '', cls = '') { return `<div class="card ${cls}"><div class="k">${k}</div><div class="v">${v} <span class="u">${u}</span></div></div>`; }
@@ -818,18 +995,34 @@ function render(r) {
   renderBlueprint(r);
   renderSpeedPower(r);
   renderComparison(r);
+  renderImmunity(r);
   const strengthCls = r.strength_comp < 0.5 ? 'bad' : r.strength_comp < 0.995 ? 'warn' : 'good';
   const stabCls = r.metacentre <= 0 ? 'bad' : r.stability < 1 ? 'warn' : '';
+
+  const isM = window._metric;
+  const dispVal = isM ? fmt(r.disp_normal * 1.01605) : fmt(r.disp_normal);
+  const dispUnit = isM ? 'tonne' : 't';
+  const fullVal = isM ? fmt(r.disp_full * 1.01605) : fmt(r.disp_full);
+  const stdVal = isM ? fmt(r.disp_standard * 1.01605) : fmt(r.disp_standard);
+  const speedVal = isM ? fmt(r.speed_max * 1.852, 1) : fmt(r.speed_max, 1);
+  const speedUnit = isM ? 'km/h' : 'kt';
+  const rangeVal = isM ? fmt(r.range * 1.852) : fmt(r.range);
+  const rangeUnit = isM ? `km @ ${fmt(r.speed_cruise * 1.852, 0)} km/h` : `nm @ ${fmt(r.speed_cruise, 0)} kt`;
+  const broadVal = isM ? fmt(r.broadside_lbs * 0.453592) : fmt(r.broadside_lbs);
+  const broadUnit = isM ? 'kg' : 'lb';
+  const gmVal = isM ? fmt(r.metacentre * 0.3048, 2) : fmt(r.metacentre, 2);
+  const gmUnit = isM ? 'm' : 'ft';
+
   $('#dCards').innerHTML = [
-    card('Normal disp.', fmt(r.disp_normal), 't'),
-    card('Full load', fmt(r.disp_full), 't'),
-    card('Standard', fmt(r.disp_standard), 't'),
-    card('Max speed', fmt(r.speed_max, 1), 'kt'),
+    card('Normal disp.', dispVal, dispUnit),
+    card('Full load', fullVal, dispUnit),
+    card('Standard', stdVal, dispUnit),
+    card('Max speed', speedVal, speedUnit),
     card('Power', fmt(r.hp_max), 'hp'),
-    card('Range', fmt(r.range), `nm @ ${fmt(r.speed_cruise, 0)} kt`),
-    card('Broadside', fmt(r.broadside_lbs), 'lb'),
+    card('Range', rangeVal, rangeUnit),
+    card('Broadside', broadVal, broadUnit),
     card('Stability', fmt(r.stability, 2), '', stabCls),
-    card('Metacentre', fmt(r.metacentre, 2), 'ft', stabCls),
+    card('Metacentre', gmVal, gmUnit, stabCls),
     card('Seakeeping', fmt(r.seakeeping, 2)),
     card('Strength', fmt(r.strength_comp, 2), '', strengthCls),
     card('Cost', '$' + fmt(r.cost_dollars, 2), 'M'),

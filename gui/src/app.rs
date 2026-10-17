@@ -12,7 +12,10 @@ use springsharp::model::{GunBattery, ResistanceModel, ShipModel, WeaponKind, Wea
 use springsharp::spaces::{
     calculate_internal_spaces, suggest_compartment_placement, CompartmentPlacement,
 };
-use springsharp::{get_preset, get_preset_benchmark, PRESET_LIST};
+use springsharp::{
+    compute_self_immunity_zone, get_preset, get_preset_benchmark, solve_displacement_scale,
+    PRESET_LIST,
+};
 
 const BOWS: &[&str] = &[
     "Normal bow",
@@ -109,6 +112,10 @@ pub struct SpringSharpApp {
     show_arcs: bool,
     target_cg: f64,
     last_placement: Option<CompartmentPlacement>,
+    target_displacement: f64,
+    metric_units: bool,
+    baseline_ship: Option<ShipModel>,
+    compare_preset_idx: Option<usize>,
 }
 
 impl SpringSharpApp {
@@ -138,6 +145,10 @@ impl SpringSharpApp {
             show_arcs: false,
             target_cg: 0.45,
             last_placement: None,
+            target_displacement: 35000.0,
+            metric_units: false,
+            baseline_ship: None,
+            compare_preset_idx: None,
         }
     }
 
@@ -198,6 +209,15 @@ impl SpringSharpApp {
                     }
                 }
             });
+        ui.separator();
+        let unit_lbl = if self.metric_units {
+            "Units: Metric"
+        } else {
+            "Units: Imperial"
+        };
+        if ui.button(unit_lbl).clicked() {
+            self.metric_units = !self.metric_units;
+        }
         ui.separator();
         ui.label(&self.status);
     }
@@ -692,6 +712,157 @@ impl SpringSharpApp {
             "Data provenance: public historical references only (not independently \
              verified). Official trial/model-basin data unavailable; treat results as approximate.",
         );
+
+        ui.separator();
+        ui.heading("Target Displacement Solver");
+        ui.label(
+            "Scale hull dimensions (length, beam, draught) proportionally to meet an exact \
+             target displacement (converges in 4-6 iterations).",
+        );
+        ui.horizontal(|ui| {
+            ui.label("Target normal displacement:");
+            drag_f64(
+                ui,
+                "tons",
+                &mut self.target_displacement,
+                500.0,
+                100.0..=120000.0,
+            );
+            if ui.button("Solve & Scale Hull").clicked() {
+                let achieved = solve_displacement_scale(&mut self.ship, self.target_displacement);
+                self.recalculate();
+                self.status = format!(
+                    "Displacement scaled to {achieved:.0} t (target: {:.0} t). L={:.1} ft, B={:.1} ft, T={:.1} ft",
+                    self.target_displacement,
+                    self.ship.hull.length,
+                    self.ship.hull.beam,
+                    self.ship.hull.draught
+                );
+            }
+        });
+
+        ui.separator();
+        ui.heading("Side-by-Side Ship Comparison");
+        ui.label(
+            "Compare your current design against a pinned baseline or historical warship preset.",
+        );
+        ui.horizontal(|ui| {
+            if ui.button("Pin current as baseline").clicked() {
+                self.baseline_ship = Some(self.ship.clone());
+                self.compare_preset_idx = None;
+                self.status = "Pinned current design as comparison baseline".to_string();
+            }
+            if ui.button("Clear comparison").clicked() {
+                self.baseline_ship = None;
+                self.compare_preset_idx = None;
+            }
+            let sel_text = self
+                .compare_preset_idx
+                .and_then(|idx| PRESET_LIST.get(idx))
+                .map(|p| p.name)
+                .unwrap_or("Compare with preset...");
+            egui::ComboBox::from_id_salt("compare_preset_picker")
+                .selected_text(sel_text)
+                .show_ui(ui, |ui| {
+                    for (idx, p) in PRESET_LIST.iter().enumerate() {
+                        let is_sel = self.compare_preset_idx == Some(idx);
+                        if ui.selectable_label(is_sel, p.name).clicked() {
+                            if let Some(preset_ship) = get_preset(p.id) {
+                                self.baseline_ship = Some(preset_ship);
+                                self.compare_preset_idx = Some(idx);
+                            }
+                        }
+                    }
+                });
+        });
+
+        if let Some(ref base) = self.baseline_ship {
+            ui.add_space(6.0);
+            egui::Grid::new("comparison_table")
+                .striped(true)
+                .spacing([24.0, 4.0])
+                .show(ui, |ui| {
+                    ui.strong("Metric");
+                    ui.strong(format!("Current ({})", self.ship.name));
+                    ui.strong(format!("Baseline ({})", base.name));
+                    ui.strong("Delta (Δ)");
+                    ui.strong("Rel. Diff (%)");
+                    ui.end_row();
+
+                    let rows = [
+                        ("Length WL (ft)", self.ship.hull.length, base.hull.length, 1),
+                        ("Beam (ft)", self.ship.hull.beam, base.hull.beam, 1),
+                        ("Draught (ft)", self.ship.hull.draught, base.hull.draught, 1),
+                        (
+                            "Normal disp (t)",
+                            self.ship.hull.displacement,
+                            base.hull.displacement,
+                            0,
+                        ),
+                        (
+                            "Full load disp (t)",
+                            self.ship.disp_max_load,
+                            base.disp_max_load,
+                            0,
+                        ),
+                        (
+                            "Max speed (kt)",
+                            self.ship.engine.speed_max,
+                            base.engine.speed_max,
+                            1,
+                        ),
+                        (
+                            "Max power (hp)",
+                            self.ship.engine.hp_max,
+                            base.engine.hp_max,
+                            0,
+                        ),
+                        ("Range (nm)", self.ship.engine.range, base.engine.range, 0),
+                        (
+                            "Main belt (in)",
+                            self.ship.armour.belt_main,
+                            base.armour.belt_main,
+                            1,
+                        ),
+                        ("Main deck (in)", self.ship.armour.deck, base.armour.deck, 1),
+                        (
+                            "Main battery cal (in)",
+                            self.ship.guns.batteries[0].calibre,
+                            base.guns.batteries[0].calibre,
+                            1,
+                        ),
+                        (
+                            "Broadside weight (lb)",
+                            self.ship.guns.broadside,
+                            base.guns.broadside,
+                            0,
+                        ),
+                        (
+                            "Metacentre GM (ft)",
+                            self.ship.metacentre,
+                            base.metacentre,
+                            2,
+                        ),
+                    ];
+
+                    for (name, val1, val2, dec) in rows {
+                        ui.label(name);
+                        ui.label(format!("{val1:.prec$}", prec = dec));
+                        ui.label(format!("{val2:.prec$}", prec = dec));
+                        let diff = val1 - val2;
+                        let sign = if diff > 0.0 { "+" } else { "" };
+                        ui.label(format!("{sign}{diff:.prec$}", prec = dec));
+                        if val2.abs() > 1e-6 {
+                            let pct = (diff / val2) * 100.0;
+                            let p_sign = if pct > 0.0 { "+" } else { "" };
+                            ui.label(format!("{p_sign}{pct:.1}%"));
+                        } else {
+                            ui.label("–");
+                        }
+                        ui.end_row();
+                    }
+                });
+        }
     }
 
     fn page_report(&mut self, ui: &mut egui::Ui) {
@@ -984,18 +1155,41 @@ impl SpringSharpApp {
             }
         });
         ui.horizontal(|ui| {
-            ui.label(format!(
-                "Disp: {:.0} t normal ({:.0} t full)",
-                self.ship.hull.displacement, self.ship.disp_max_load
-            ));
-            ui.separator();
-            ui.label(format!("Speed: {:.1} kt", self.ship.engine.speed_max));
-            ui.separator();
-            ui.label(format!("Power: {:.0} hp", self.ship.engine.hp_max));
-            ui.separator();
-            ui.label(format!("Broadside: {:.0} lb", self.ship.guns.broadside));
-            ui.separator();
-            ui.label(format!("GM: {:.1} ft", self.ship.metacentre));
+            if self.metric_units {
+                ui.label(format!(
+                    "Disp: {:.0} t normal ({:.0} t full)",
+                    self.ship.hull.displacement * 1.01605,
+                    self.ship.disp_max_load * 1.01605
+                ));
+                ui.separator();
+                ui.label(format!(
+                    "Speed: {:.1} km/h ({:.1} kt)",
+                    self.ship.engine.speed_max * 1.852,
+                    self.ship.engine.speed_max
+                ));
+                ui.separator();
+                ui.label(format!("Power: {:.0} hp", self.ship.engine.hp_max));
+                ui.separator();
+                ui.label(format!(
+                    "Broadside: {:.0} kg",
+                    self.ship.guns.broadside * 0.453592
+                ));
+                ui.separator();
+                ui.label(format!("GM: {:.2} m", self.ship.metacentre * 0.3048));
+            } else {
+                ui.label(format!(
+                    "Disp: {:.0} t normal ({:.0} t full)",
+                    self.ship.hull.displacement, self.ship.disp_max_load
+                ));
+                ui.separator();
+                ui.label(format!("Speed: {:.1} kt", self.ship.engine.speed_max));
+                ui.separator();
+                ui.label(format!("Power: {:.0} hp", self.ship.engine.hp_max));
+                ui.separator();
+                ui.label(format!("Broadside: {:.0} lb", self.ship.guns.broadside));
+                ui.separator();
+                ui.label(format!("GM: {:.1} ft", self.ship.metacentre));
+            }
         });
 
         // Color weight distribution bar
@@ -1062,10 +1256,20 @@ impl SpringSharpApp {
         ui.horizontal(|ui| {
             ui.checkbox(&mut self.show_arcs, "Show 290° Turret Firing Arcs");
             ui.separator();
-            ui.label(format!(
-                "Dimensions: {:.0} ft × {:.0} ft × {:.1} ft",
-                self.ship.hull.length, self.ship.hull.beam, self.ship.hull.draught
-            ));
+            let dim_lbl = if self.metric_units {
+                format!(
+                    "Dimensions: {:.1} m × {:.1} m × {:.1} m",
+                    self.ship.hull.length * 0.3048,
+                    self.ship.hull.beam * 0.3048,
+                    self.ship.hull.draught * 0.3048
+                )
+            } else {
+                format!(
+                    "Dimensions: {:.0} ft × {:.0} ft × {:.1} ft",
+                    self.ship.hull.length, self.ship.hull.beam, self.ship.hull.draught
+                )
+            };
+            ui.label(dim_lbl);
         });
         ui.separator();
 
@@ -1149,6 +1353,24 @@ impl SpringSharpApp {
             egui::Color32::from_rgba_unmultiplied(79, 179, 255, 20),
             egui::Stroke::new(1.5, egui::Color32::from_rgb(79, 179, 255)),
         ));
+
+        // Carrier flight deck in profile view
+        let is_carrier = self.ship.ship_type.to_lowercase().contains("carrier");
+        if is_carrier {
+            let fd_y = y_fc_for - 12.0;
+            painter.line_segment(
+                [egui::pos2(x0 + 4.0, fd_y), egui::pos2(x1 - 4.0, fd_y)],
+                egui::Stroke::new(2.5, egui::Color32::from_rgb(95, 211, 141)),
+            );
+            painter.line_segment(
+                [egui::pos2(x0 + 15.0, fd_y), egui::pos2(x0 + 15.0, y_fc_for)],
+                egui::Stroke::new(1.0, egui::Color32::from_rgb(95, 211, 141)),
+            );
+            painter.line_segment(
+                [egui::pos2(x1 - 15.0, fd_y), egui::pos2(x1 - 15.0, y_qd_aft)],
+                egui::Stroke::new(1.0, egui::Color32::from_rgb(95, 211, 141)),
+            );
+        }
 
         // Superstructure bridge & funnel
         let x_mid = x0 + draw_w * 0.48;
@@ -1264,6 +1486,76 @@ impl SpringSharpApp {
             egui::Stroke::new(1.5, egui::Color32::from_rgb(79, 179, 255)),
         ));
 
+        // Carrier flight deck in plan view
+        if is_carrier {
+            let f_rect = egui::Rect::from_min_max(
+                egui::pos2(x0 + 4.0, y_cl - hb * 1.15),
+                egui::pos2(x1 - 4.0, y_cl + hb * 1.15),
+            );
+            painter.rect_filled(
+                f_rect,
+                4.0,
+                egui::Color32::from_rgba_unmultiplied(95, 211, 141, 30),
+            );
+            painter.rect_stroke(
+                f_rect,
+                4.0,
+                egui::Stroke::new(1.2, egui::Color32::from_rgb(95, 211, 141)),
+                egui::StrokeKind::Outside,
+            );
+            painter.line_segment(
+                [egui::pos2(x0 + 12.0, y_cl), egui::pos2(x1 - 12.0, y_cl)],
+                egui::Stroke::new(
+                    1.0,
+                    egui::Color32::from_rgba_unmultiplied(255, 255, 255, 70),
+                ),
+            );
+            let island_rect = egui::Rect::from_min_max(
+                egui::pos2(x0 + draw_w * 0.45, y_cl - hb * 1.15 - 2.0),
+                egui::pos2(x0 + draw_w * 0.45 + 24.0, y_cl - hb * 1.15 + 7.0),
+            );
+            painter.rect_filled(island_rect, 2.0, egui::Color32::from_rgb(224, 134, 79));
+            painter.rect_stroke(
+                island_rect,
+                2.0,
+                egui::Stroke::new(1.0, egui::Color32::WHITE),
+                egui::StrokeKind::Outside,
+            );
+        }
+
+        // Torpedo tube mounts in plan view
+        let torp_count = self.ship.weapons.torpedo1.number + self.ship.weapons.torpedo2.number;
+        if torp_count > 0 {
+            let t_positions = [x0 + draw_w * 0.58, x0 + draw_w * 0.68];
+            for tx in t_positions {
+                let center = egui::pos2(tx, y_cl);
+                painter.circle_filled(center, 4.5, egui::Color32::from_rgb(56, 239, 125));
+                painter.circle_stroke(
+                    center,
+                    4.5,
+                    egui::Stroke::new(1.0, egui::Color32::from_rgb(17, 153, 142)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(tx - 4.0, y_cl - 3.0),
+                        egui::pos2(tx + 4.0, y_cl - 3.0),
+                    ],
+                    egui::Stroke::new(1.2, egui::Color32::WHITE),
+                );
+                painter.line_segment(
+                    [egui::pos2(tx - 4.0, y_cl), egui::pos2(tx + 4.0, y_cl)],
+                    egui::Stroke::new(1.2, egui::Color32::WHITE),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(tx - 4.0, y_cl + 3.0),
+                        egui::pos2(tx + 4.0, y_cl + 3.0),
+                    ],
+                    egui::Stroke::new(1.2, egui::Color32::WHITE),
+                );
+            }
+        }
+
         // Plan turrets & arcs
         for &p_f64 in &positions {
             let p = p_f64 as f32;
@@ -1330,6 +1622,9 @@ impl SpringSharpApp {
         ui.separator();
         ui.heading("Speed & Power Curve");
         self.draw_speed_power_chart(ui, available_width);
+        ui.separator();
+        ui.heading("Armor Penetration & Immunity Zone");
+        self.draw_immunity_chart(ui, available_width);
     }
 
     fn draw_speed_power_chart(&self, ui: &mut egui::Ui, available_width: f32) {
@@ -1445,6 +1740,239 @@ impl SpringSharpApp {
             egui::pos2(rect.left() + pad_l + 10.0, rect.top() + 8.0),
             egui::Align2::LEFT_TOP,
             "■ Current Calibrated Model (cyan)   ■ Original Baseline (amber)",
+            egui::FontId::monospace(10.0),
+            egui::Color32::from_rgb(219, 231, 243),
+        );
+    }
+
+    fn draw_immunity_chart(&self, ui: &mut egui::Ui, available_width: f32) {
+        let g1 = &self.ship.guns.batteries[0];
+        if g1.calibre <= 0.0 || g1.barrels <= 0 {
+            ui.label("No active main battery guns for exterior ballistics analysis.");
+            return;
+        }
+
+        let iz = compute_self_immunity_zone(
+            g1,
+            self.ship.armour.belt_main,
+            self.ship.armour.belts_incline,
+            self.ship.armour.deck,
+        );
+
+        if iz.curve.is_empty() {
+            ui.label("Ballistic trajectory calculation produced no curve points.");
+            return;
+        }
+
+        ui.horizontal(|ui| {
+            ui.label(format!("Gun: {:.1}\" / {} cal", g1.calibre, g1.cal_length));
+            ui.separator();
+            ui.label(format!(
+                "Belt target: {:.1}\" @ {:.0}°",
+                iz.target_belt_in, iz.target_belt_incline
+            ));
+            ui.separator();
+            ui.label(format!("Deck target: {:.1}\"", iz.target_deck_in));
+            ui.separator();
+            if iz.has_zone {
+                if let (Some(in_yd), Some(out_yd)) = (iz.inner_limit_yd, iz.outer_limit_yd) {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(95, 211, 141),
+                        format!("● Immunity Zone: {:.0} – {:.0} yd", in_yd, out_yd),
+                    );
+                } else {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(255, 181, 71),
+                        "▲ No immunity zone against own main armament",
+                    );
+                }
+            } else {
+                ui.colored_label(
+                    egui::Color32::from_rgb(255, 181, 71),
+                    "▲ No immunity zone against own main armament",
+                );
+            }
+        });
+
+        let chart_h = 220.0_f32;
+        let (response, painter) =
+            ui.allocate_painter(egui::vec2(available_width, chart_h), egui::Sense::hover());
+        let rect = response.rect;
+        painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(8, 19, 30));
+
+        let min_r = iz.curve.first().map(|p| p.range_yd as f32).unwrap_or(0.0);
+        let max_r = iz
+            .curve
+            .last()
+            .map(|p| p.range_yd as f32)
+            .unwrap_or(35000.0);
+        let mut max_pen = (iz.target_belt_in.max(iz.target_deck_in) as f32).max(12.0);
+        for p in &iz.curve {
+            if (p.belt_pen_in as f32) > max_pen {
+                max_pen = p.belt_pen_in as f32;
+            }
+            if (p.deck_pen_in as f32) > max_pen {
+                max_pen = p.deck_pen_in as f32;
+            }
+        }
+        max_pen *= 1.15;
+
+        let pad_l = 65.0_f32;
+        let pad_r = 25.0_f32;
+        let pad_t = 22.0_f32;
+        let pad_b = 30.0_f32;
+        let pw = (rect.width() - pad_l - pad_r).max(100.0);
+        let ph = (rect.height() - pad_t - pad_b).max(60.0);
+
+        let x_at = |rng: f32| rect.left() + pad_l + ((rng - min_r) / (max_r - min_r)) * pw;
+        let y_at = |pen: f32| rect.top() + pad_t + (1.0 - (pen / max_pen).clamp(0.0, 1.0)) * ph;
+
+        // Immunity zone band
+        if iz.has_zone {
+            if let (Some(in_yd), Some(out_yd)) = (iz.inner_limit_yd, iz.outer_limit_yd) {
+                let x_in = x_at(in_yd as f32);
+                let x_out = x_at(out_yd as f32);
+                let iz_rect = egui::Rect::from_min_max(
+                    egui::pos2(x_in, rect.top() + pad_t),
+                    egui::pos2(x_out, rect.top() + pad_t + ph),
+                );
+                painter.rect_filled(
+                    iz_rect,
+                    0.0,
+                    egui::Color32::from_rgba_unmultiplied(95, 211, 141, 35),
+                );
+                painter.rect_stroke(
+                    iz_rect,
+                    0.0,
+                    egui::Stroke::new(
+                        1.0,
+                        egui::Color32::from_rgba_unmultiplied(95, 211, 141, 120),
+                    ),
+                    egui::StrokeKind::Outside,
+                );
+            }
+        }
+
+        // Horizontal grid lines
+        for i in 0..=4 {
+            let val = max_pen * (i as f32 / 4.0);
+            let y = y_at(val);
+            painter.line_segment(
+                [
+                    egui::pos2(rect.left() + pad_l, y),
+                    egui::pos2(rect.left() + pad_l + pw, y),
+                ],
+                egui::Stroke::new(1.0, egui::Color32::from_rgb(28, 45, 66)),
+            );
+            let label = if self.metric_units {
+                format!("{:.0} mm", val * 25.4)
+            } else {
+                format!("{val:.1}\"")
+            };
+            painter.text(
+                egui::pos2(rect.left() + pad_l - 6.0, y),
+                egui::Align2::RIGHT_CENTER,
+                label,
+                egui::FontId::monospace(9.5),
+                egui::Color32::from_rgb(138, 164, 191),
+            );
+        }
+
+        // Vertical range grid
+        for p in &iz.curve {
+            let x = x_at(p.range_yd as f32);
+            painter.line_segment(
+                [
+                    egui::pos2(x, rect.top() + pad_t),
+                    egui::pos2(x, rect.top() + pad_t + ph),
+                ],
+                egui::Stroke::new(1.0, egui::Color32::from_rgb(22, 35, 52)),
+            );
+            let r_label = if self.metric_units {
+                format!("{:.1}k m", p.range_yd * 0.0009144)
+            } else {
+                format!("{:.0}k yd", p.range_yd / 1000.0)
+            };
+            painter.text(
+                egui::pos2(x, rect.top() + pad_t + ph + 12.0),
+                egui::Align2::CENTER_CENTER,
+                r_label,
+                egui::FontId::monospace(9.0),
+                egui::Color32::from_rgb(138, 164, 191),
+            );
+        }
+
+        // Target belt line (dashed red)
+        if iz.target_belt_in > 0.0 {
+            let y = y_at(iz.target_belt_in as f32);
+            painter.line_segment(
+                [
+                    egui::pos2(rect.left() + pad_l, y),
+                    egui::pos2(rect.left() + pad_l + pw, y),
+                ],
+                egui::Stroke::new(1.5, egui::Color32::from_rgb(255, 107, 107)),
+            );
+            painter.text(
+                egui::pos2(rect.left() + pad_l + pw - 4.0, y - 4.0),
+                egui::Align2::RIGHT_BOTTOM,
+                format!("Belt {:.1}\"", iz.target_belt_in),
+                egui::FontId::monospace(9.0),
+                egui::Color32::from_rgb(255, 107, 107),
+            );
+        }
+
+        // Target deck line (dashed blue)
+        if iz.target_deck_in > 0.0 {
+            let y = y_at(iz.target_deck_in as f32);
+            painter.line_segment(
+                [
+                    egui::pos2(rect.left() + pad_l, y),
+                    egui::pos2(rect.left() + pad_l + pw, y),
+                ],
+                egui::Stroke::new(1.5, egui::Color32::from_rgb(79, 179, 255)),
+            );
+            painter.text(
+                egui::pos2(rect.left() + pad_l + pw - 4.0, y - 4.0),
+                egui::Align2::RIGHT_BOTTOM,
+                format!("Deck {:.1}\"", iz.target_deck_in),
+                egui::FontId::monospace(9.0),
+                egui::Color32::from_rgb(79, 179, 255),
+            );
+        }
+
+        // Belt pen line (red)
+        let belt_pts: Vec<egui::Pos2> = iz
+            .curve
+            .iter()
+            .map(|p| egui::pos2(x_at(p.range_yd as f32), y_at(p.belt_pen_in as f32)))
+            .collect();
+        painter.add(egui::Shape::line(
+            belt_pts.clone(),
+            egui::Stroke::new(2.4, egui::Color32::from_rgb(255, 107, 107)),
+        ));
+        for pt in belt_pts {
+            painter.circle_filled(pt, 2.8, egui::Color32::from_rgb(255, 107, 107));
+        }
+
+        // Deck pen line (cyan)
+        let deck_pts: Vec<egui::Pos2> = iz
+            .curve
+            .iter()
+            .map(|p| egui::pos2(x_at(p.range_yd as f32), y_at(p.deck_pen_in as f32)))
+            .collect();
+        painter.add(egui::Shape::line(
+            deck_pts.clone(),
+            egui::Stroke::new(2.4, egui::Color32::from_rgb(79, 179, 255)),
+        ));
+        for pt in deck_pts {
+            painter.circle_filled(pt, 2.8, egui::Color32::from_rgb(79, 179, 255));
+        }
+
+        // Legend
+        painter.text(
+            egui::pos2(rect.left() + pad_l + 10.0, rect.top() + 8.0),
+            egui::Align2::LEFT_TOP,
+            "■ Belt Penetration (red)   ■ Deck Penetration (cyan)   ■ Safe Immunity Zone (green band)",
             egui::FontId::monospace(10.0),
             egui::Color32::from_rgb(219, 231, 243),
         );

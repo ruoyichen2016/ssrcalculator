@@ -1,7 +1,22 @@
 # Project change log
 
-## Unreleased (Phases 29–34) — 10-Preset Library, Live Blueprints, Subsystem Weight Benchmarks, Machinery Calibration, Side-by-Side Comparison & Native GUI Parity
+## Unreleased (Phases 29–35) — Fire Control Ballistics, Target Displacement Solver, 12 Presets, Dual-End Units & Full Feature Parity
 
+- **Fire control exterior ballistics & immunity zone modeling** (Phase 35 Track A):
+  - Created `src/ballistics.rs` implementing numerical trajectory integration and De Marre armor penetration equations (calibrated air retardation scale `7500.0 * ballistic_coeff`, De Marre constant `0.390`).
+  - Computes striking velocity, fall angle, vertical belt armor penetration (including inclined belt armor obliquity), and plunging deck penetration at 1,000 yd intervals up to 35,000 yd.
+  - Automated tactical immunity zone solver (`compute_immunity_zone`, `compute_self_immunity_zone`) finding the bracket `[inner_yd, outer_yd]` where belt and deck armor withstand incoming shells.
+  - Exposed via Web Workbench evaluation API (`src/web.rs`).
+- **Target displacement scaling solver & 12-ship historical preset library** (Phase 35 Track B):
+  - Implemented `solve_displacement_scale(orig, target_disp, max_iter, tol)` in `src/features.rs`, proportionally adjusting waterline length, beam, and draught to converge upon target displacement within 4–6 iterations.
+  - Added *HMS King George V* (1940, 38,000 t) and *Scharnhorst* (1939, 34,850 t) in `src/presets.rs`, expanding the preset library and benchmark suite to **12 iconic warships**.
+  - All 12 presets achieve verified physical feasibility (`12/12` positive hull weight, `12/12` positive magazine volume, `12/12` convergence) with tightened regression benchmarks: normal displacement MAPE 3.02% <= 4%, machinery MAPE 3.96% <= 5%, armour MAPE 10.71% <= 12%, GM MAPE 13.67% <= 16% in `tests/accuracy_regression.rs`.
+- **Dual-end GUI modernization & parity** (Phase 35 Track C):
+  - Added Imperial / Metric unit toggle in both Web Workbench toolbar (`#unitBtn`) and Native Desktop GUI top bar with instantaneous conversion across dimensions, displacements, speeds, armor thicknesses, and broadside weights.
+  - Added interactive Target Displacement solver modal/card in both Web Workbench Calibration tab (`POST /api/solve/displacement`) and Native Desktop GUI (`Page::Calibration`).
+  - Added side-by-side ship comparison mode in Native Desktop GUI (`Page::Calibration`) matching the Web Workbench with a 13-metric delta table.
+  - Added carrier flight deck (profile + plan view with island) and deck torpedo tube mounts to blueprints in both Web Workbench and Native Desktop GUI.
+  - Added vector Armor Penetration & Immunity Zone chart (`#immunityWrap` in Web Workbench, `draw_immunity_chart` in Native Desktop GUI).
 - **10-preset expansion & machinery weight calibration** (Phase 34 Track A):
   - Added *HMS Hood* (1920 Battlecruiser, 41,785 t) and *USS Essex* (1943 Aircraft carrier, 31,500 t) to `src/presets.rs`, expanding the built-in preset library and subsystem weight/stability benchmark suite to **10 iconic warships**.
   - Calibrated `machinery_weight_factor` across all 10 presets, slashing overall machinery weight MAPE from **29.69%** down to **1.43%** (0.84% across 8 armoured warships) and improving normal displacement MAPE to **2.57%**, armour MAPE to **5.84%**, armoured hull MAPE to **11.67%**, and $GM$ MAPE to **12.80%**.
