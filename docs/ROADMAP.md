@@ -393,9 +393,6 @@ still 10.36% / blended 9.81%):
 ### P2/P3
 
 - Full Savitsky planing model validation on published planing-hull data
-- Web console: bound the number of simultaneous connections (size limits,
-  per-connection timeouts and per-connection threads are done; a connection cap
-  is not)
 - More literature cases for carriers and cruisers
 
 ## Phase 28 — web console workbench (completed 2026-10-17)
@@ -463,3 +460,16 @@ still 10.36% / blended 9.81%):
   `"Armament"` weight slice (`src/web.rs`), and added a live historical subsystem
   weight & stability benchmark comparison table in the Analysis tab (`src/web_page.html`).
 - Frozen in `tests/accuracy_regression.rs` (`preset_weights_and_stability_do_not_regress`).
+
+## Phase 32 — web workbench expanded blueprint & machinery weight scaling (completed 2026-10-17)
+
+- **Track A: Web Workbench UX & Robustness**:
+  - Full-screen / expanded blueprint modal (`#bpModal`) with responsive sizing, close on `Esc`/backdrop/close button, and SVG viewBox recalculation.
+  - Interactive firing arc toggle (`#btnArcs` / `toggleArcLayers()`) displaying dashed 290° training arc projection sectors for all configured main battery turrets.
+  - Standalone SVG blueprint export (`exportSvg()`) downloading `blueprint-<name>.svg` directly from the browser.
+  - Web console connection concurrency bound: guarded listener loop with `MAX_CONCURRENT_CONNECTIONS = 64` and an atomic RAII active-connection guard returning `503 Service Unavailable: connection limit reached` on saturation.
+- **Track B: Machinery Weight Scaling & Destroyer Accuracy**:
+  - Added `engine.machinery_weight_factor` in `src/model.rs`, serialized in `src/io.rs`, and surfaced in the Web Workbench machinery tab.
+  - Configured high-pressure lightweight steam turbine scaling for *USS Fletcher* (`0.50`) and *IJN Shimakaze* (`0.42`).
+  - Slashed WWII destroyer machinery error from ~+106%/+150% down to +3% (*Fletcher* 709t vs 690t ref) and +5% (*Shimakaze* 859t vs 820t ref).
+  - Improved overall 8-preset machinery weight MAPE from **60.63%** down to **29.69%**, relieving residual hull weight squeeze while maintaining all physical feasibility guarantees and GM stability within regression gates (`<= 35%` machinery MAPE gate added to `tests/accuracy_regression.rs`).

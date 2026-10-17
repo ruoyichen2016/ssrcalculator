@@ -1172,6 +1172,9 @@ pub struct EngineValues {
     pub planing_max_displacement_tons: f64,
     pub ensemble_reduced_weight: f64,
     pub ensemble_structural_weight: f64,
+    /// Multiplier on the empirical engine weight (1.0 = standard capital-ship steam baseline).
+    /// Used for lightweight/compact machinery (e.g. WWII high-pressure destroyer steam turbines ~0.50).
+    pub machinery_weight_factor: f64,
     pub engine_lock: bool,
 
     // derived resistance
@@ -1413,6 +1416,13 @@ impl EngineValues {
         } else if hull.displacement < 600.0 && self.disp_factor < 1.0 {
             self.engine_weight *= pow(self.disp_factor, 0.88);
         }
+        let mw_factor =
+            if self.machinery_weight_factor > 0.0 && self.machinery_weight_factor.is_finite() {
+                self.machinery_weight_factor
+            } else {
+                1.0
+            };
+        self.engine_weight *= mw_factor;
     }
 
     pub fn bunker_calc(&mut self, hull: &HullValues) {
@@ -1545,6 +1555,7 @@ impl Default for ShipModel {
                 planing_max_displacement_tons: 3000.0,
                 ensemble_reduced_weight: 0.5,
                 ensemble_structural_weight: 0.5,
+                machinery_weight_factor: 1.0,
                 ..EngineValues::default()
             },
             steadiness: 50,

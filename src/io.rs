@@ -216,6 +216,10 @@ pub fn serialize(ship: &ShipModel) -> String {
         "engine.ensemble_structural_weight",
         ship.engine.ensemble_structural_weight.to_string(),
     );
+    push(
+        "engine.machinery_weight_factor",
+        ship.engine.machinery_weight_factor.to_string(),
+    );
     for (i, v) in ship.engine.fuel.iter().enumerate() {
         push(&format!("engine.fuel{i}"), v.to_string());
     }
@@ -703,6 +707,10 @@ fn set_value(ship: &mut ShipModel, key: &str, value: &str) -> Result<(), String>
         }
         "engine.ensemble_structural_weight" => {
             ship.engine.ensemble_structural_weight = parse_f64(value)?;
+            true
+        }
+        "engine.machinery_weight_factor" => {
+            ship.engine.machinery_weight_factor = parse_f64(value)?;
             true
         }
         "perf.steadiness" => {

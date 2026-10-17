@@ -284,4 +284,9 @@ fn preset_weights_and_stability_do_not_regress() {
         "armoured-ship armament+ammo weight MAPE {:.2}% exceeded 20% baseline",
         report.armament_armoured_mape * 100.0
     );
+    assert!(
+        report.machinery_mape <= 0.35,
+        "overall machinery weight MAPE {:.2}% exceeded 35% baseline (improved by DD machinery weight factor)",
+        report.machinery_mape * 100.0
+    );
 }

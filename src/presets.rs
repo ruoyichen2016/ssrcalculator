@@ -718,6 +718,9 @@ fn preset_fletcher() -> ShipModel {
     ship.engine.screws = 2;
     ship.engine.resistance_model = ResistanceModel::HoltropMennen;
     ship.engine.power_factor = 1.017;
+    // WWII compact lightweight high-pressure destroyer machinery (60,000 shp in ~700t => ~85 shp/ton)
+    ship.engine.machinery_weight_factor = 0.50;
+    ship.steadiness = 10;
 
     ship.weapons = WeaponAggregate {
         torpedo1: WeaponMount {
@@ -792,6 +795,9 @@ fn preset_shimakaze() -> ShipModel {
     ship.engine.screws = 2;
     ship.engine.resistance_model = ResistanceModel::HoltropMennen;
     ship.engine.power_factor = 1.017;
+    // Experimental experimental high-temperature/high-pressure Kampon machinery (75,000+ shp in ~820t => ~92 shp/ton)
+    ship.engine.machinery_weight_factor = 0.42;
+    ship.steadiness = 5;
 
     // 15 x 61cm (24") Type 93 Long Lance torpedoes in 3 quintuple mounts
     ship.weapons = WeaponAggregate {

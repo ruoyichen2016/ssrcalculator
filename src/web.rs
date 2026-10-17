@@ -9,6 +9,8 @@
 
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use crate::model::{ResistanceModel, ShipModel};
 use crate::{
@@ -277,6 +279,10 @@ fn form_html() -> String {
         ("engine.power_factor", "Power factor"),
         ("engine.original_power_factor", "Original-model factor"),
         ("engine.blend_weight", "Holtrop blend weight (1 = none)"),
+        (
+            "engine.machinery_weight_factor",
+            "Machinery weight factor (1.0 = std, ~0.50 = DD)",
+        ),
         ("engine.holtrop_viscous_factor", "Holtrop viscous factor"),
         ("engine.holtrop_wave_factor", "Holtrop wave factor"),
         (
@@ -689,6 +695,11 @@ fn design_route(body: &str, action: &str) -> Result<String, String> {
 /// mistake or an attempt to exhaust memory, so it is rejected early.
 pub const MAX_BODY_BYTES: usize = 8 * 1024 * 1024;
 
+/// Maximum simultaneous active client connections allowed by the server.
+/// Exceeding this bound immediately returns 503 Service Unavailable to protect
+/// file descriptors and thread resources.
+pub const MAX_CONCURRENT_CONNECTIONS: usize = 64;
+
 /// Read/write timeout for a single connection.  Without this a client that
 /// announces a body and then stalls would block the (single-threaded) accept
 /// loop indefinitely.
@@ -697,17 +708,41 @@ const CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1
 pub fn run_server(port: u16) -> io::Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", port))?;
     println!("SpringSharp web console: http://127.0.0.1:{port}");
+    let active_connections = Arc::new(AtomicUsize::new(0));
+
     for stream in listener.incoming() {
-        let stream = match stream {
+        let mut stream = match stream {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("accept error: {e}");
                 continue;
             }
         };
+
+        let current = active_connections.load(Ordering::Relaxed);
+        if current >= MAX_CONCURRENT_CONNECTIONS {
+            let _ = write_plain(
+                &mut stream,
+                503,
+                "Service Unavailable: connection limit reached",
+            );
+            continue;
+        }
+
+        active_connections.fetch_add(1, Ordering::SeqCst);
+        let counter = Arc::clone(&active_connections);
+
         // Handle each connection on its own thread so one slow/stalled client
         // cannot block the whole console.
         std::thread::spawn(move || {
+            struct ConnGuard(Arc<AtomicUsize>);
+            impl Drop for ConnGuard {
+                fn drop(&mut self) {
+                    self.0.fetch_sub(1, Ordering::SeqCst);
+                }
+            }
+            let _guard = ConnGuard(counter);
+
             // A panic inside a request handler must not take down the server.
             let result = std::panic::catch_unwind(|| handle_connection(stream));
             match result {
@@ -949,6 +984,7 @@ fn reason_phrase(status: u16) -> &'static str {
         400 => "Bad Request",
         404 => "Not Found",
         413 => "Payload Too Large",
+        503 => "Service Unavailable",
         _ => "Error",
     }
 }

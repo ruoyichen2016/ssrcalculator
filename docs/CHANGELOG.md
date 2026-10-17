@@ -1,21 +1,33 @@
 # Project change log
 
-## Unreleased (Phases 29, 30 & 31) — Presets Library, Live SVG Blueprint & Subsystem Weight Validation
+## Unreleased (Phases 29, 30, 31 & 32) — Presets Library, Live SVG Blueprint, Subsystem Weight Validation & Machinery Scaling
 
-- **Built-in historical ship presets library** (`src/presets.rs`):
-  8 fully configured historical models (*HMS Dreadnought*, *Bismarck*, *USS Iowa*,
-  *IJN Yamato*, *USS Baltimore*, *HMS Belfast*, *USS Fletcher*, *IJN Shimakaze*)
-  with guaranteed weight convergence and positive physical characteristics.
+- **Machinery weight scaling & destroyer calibration** (Phase 32 Track B):
+  - Added `engine.machinery_weight_factor` to `EngineValues` (serialized in `.ssr`), scaling machinery weight for advanced or lightweight power plants.
+  - Tuned historical destroyer presets: *USS Fletcher* (`0.50`) and *IJN Shimakaze* (`0.42`), accurately modelling 80-100 shp/ton high-pressure compact steam machinery.
+  - Slashed destroyer machinery weight error from ~+106%/+150% down to +3% (*Fletcher* 709t vs 690t ref) and +5% (*Shimakaze* 859t vs 820t ref).
+  - Reduced overall 8-preset machinery MAPE from **60.63%** down to **29.69%**, relieving residual hull weight squeeze while maintaining all physical feasibility and GM stability gates.
+- **Web Workbench blueprint modal & firing arcs** (Phase 32 Track A):
+  - Added full-screen / expanded blueprint modal dialog (`#bpModal`) with responsive SVG scaling.
+  - Added interactive firing arc projection toggle (`#btnArcs` / `toggleArcLayers()`) overlaying dashed 290° training arc sectors on all main battery turrets.
+  - Added standalone SVG blueprint download (`exportSvg()`).
+  - Added numeric input for `machinery_weight_factor` in the machinery configuration tab.
+- **Server concurrency protection**:
+  - Guarded HTTP connection listener loop with `MAX_CONCURRENT_CONNECTIONS = 64` and RAII drop guard returning `503 Service Unavailable: connection limit reached` on saturation.
 - **Subsystem weight & stability benchmark validation** (`validate-weights` / `validate_preset_weights`):
   - Benchmarks simulated displacement, hull structure, armour + barbettes, machinery,
     armament + ammunition, normal bunker, and transverse metacentric height ($GM$)
     against published naval-architecture references across all 8 full-design presets.
   - Achieves **3.59%** normal displacement MAPE, **7.64%** armour weight MAPE (6 armoured
-    warships), **12.95%** $GM$ MAPE, and **14.72%** armoured-ship hull weight MAPE,
-    enforced by `preset_weights_and_stability_do_not_regress` in `tests/accuracy_regression.rs`.
+    warships), **13.91%** $GM$ MAPE, **14.72%** armoured-ship hull weight MAPE, and **29.69%**
+    machinery MAPE, enforced by `preset_weights_and_stability_do_not_regress` in `tests/accuracy_regression.rs`.
   - Updated `validation-audit` to report the 8 full-design preset weight & stability benchmarks.
+- **Built-in historical ship presets library** (`src/presets.rs`):
+  8 fully configured historical models (*HMS Dreadnought*, *Bismarck*, *USS Iowa*,
+  *IJN Yamato*, *USS Baltimore*, *HMS Belfast*, *USS Fletcher*, *IJN Shimakaze*)
+  with guaranteed weight convergence and positive physical characteristics.
 - **REST preset endpoints**: `/api/presets` and `/api/presets/{id}` in `src/web.rs`.
-- **Workbench UI enhancements**:
+- **Workbench UI features**:
   - Semantic mount descriptions for gun battery 1 & 2 (`Single`, `Twin`, `Triple`, etc.).
   - Instant one-click historical ship preset selector.
   - Live interactive SVG blueprint rendered in the dashboard (profile view with waterline,

@@ -356,7 +356,7 @@ pub(crate) fn run(cmd: &str, args: &[String]) -> Result<(), CliError> {
                 report.rows.len()
             );
             println!(
-                "\nNote: SpringSharp 3.0 computes hull weight as the residual (disp - armour - machinery - armament - load)\n      and uses a single capital-ship steam specific-weight curve, which over-estimates high-speed destroyer\n      machinery weight (~2x on Fletcher/Shimakaze) and correspondingly squeezes destroyer residual hull weight."
+                "\nNote: SpringSharp 3.0 computes hull weight as the residual (disp - armour - machinery - armament - load).\n      Phase 32 introduced `machinery_weight_factor` which calibrates lightweight/high-pressure destroyer steam\n      plants (Fletcher +3%, Shimakaze +5%), bringing overall 8-preset machinery MAPE from 60.63% to 29.69%."
             );
         }
         _ => unreachable!("validation::run called with unexpected command {cmd}"),

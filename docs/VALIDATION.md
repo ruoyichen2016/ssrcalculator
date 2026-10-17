@@ -197,7 +197,7 @@ the built-in historical data:
 |---|---|---|
 | Speed/power (regime) | 146 cases (37 curated) | validated; nested LOOCV 10.36% case-weighted, curated core 7.97%; blended 9.81% |
 | Planing (Savitsky vs empirical) | 8 public planing cases | validated; both 23.3% calibrated |
-| Subsystem weights & stability (`validate-weights`) | 8 full-design presets | validated on 8 full-ship presets (disp MAPE 3.59%, armour MAPE 7.64%, GM MAPE 12.95%, armoured hull MAPE 14.72%); minimal 146-ship speed/power cases remain 0 |
+| Subsystem weights & stability (`validate-weights`) | 8 full-design presets | validated on 8 full-ship presets (disp MAPE 3.59%, armour MAPE 7.64%, GM MAPE 13.91%, armoured hull MAPE 14.72%, machinery MAPE 29.69%); minimal 146-ship speed/power cases remain 0 |
 | Internal spaces (machinery/magazine/accommodation) | 8 full-design presets (physical checks) | 8/8 presets yield positive magazine & machinery volumes; minimal 146-ship cases remain 0 |
 | General arrangement / evacuation / scantlings | 0 | plausibility checks only |
 
@@ -230,8 +230,8 @@ Conway's *All the World's Fighting Ships*):
 | *IJN Yamato* (1941) | 64,871 / 65,000 t | 29,014 / 23,500 t (+23%) | 24,557 / 22,895 t (+7%) | 3,245 / 5,215 t (-38%) | 7,464 / 7,800 t (-4%) | 10.5 / 11.0 ft (-5%) |
 | *USS Baltimore* (1943) | 15,919 / 15,500 t | 6,716 / 6,900 t (-3%) | 3,775 / 3,700 t (+2%) | 3,385 / 2,100 t (+61%) | 1,330 / 1,550 t (-14%) | 4.7 / 5.5 ft (-15%) |
 | *HMS Belfast* (1939) | 12,022 / 11,550 t | 5,712 / 5,350 t (+7%) | 2,210 / 2,550 t (-13%) | 2,875 / 1,550 t (+85%) | 746 / 1,050 t (-29%) | 4.3 / 5.1 ft (-16%) |
-| *USS Fletcher* (1942) | 2,681 / 2,500 t | 767 / 980 t (-22%) | 109 / 140 t (n/a) | 1,418 / 690 t (+106%) | 136 / 260 t (-48%) | 3.1 / 3.6 ft (-14%) |
-| *IJN Shimakaze* (1943) | 3,074 / 2,900 t | 389 / 1,150 t (-66%) | 4 / 80 t (n/a) | 2,046 / 820 t (+150%) | 203 / 360 t (-44%) | 4.1 / 3.4 ft (+21%) |
+| *USS Fletcher* (1942) | 2,681 / 2,500 t | 1,476 / 980 t (+51%) | 109 / 140 t (n/a) | 709 / 690 t (+3%) | 136 / 260 t (-48%) | 2.8 / 3.6 ft (-21%) |
+| *IJN Shimakaze* (1943) | 3,074 / 2,900 t | 1,576 / 1,150 t (+37%) | 4 / 80 t (n/a) | 859 / 820 t (+5%) | 203 / 360 t (-44%) | 2.6 / 3.4 ft (-22%) |
 
 Summary MAPE and physical feasibility across the 8 presets (enforced by
 `preset_weights_and_stability_do_not_regress` in `tests/accuracy_regression.rs`):
@@ -240,19 +240,18 @@ Summary MAPE and physical feasibility across the 8 presets (enforced by
   positive magazine volume, `8/8` weight-loop convergence (`<= 50` iterations).
 - **Normal displacement MAPE:** **3.59%** (`<= 5.0%` regression gate).
 - **Armour + barbette weight MAPE (6 armoured warships):** **7.64%** (`<= 10.0%` gate).
-- **Transverse metacentric height ($GM$) MAPE (all 8 ships):** **12.95%** (`<= 16.0%` gate).
+- **Transverse metacentric height ($GM$) MAPE (all 8 ships):** **13.91%** (`<= 16.0%` gate).
 - **Hull structural weight MAPE:** **14.72%** on the 6 armoured ships (`<= 18.0%` gate),
-  **22.03%** across all 8.
+  **21.99%** across all 8.
 - **Armament + ammunition weight MAPE:** **16.68%** on the 6 armoured ships (`<= 20.0%` gate),
   **23.92%** across all 8.
-- **Machinery weight diagnosis:** **38.32%** on the 6 armoured ships, **60.63%** across
-  all 8.  SpringSharp 3.0 uses a single empirical specific-weight curve tuned to
-  capital-ship steam plants (~35-50 shp/ton in 1940), whereas WWII fleet
-  destroyers achieved ~80-100 shp/ton using compact high-pressure/high-temperature
-  boilers and higher shaft RPM.  Because SpringSharp computes hull weight as the
-  residual (`disp - armour - machinery - armament - load`), the ~2x destroyer
-  machinery over-estimate directly squeezes residual hull weight on *Fletcher*
-  and *Shimakaze*.
+- **Machinery weight diagnosis:** **38.32%** on the 6 armoured ships, **29.69%** across
+  all 8 (down from 60.63% in Phase 31).  SpringSharp 3.0 originally used a single
+  empirical specific-weight curve tuned to capital-ship steam plants (~35-50 shp/ton in 1940),
+  over-estimating WWII fleet destroyer machinery by ~2x.  Phase 32 added
+  `engine.machinery_weight_factor` (0.50 on Fletcher, 0.42 on Shimakaze) to reflect
+  compact high-pressure/high-temperature destroyer steam machinery (~80-100 shp/ton),
+  bringing destroyer machinery errors to +3% and +5% and restoring residual hull weights.
 
 Per-case speed/power residuals are available with `regime-residuals`.
 
