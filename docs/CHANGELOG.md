@@ -1,6 +1,18 @@
 # Project change log
 
-## Unreleased (Phases 29, 30, 31 & 32) — Presets Library, Live SVG Blueprint, Subsystem Weight Validation & Machinery Scaling
+## Unreleased (Phases 29, 30, 31, 32 & 33) — Presets Library, Live SVG Blueprint, Subsystem Weight Validation, Machinery Scaling, Speed-Power Curves & Native GUI Modernization
+
+- **Speed-power curve & interactive blueprint tooltips** (Phase 33 Track A):
+  - Added dynamic speed-power curve calculation (`speed_curve: [[speed, model_hp, orig_hp, fn], ...]`) across 10 kt to max speed + 2 kt via exposed `EngineValues::speed_hp_calc()`.
+  - Added SVG speed-power curve chart in Web Workbench Analysis tab (`#speedPowerWrap`) comparing calibrated regime model vs original SpringSharp baseline with cruise/max speed markers.
+  - Added interactive inspection tooltips (`#bpTip`) across blueprint SVG elements (hover over belt armor, bridge superstructure, turrets with caliber/mount/armor/ammo details, and secondary mounts).
+  - Added longitudinal multi-deck compartment layout SVG schematic in `compartment_placement_html()`.
+  - Added color-coded tolerance badges (green $\le 10\%$, yellow $10\%\sim 20\%$, red $> 20\%$) in the preset weight validation table.
+- **Native desktop GUI modernization** (Phase 33 Track B):
+  - Added 8 historical warship presets dropdown (`PRESET_LIST`, `get_preset()`) in the left navigation panel for instant loading.
+  - Replaced integer-code inputs with user-friendly semantic combo boxes for Bow forms, Stern types, Gun types, Mount types, and Turret layouts, plus descriptive engine/drive options and `machinery_weight_factor`.
+  - Added live dashboard header with weight convergence badge, primary dimensions, speed, power, GM, and a painted segmented weight distribution bar (Hull, Armour, Machinery, Armament, Magazine, Bunker).
+  - Added dedicated `Page::Blueprint` with dual-view vector graphics via `egui::Painter`: Profile View (deckline, belt, keel, bridge, turrets) and Plan View (beam curvature, centerline, turrets, and toggleable 290° firing arc projection sectors).
 
 - **Machinery weight scaling & destroyer calibration** (Phase 32 Track B):
   - Added `engine.machinery_weight_factor` to `EngineValues` (serialized in `.ssr`), scaling machinery weight for advanced or lightweight power plants.

@@ -8,7 +8,77 @@ use eframe::egui;
 
 use springsharp::features::demo_ship;
 use springsharp::io::{load_from_file, save_to_file};
-use springsharp::model::{ResistanceModel, ShipModel};
+use springsharp::model::{GunBattery, ResistanceModel, ShipModel};
+use springsharp::{get_preset, PRESET_LIST};
+
+const BOWS: &[&str] = &[
+    "Normal bow",
+    "Bulbous bow - straight",
+    "Bulbous bow - forward",
+    "Ram bow",
+];
+
+const STERNS: &[&str] = &["Cruiser stern", "Transom stern", "Round stern"];
+
+const GUN_TYPES: &[&str] = &[
+    "Muzzle loading gun",
+    "Breech loading gun",
+    "Quick firing gun",
+    "Anti-air gun",
+    "Dual purpose gun",
+    "Auto rapid fire gun",
+    "Machine gun",
+];
+
+const MOUNT_TYPES: &[&str] = &[
+    "Broadside",
+    "Coles/Ericsson turret",
+    "Open barbette",
+    "Turret on barbette",
+    "Deck and hoist",
+    "Deck mount",
+    "Casemate",
+];
+
+const GUNS_IN_MOUNT: &[&str] = &[
+    "Single mount (1)",
+    "2 row twin mount (2)",
+    "4 row quad mount (4)",
+    "Twin mount (2)",
+    "2-gun mount (2)",
+    "2 row quad mount (4)",
+    "Triple mount (3)",
+    "3-gun mount (3)",
+    "2 row sextuple mount (6)",
+    "Quad mount (4)",
+    "4-gun mount (4)",
+    "2 row octuple mount (8)",
+    "Quintuple mount (5)",
+    "5-gun mount (5)",
+    "2 row decuple mount (10)",
+];
+
+const LAYOUTS: &[&str] = &[
+    "Centreline - distributed",
+    "Centreline - ends (fore >= aft)",
+    "Centreline - ends (aft >= fore)",
+    "Centreline - fore deck forward",
+    "Centreline - fore deck",
+    "Centreline - fore deck aft",
+    "Centreline - aft deck forward",
+    "Centreline - aft deck",
+    "Centreline - aft deck aft",
+    "Sides - distributed",
+    "Sides - ends (fore >= aft)",
+    "Sides - ends (aft >= fore)",
+    "Sides - fore deck forward",
+    "Sides - fore deck",
+    "Sides - fore deck aft",
+    "Sides - aft deck forward",
+    "Sides - aft deck",
+    "Sides - aft deck aft",
+    "None",
+];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -17,6 +87,7 @@ enum Page {
     Armour,
     Guns,
     Engine,
+    Blueprint,
     Calibration,
     Report,
 }
@@ -29,6 +100,8 @@ pub struct SpringSharpApp {
     load_path: String,
     status: String,
     regime_summary: String,
+    selected_preset_index: Option<usize>,
+    show_arcs: bool,
 }
 
 impl SpringSharpApp {
@@ -54,6 +127,8 @@ impl SpringSharpApp {
             load_path: "example.ssr".to_string(),
             status: "Demo design loaded".to_string(),
             regime_summary,
+            selected_preset_index: None,
+            show_arcs: false,
         }
     }
 
@@ -72,6 +147,7 @@ impl SpringSharpApp {
             (Page::Armour, "Armour"),
             (Page::Guns, "Guns"),
             (Page::Engine, "Engine"),
+            (Page::Blueprint, "Blueprint"),
             (Page::Calibration, "Calibration"),
             (Page::Report, "Report"),
         ] {
@@ -85,9 +161,32 @@ impl SpringSharpApp {
         }
         if ui.button("Load demo").clicked() {
             self.ship = demo_ship();
+            self.selected_preset_index = None;
             self.recalculate();
             self.status = "Demo design loaded".to_string();
         }
+        ui.separator();
+        ui.label("Historical Presets:");
+        let current_preset_name = self
+            .selected_preset_index
+            .and_then(|idx| PRESET_LIST.get(idx))
+            .map(|p| p.name)
+            .unwrap_or("Select preset...");
+        egui::ComboBox::from_id_salt("preset_picker")
+            .selected_text(current_preset_name)
+            .show_ui(ui, |ui| {
+                for (idx, p) in PRESET_LIST.iter().enumerate() {
+                    let is_sel = self.selected_preset_index == Some(idx);
+                    if ui.selectable_label(is_sel, p.name).clicked() {
+                        if let Some(preset_ship) = get_preset(p.id) {
+                            self.ship = preset_ship;
+                            self.selected_preset_index = Some(idx);
+                            self.recalculate();
+                            self.status = format!("Loaded preset: {}", p.name);
+                        }
+                    }
+                }
+            });
         ui.separator();
         ui.label(&self.status);
     }
@@ -242,8 +341,8 @@ impl SpringSharpApp {
             0.1,
             0.0..=200.0,
         );
-        drag_i32(ui, "Bow shape index", &mut f.bow);
-        drag_i32(ui, "Stern shape index", &mut f.stern);
+        combo_i32(ui, "Bow shape", &mut f.bow, BOWS);
+        combo_i32(ui, "Stern shape", &mut f.stern, STERNS);
         drag_f64(
             ui,
             "Transom width fraction",
@@ -376,14 +475,14 @@ impl SpringSharpApp {
                 drag_f64(ui, "Calibre (in)", &mut g.calibre, 0.1, 0.0..=40.0);
                 drag_f64(ui, "Calibre length", &mut g.cal_length, 0.1, 1.0..=100.0);
                 drag_i32(ui, "Gun year", &mut g.date_gun);
-                drag_i32(ui, "Gun type", &mut g.gun_type);
-                drag_i32(ui, "Mount type", &mut g.mount_type);
+                combo_i32(ui, "Gun type", &mut g.gun_type, GUN_TYPES);
+                combo_i32(ui, "Mount type", &mut g.mount_type, MOUNT_TYPES);
                 drag_i32(ui, "Magazine rounds", &mut g.magazine);
                 drag_i32(ui, "Mounts", &mut g.mounts);
-                drag_i32(ui, "Guns/mount G1", &mut g.guns_in_mount_g1);
-                drag_i32(ui, "Guns/mount G2", &mut g.guns_in_mount_g2);
-                drag_i32(ui, "Layout G1", &mut g.layout_g1);
-                drag_i32(ui, "Layout G2", &mut g.layout_g2);
+                combo_i32(ui, "Guns/mount G1", &mut g.guns_in_mount_g1, GUNS_IN_MOUNT);
+                combo_i32(ui, "Guns/mount G2", &mut g.guns_in_mount_g2, GUNS_IN_MOUNT);
+                combo_i32(ui, "Layout G1", &mut g.layout_g1, LAYOUTS);
+                combo_i32(ui, "Layout G2", &mut g.layout_g2, LAYOUTS);
                 drag_i32(ui, "Super mounts G1", &mut g.mount_super_g1);
                 drag_i32(ui, "Sub mounts G1", &mut g.mount_sub_g1);
                 drag_i32(ui, "Super mounts G2", &mut g.mount_super_g2);
@@ -418,6 +517,13 @@ impl SpringSharpApp {
             &mut e.power_factor,
             0.001,
             0.1..=2.0,
+        );
+        drag_f64(
+            ui,
+            "Machinery weight factor",
+            &mut e.machinery_weight_factor,
+            0.01,
+            0.1..=3.0,
         );
         ui.horizontal(|ui| {
             ui.label("Resistance model:");
@@ -498,15 +604,33 @@ impl SpringSharpApp {
         ui.separator();
         ui.label("Fuel types");
         for (i, v) in e.fuel.iter_mut().enumerate() {
-            ui.checkbox(v, format!("Fuel {i}"));
+            let name = match i {
+                0 => "Coal fired boilers",
+                1 => "Oil fired boilers",
+                2 => "Diesel motors",
+                3 => "Petrol motors",
+                _ => "Batteries",
+            };
+            ui.checkbox(v, name);
         }
         ui.label("Engine types");
         for (i, v) in e.engine_types.iter_mut().enumerate() {
-            ui.checkbox(v, format!("Engine type {i}"));
+            let name = match i {
+                0 => "Simple reciprocating",
+                1 => "Complex reciprocating",
+                _ => "Steam turbines",
+            };
+            ui.checkbox(v, name);
         }
         ui.label("Drive types");
         for (i, v) in e.drive.iter_mut().enumerate() {
-            ui.checkbox(v, format!("Drive {i}"));
+            let name = match i {
+                0 => "Direct",
+                1 => "Geared",
+                2 => "Electric",
+                _ => "Hydraulic",
+            };
+            ui.checkbox(v, name);
         }
     }
 
@@ -605,6 +729,362 @@ impl SpringSharpApp {
             );
         });
     }
+
+    fn dashboard_header(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.heading(&self.ship.name);
+            ui.label(format!("· {} · {}", self.ship.country, self.ship.ship_type));
+            if self.ship.converged {
+                ui.colored_label(egui::Color32::from_rgb(95, 211, 141), "● Converged");
+            } else {
+                ui.colored_label(
+                    egui::Color32::from_rgb(255, 181, 71),
+                    "▲ Weights not converged",
+                );
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(format!(
+                "Disp: {:.0} t normal ({:.0} t full)",
+                self.ship.hull.displacement, self.ship.disp_max_load
+            ));
+            ui.separator();
+            ui.label(format!("Speed: {:.1} kt", self.ship.engine.speed_max));
+            ui.separator();
+            ui.label(format!("Power: {:.0} hp", self.ship.engine.hp_max));
+            ui.separator();
+            ui.label(format!("GM: {:.1} ft", self.ship.metacentre));
+        });
+
+        // Color weight distribution bar
+        let total = self.ship.hull.displacement.max(1.0);
+        let e = &self.ship.engine;
+        let g = &self.ship.guns;
+        let arm = &self.ship.armour;
+        let w = &self.ship.weapons;
+
+        let parts = [
+            ("Hull", e.hull_weight, egui::Color32::from_rgb(79, 143, 214)),
+            ("Armour", arm.weight, egui::Color32::from_rgb(155, 123, 234)),
+            (
+                "Machinery",
+                e.engine_weight,
+                egui::Color32::from_rgb(224, 134, 79),
+            ),
+            (
+                "Armament",
+                g.borne_weight + w.weight,
+                egui::Color32::from_rgb(224, 93, 111),
+            ),
+            (
+                "Magazine",
+                g.magazine,
+                egui::Color32::from_rgb(214, 181, 79),
+            ),
+            ("Bunker", e.bunker, egui::Color32::from_rgb(79, 199, 180)),
+        ];
+
+        let bar_height = 14.0;
+        let available_w = ui.available_width().max(300.0);
+        let (response, painter) =
+            ui.allocate_painter(egui::vec2(available_w, bar_height), egui::Sense::hover());
+        let rect = response.rect;
+        painter.rect_filled(rect, 3.0, egui::Color32::from_rgb(12, 27, 42));
+        let mut cur_x = rect.left();
+        for (_, wt, color) in parts {
+            if wt > 0.0 {
+                let frac = ((wt / total).clamp(0.0, 1.0)) as f32;
+                let w_px = (frac * rect.width()).max(1.0);
+                let slice = egui::Rect::from_min_max(
+                    egui::pos2(cur_x, rect.top()),
+                    egui::pos2((cur_x + w_px).min(rect.right()), rect.bottom()),
+                );
+                painter.rect_filled(slice, 0.0, color);
+                cur_x += w_px;
+                if cur_x >= rect.right() {
+                    break;
+                }
+            }
+        }
+        ui.horizontal_wrapped(|ui| {
+            for (name, wt, color) in parts {
+                let pct = (wt / total * 100.0).clamp(0.0, 100.0);
+                ui.colored_label(color, format!("■ {name}: {:.0}t ({:.1}%)", wt, pct));
+            }
+        });
+        ui.separator();
+    }
+
+    fn page_blueprint(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Vessel Blueprint Schematic");
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut self.show_arcs, "Show 290° Turret Firing Arcs");
+            ui.separator();
+            ui.label(format!(
+                "Dimensions: {:.0} ft × {:.0} ft × {:.1} ft",
+                self.ship.hull.length, self.ship.hull.beam, self.ship.hull.draught
+            ));
+        });
+        ui.separator();
+
+        let available_width = ui.available_width().max(600.0);
+        let height = 360.0;
+        let (response, painter) =
+            ui.allocate_painter(egui::vec2(available_width, height), egui::Sense::hover());
+        let rect = response.rect;
+
+        // Background canvas
+        painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(8, 19, 30));
+
+        let l = self.ship.hull.length.max(10.0) as f32;
+        let b = self.ship.hull.beam.max(5.0) as f32;
+        let pad_x = 50.0_f32;
+        let draw_w = (rect.width() - pad_x * 2.0).max(100.0);
+        let x0 = rect.left() + pad_x;
+        let x1 = x0 + draw_w;
+
+        let fc = self.ship.free.fc_length.clamp(0.0, 1.0) as f32;
+        let fd = self
+            .ship
+            .free
+            .fd_length
+            .clamp(0.0, (1.0 - fc as f64).max(0.0)) as f32;
+        let qd = self
+            .ship
+            .free
+            .qd_length
+            .clamp(0.0, (1.0 - (fc + fd) as f64).max(0.0)) as f32;
+        let ad = (1.0_f32 - fc - fd - qd).max(0.0);
+
+        let x_at = |p: f32| x0 + p * draw_w;
+
+        // Profile view baseline
+        let y_wl = rect.top() + 75.0_f32;
+        let y_keel = y_wl + 20.0_f32;
+        let fb_scale = 1.0_f32;
+
+        // Profile Deck heights
+        let y_fc_for = y_wl - ((self.ship.free.free_fc_for as f32) * fb_scale).clamp(8.0, 36.0);
+        let y_fc_aft = y_wl - ((self.ship.free.free_fc_aft as f32) * fb_scale).clamp(8.0, 36.0);
+        let y_fd_for = y_wl - ((self.ship.free.free_fd_for as f32) * fb_scale).clamp(6.0, 30.0);
+        let y_fd_aft = y_wl - ((self.ship.free.free_fd_aft as f32) * fb_scale).clamp(6.0, 30.0);
+        let y_ad_for = y_wl - ((self.ship.free.free_ad_for as f32) * fb_scale).clamp(4.0, 26.0);
+        let y_ad_aft = y_wl - ((self.ship.free.free_ad_aft as f32) * fb_scale).clamp(4.0, 26.0);
+        let y_qd_for = y_wl - ((self.ship.free.free_qd_for as f32) * fb_scale).clamp(4.0, 26.0);
+        let y_qd_aft = y_wl - ((self.ship.free.free_qd_aft as f32) * fb_scale).clamp(4.0, 26.0);
+
+        // Waterline
+        painter.line_segment(
+            [egui::pos2(x0 - 15.0, y_wl), egui::pos2(x1 + 15.0, y_wl)],
+            egui::Stroke::new(1.0, egui::Color32::from_rgb(79, 179, 255)),
+        );
+        painter.text(
+            egui::pos2(x1 + 20.0, y_wl),
+            egui::Align2::LEFT_CENTER,
+            "WL",
+            egui::FontId::monospace(10.0),
+            egui::Color32::from_rgb(79, 179, 255),
+        );
+
+        // Hull profile polygon
+        let x_fc = x_at(fc);
+        let x_fd = x_at(fc + fd);
+        let x_ad = x_at(1.0 - qd);
+        let profile_pts = vec![
+            egui::pos2(x0, y_fc_for),
+            egui::pos2(x_fc, y_fc_aft),
+            egui::pos2(x_fc, y_fd_for),
+            egui::pos2(x_fd, y_fd_aft),
+            egui::pos2(x_fd, y_ad_for),
+            egui::pos2(x_ad, y_ad_aft),
+            egui::pos2(x_ad, y_qd_for),
+            egui::pos2(x1, y_qd_aft),
+            egui::pos2(x1 - 4.0, y_keel),
+            egui::pos2(x0 + 10.0, y_keel),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            profile_pts,
+            egui::Color32::from_rgba_unmultiplied(79, 179, 255, 20),
+            egui::Stroke::new(1.5, egui::Color32::from_rgb(79, 179, 255)),
+        ));
+
+        // Superstructure bridge & funnel
+        let x_mid = x0 + draw_w * 0.48;
+        let bridge_rect = egui::Rect::from_min_max(
+            egui::pos2(x_mid - 24.0, y_fd_for - 16.0),
+            egui::pos2(x_mid - 8.0, y_fd_for),
+        );
+        painter.rect_filled(bridge_rect, 2.0, egui::Color32::from_rgb(138, 164, 191));
+        let funnel_rect = egui::Rect::from_min_max(
+            egui::pos2(x_mid + 6.0, y_fd_for - 20.0),
+            egui::pos2(x_mid + 18.0, y_fd_for),
+        );
+        painter.rect_filled(funnel_rect, 2.0, egui::Color32::from_rgb(110, 130, 150));
+
+        // Main belt armour
+        if self.ship.armour.belt_main > 0.0 && self.ship.armour.belt_main_length > 0.0 {
+            let bw =
+                (((self.ship.armour.belt_main_length as f32) / l) * draw_w).clamp(10.0, draw_w);
+            let bx = x0 + (draw_w - bw) / 2.0;
+            let bh = ((self.ship.armour.belt_main_height as f32) * fb_scale).clamp(6.0, 18.0);
+            let by = y_wl - bh * 0.6;
+            let belt_rect =
+                egui::Rect::from_min_max(egui::pos2(bx, by), egui::pos2(bx + bw, by + bh));
+            painter.rect_filled(
+                belt_rect,
+                1.0,
+                egui::Color32::from_rgba_unmultiplied(155, 123, 234, 110),
+            );
+        }
+
+        // Turret positions
+        let g1 = &self.ship.guns.batteries[0];
+        let positions = get_turret_positions(g1, fc as f64, fd as f64, qd as f64);
+        let g1_cal = g1.calibre as f32;
+        let t_rad = (g1_cal * 0.3).clamp(3.5, 7.5);
+
+        for &p_f64 in &positions {
+            let p = p_f64 as f32;
+            let tx = x_at(p);
+            let ty = if p <= fc {
+                y_fc_for + (y_fc_aft - y_fc_for) * if fc > 0.0 { p / fc } else { 0.0 }
+            } else if p <= fc + fd {
+                y_fd_for + (y_fd_aft - y_fd_for) * if fd > 0.0 { (p - fc) / fd } else { 0.0 }
+            } else if p <= 1.0 - qd {
+                y_ad_for + (y_ad_aft - y_ad_for) * if ad > 0.0 { (p - fc - fd) / ad } else { 0.0 }
+            } else {
+                y_qd_for
+                    + (y_qd_aft - y_qd_for) * if qd > 0.0 { (p - (1.0 - qd)) / qd } else { 0.0 }
+            };
+            let fwd = p < 0.5;
+            let t_rect = egui::Rect::from_min_max(
+                egui::pos2(tx - t_rad, ty - t_rad * 1.3),
+                egui::pos2(tx + t_rad, ty),
+            );
+            painter.rect_filled(t_rect, 1.0, egui::Color32::from_rgb(224, 93, 111));
+            let barrel_x2 = if fwd {
+                tx - t_rad - 8.0
+            } else {
+                tx + t_rad + 8.0
+            };
+            painter.line_segment(
+                [
+                    egui::pos2(if fwd { tx - t_rad } else { tx + t_rad }, ty - t_rad * 0.6),
+                    egui::pos2(barrel_x2, ty - t_rad * 0.6),
+                ],
+                egui::Stroke::new(1.5, egui::Color32::WHITE),
+            );
+        }
+
+        // Plan View
+        let y_cl = rect.top() + 245.0;
+        let hb = ((b / l) * draw_w * 0.75).clamp(8.0, 32.0);
+
+        // Centerline
+        painter.line_segment(
+            [egui::pos2(x0 - 15.0, y_cl), egui::pos2(x1 + 15.0, y_cl)],
+            egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgba_unmultiplied(255, 255, 255, 40),
+            ),
+        );
+
+        // Plan hull points (smooth approximation)
+        let mut plan_pts = Vec::new();
+        let steps = 40;
+        for i in 0..=steps {
+            let u = i as f32 / steps as f32;
+            let px = x_at(u);
+            let curve = if u < 0.25 {
+                (u / 0.25).sin()
+            } else if u > 0.75 {
+                ((1.0 - u) / 0.25).sin()
+            } else {
+                1.0
+            };
+            plan_pts.push(egui::pos2(px, y_cl - hb * curve));
+        }
+        for i in (0..=steps).rev() {
+            let u = i as f32 / steps as f32;
+            let px = x_at(u);
+            let curve = if u < 0.25 {
+                (u / 0.25).sin()
+            } else if u > 0.75 {
+                ((1.0 - u) / 0.25).sin()
+            } else {
+                1.0
+            };
+            plan_pts.push(egui::pos2(px, y_cl + hb * curve));
+        }
+        painter.add(egui::Shape::convex_polygon(
+            plan_pts,
+            egui::Color32::from_rgba_unmultiplied(79, 179, 255, 24),
+            egui::Stroke::new(1.5, egui::Color32::from_rgb(79, 179, 255)),
+        ));
+
+        // Plan turrets & arcs
+        for &p_f64 in &positions {
+            let p = p_f64 as f32;
+            let tx = x_at(p);
+            let fwd = p < 0.5;
+            let center = egui::pos2(tx, y_cl);
+            painter.circle_filled(center, t_rad, egui::Color32::from_rgb(224, 93, 111));
+            painter.circle_stroke(center, t_rad, egui::Stroke::new(1.0, egui::Color32::WHITE));
+            let barrel_x2 = if fwd {
+                tx - t_rad - 9.0
+            } else {
+                tx + t_rad + 9.0
+            };
+            painter.line_segment(
+                [center, egui::pos2(barrel_x2, y_cl)],
+                egui::Stroke::new(1.5, egui::Color32::WHITE),
+            );
+
+            if self.show_arcs {
+                let arc_r = (hb * 1.5).clamp(18.0, 40.0);
+                let arc_pts = if fwd {
+                    vec![
+                        center,
+                        egui::pos2(tx + arc_r * 0.819_f32, y_cl - arc_r * 0.573_f32),
+                        egui::pos2(tx - arc_r * 0.707_f32, y_cl - arc_r * 0.707_f32),
+                        egui::pos2(tx - arc_r, y_cl),
+                        egui::pos2(tx - arc_r * 0.707_f32, y_cl + arc_r * 0.707_f32),
+                        egui::pos2(tx + arc_r * 0.819_f32, y_cl + arc_r * 0.573_f32),
+                    ]
+                } else {
+                    vec![
+                        center,
+                        egui::pos2(tx - arc_r * 0.819_f32, y_cl - arc_r * 0.573_f32),
+                        egui::pos2(tx + arc_r * 0.707_f32, y_cl - arc_r * 0.707_f32),
+                        egui::pos2(tx + arc_r, y_cl),
+                        egui::pos2(tx + arc_r * 0.707_f32, y_cl + arc_r * 0.707_f32),
+                        egui::pos2(tx - arc_r * 0.819_f32, y_cl + arc_r * 0.573_f32),
+                    ]
+                };
+                painter.add(egui::Shape::convex_polygon(
+                    arc_pts,
+                    egui::Color32::from_rgba_unmultiplied(224, 93, 111, 28),
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(224, 93, 111, 90)),
+                ));
+            }
+        }
+
+        // Section labels
+        painter.text(
+            egui::pos2(rect.left() + 10.0, rect.top() + 12.0),
+            egui::Align2::LEFT_TOP,
+            "PROFILE VIEW",
+            egui::FontId::monospace(10.0),
+            egui::Color32::from_rgb(138, 164, 191),
+        );
+        painter.text(
+            egui::pos2(rect.left() + 10.0, rect.top() + 155.0),
+            egui::Align2::LEFT_TOP,
+            "PLAN VIEW",
+            egui::FontId::monospace(10.0),
+            egui::Color32::from_rgb(138, 164, 191),
+        );
+    }
 }
 
 impl Default for SpringSharpApp {
@@ -617,17 +1097,85 @@ impl eframe::App for SpringSharpApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::Panel::left("nav_panel").show(ui, |ui| self.nav(ui));
         egui::CentralPanel::default().show(ui, |ui| {
+            self.dashboard_header(ui);
             egui::ScrollArea::vertical().show(ui, |ui| match self.page {
                 Page::Hull => self.page_hull(ui),
                 Page::Freeboard => self.page_freeboard(ui),
                 Page::Armour => self.page_armour(ui),
                 Page::Guns => self.page_guns(ui),
                 Page::Engine => self.page_engine(ui),
+                Page::Blueprint => self.page_blueprint(ui),
                 Page::Calibration => self.page_calibration(ui),
                 Page::Report => self.page_report(ui),
             });
         });
     }
+}
+
+fn combo_i32(ui: &mut egui::Ui, label: &str, value: &mut i32, options: &[&str]) {
+    ui.horizontal(|ui| {
+        ui.label(label);
+        let curr_idx = (*value).max(0) as usize;
+        let selected_text = options.get(curr_idx).copied().unwrap_or("Other");
+        egui::ComboBox::from_id_salt(label)
+            .selected_text(selected_text)
+            .show_ui(ui, |ui| {
+                for (idx, &opt) in options.iter().enumerate() {
+                    ui.selectable_value(value, idx as i32, opt);
+                }
+            });
+    });
+}
+
+fn get_layout_pos(layout: i32, fc: f64, fd: f64, qd: f64) -> f64 {
+    let ad = (1.0 - fc - fd - qd).max(0.0);
+    match layout {
+        0 | 9 => 0.5,
+        1 | 10 => 0.38,
+        2 | 11 => 0.62,
+        3 | 12 => fc + 0.25 * fd,
+        4 | 13 => fc + 0.50 * fd,
+        5 | 14 => fc + 0.75 * fd,
+        6 | 15 => 1.0 - (qd + 0.75 * ad),
+        7 | 16 => 1.0 - (qd + 0.50 * ad),
+        8 | 17 => 1.0 - (qd + 0.25 * ad),
+        _ => 0.5,
+    }
+}
+
+fn get_turret_positions(b: &GunBattery, fc: f64, fd: f64, qd: f64) -> Vec<f64> {
+    let mut list = Vec::new();
+    let mut add_grp = |count: i32, layout: i32| {
+        let center = get_layout_pos(layout, fc, fd, qd);
+        if count == 1 {
+            list.push(center);
+        } else if count == 2 {
+            list.push(center - 0.04);
+            list.push(center + 0.04);
+        } else if count == 3 {
+            list.push(center - 0.05);
+            list.push(center);
+            list.push(center + 0.05);
+        } else if count >= 4 {
+            let step = 0.035;
+            let start = center - (count - 1) as f64 * step / 2.0;
+            for i in 0..count {
+                list.push(start + i as f64 * step);
+            }
+        }
+    };
+    if b.mounts > 0 {
+        if b.mounts_g1 > 0 {
+            add_grp(b.mounts_g1, b.layout_g1);
+        }
+        if b.mounts_g2 > 0 {
+            add_grp(b.mounts_g2, b.layout_g2);
+        }
+        if b.mounts_g1 == 0 && b.mounts_g2 == 0 {
+            add_grp(b.mounts, b.layout_g1);
+        }
+    }
+    list
 }
 
 fn drag_f64(

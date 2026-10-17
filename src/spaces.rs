@@ -1975,6 +1975,100 @@ pub fn compartment_placement_html(ship: &ShipModel, placement: &CompartmentPlace
         crate::features::html_escape(&ship.ship_type)
     ));
     html.push_str("<p>Multi-deck genetic-algorithm allocation with feasibility repair and an access network. Volumes in m&sup3;, positions as fraction of length.</p>");
+
+    // Schematic multi-deck arrangement SVG diagram
+    let svg_w = 760.0;
+    let svg_h = 230.0;
+    let pad_left = 65.0;
+    let pad_right = 35.0;
+    let pad_top = 25.0;
+    let pad_bottom = 45.0;
+    let plot_w = svg_w - pad_left - pad_right;
+    let plot_h = svg_h - pad_top - pad_bottom;
+    let deck_h = plot_h / 4.0;
+
+    let mut svg = format!(
+        r##"<svg viewBox="0 0 {svg_w} {svg_h}" width="100%" style="max-width:760px;background:#161b22;border:1px solid #30363d;border-radius:6px;margin:12px 0;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;">"##
+    );
+    // Draw hull profile outline (Stern on left, Bow on right matching 0..1 longitudinal fraction from stern)
+    let x_end = pad_left + plot_w;
+    let x_q1 = pad_left + plot_w + 15.0;
+    let y_q1 = pad_top + plot_h * 0.4;
+    let x_end2 = pad_left + plot_w - 20.0;
+    let y_bot = pad_top + plot_h;
+    let x_mid = pad_left + plot_w * 0.5;
+    let x_bow_bot = pad_left + 15.0;
+    let y_bow_bot = pad_top + plot_h * 0.8;
+    svg.push_str(&format!(
+        r##"<path d="M {pad_left} {pad_top} L {x_end} {pad_top} Q {x_q1} {y_q1} {x_end2} {y_bot} Q {x_mid} {y_bot} {x_bow_bot} {y_bow_bot} Z" fill="none" stroke="#58a6ff" stroke-width="1.5" stroke-opacity="0.7"/>"##
+    ));
+    // Deck grid and labels
+    for d in 0..=4 {
+        let y = pad_top + (4 - d) as f64 * deck_h;
+        svg.push_str(&format!(
+            r##"<line x1="{pad_left}" y1="{y}" x2="{x_end}" y2="{y}" stroke="#30363d" stroke-dasharray="4,4"/>"##
+        ));
+        if d < 4 {
+            let label = match d {
+                0 => "Hold (0)",
+                1 => "Lower (1)",
+                2 => "Main (2)",
+                _ => "Upper (3)",
+            };
+            let text_x = pad_left - 8.0;
+            let text_y = y - deck_h * 0.35;
+            svg.push_str(&format!(
+                r##"<text x="{text_x}" y="{text_y}" fill="#8b949e" font-size="10" text-anchor="end">{label}</text>"##
+            ));
+        }
+    }
+    // Compartment colors
+    let comp_meta = [
+        ("Machinery", "#e06c75"),
+        ("Magazine", "#c678dd"),
+        ("Accommod.", "#61afef"),
+        ("Fuel", "#d19a66"),
+        ("Stores", "#98c379"),
+        ("Void", "#7d8590"),
+    ];
+    let box_w = 78.0;
+    let box_h = deck_h - 8.0;
+    for (i, (name, color)) in comp_meta.iter().enumerate() {
+        let deck_idx = placement.decks[i].clamp(0, 3);
+        let x_norm = placement.longitudinal[i].clamp(0.05, 0.95);
+        let cx = pad_left + x_norm * plot_w;
+        let rx = (cx - box_w * 0.5).clamp(pad_left + 4.0, pad_left + plot_w - box_w - 4.0);
+        let ry = pad_top + (3 - deck_idx) as f64 * deck_h + 4.0;
+        let text_cx = rx + box_w * 0.5;
+        let text_cy = ry + box_h * 0.6;
+
+        svg.push_str(&format!(
+            r##"<rect x="{rx:.1}" y="{ry:.1}" width="{box_w}" height="{box_h:.1}" rx="4" fill="{color}" fill-opacity="0.35" stroke="{color}" stroke-width="1.5"/>"##
+        ));
+        svg.push_str(&format!(
+            r##"<text x="{text_cx:.1}" y="{text_cy:.1}" fill="#f0f6fc" font-size="9.5" font-weight="600" text-anchor="middle">{name}</text>"##
+        ));
+    }
+    // Assembly station marker
+    let ax = pad_left + placement.assembly_x.clamp(0.05, 0.95) * plot_w;
+    let y_assembly_top = pad_top - 6.0;
+    svg.push_str(&format!(
+        r##"<line x1="{ax:.1}" y1="{pad_top}" x2="{ax:.1}" y2="{y_bot}" stroke="#f1e05a" stroke-width="2" stroke-dasharray="3,3"/>"##
+    ));
+    svg.push_str(&format!(
+        r##"<text x="{ax:.1}" y="{y_assembly_top}" fill="#f1e05a" font-size="9" text-anchor="middle">Assembly</text>"##
+    ));
+    // Stern and Bow indications
+    let y_lbl = pad_top + plot_h + 18.0;
+    svg.push_str(&format!(
+        r##"<text x="{pad_left}" y="{y_lbl}" fill="#8b949e" font-size="10">Stern (0.0 L)</text>"##
+    ));
+    svg.push_str(&format!(
+        r##"<text x="{x_end}" y="{y_lbl}" fill="#8b949e" font-size="10" text-anchor="end">Bow (1.0 L)</text>"##
+    ));
+    svg.push_str("</svg>");
+    html.push_str(&svg);
+
     html.push_str("<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\">");
     html.push_str("<tr><th>Compartment</th><th>Volume (m3)</th><th>Deck</th><th>Vertical centre</th><th>Longitudinal</th></tr>");
     for (name, v, deck, z, x) in [

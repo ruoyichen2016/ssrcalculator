@@ -544,6 +544,46 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
     } else {
         "null".to_string()
     };
+    let mut speeds = Vec::new();
+    let max_s = (e.speed_max + 2.0).max(20.0);
+    let mut s = 10.0;
+    while s <= max_s + 1e-6 {
+        speeds.push(s);
+        s += 2.0;
+    }
+    if e.speed_cruise > 5.0 && !speeds.iter().any(|&x| (x - e.speed_cruise).abs() < 0.2) {
+        speeds.push(e.speed_cruise);
+    }
+    if e.speed_max > 5.0 && !speeds.iter().any(|&x| (x - e.speed_max).abs() < 0.2) {
+        speeds.push(e.speed_max);
+    }
+    speeds.sort_by(|a, b| a.total_cmp(b));
+
+    let speed_curve_json = speeds
+        .into_iter()
+        .map(|spd| {
+            let mut cur_engine = e.clone();
+            let model_hp = cur_engine.speed_hp_calc(spd, h);
+            let mut orig_engine = e.clone();
+            orig_engine.resistance_model = ResistanceModel::Original;
+            orig_engine.blend_weight = 1.0;
+            let orig_hp = orig_engine.speed_hp_calc(spd, h);
+            let fn_ = if h.length > 0.0 {
+                spd * 1.68781 / (32.174 * h.length).sqrt()
+            } else {
+                0.0
+            };
+            format!(
+                "[{},{},{},{}]",
+                json_num(spd),
+                json_num(model_hp),
+                json_num(orig_hp),
+                json_num(fn_)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+
     let fields: Vec<(&str, String)> = vec![
         ("message", json_str(message)),
         ("name", json_str(&ship.name)),
@@ -572,6 +612,7 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         ("benchmark", benchmark_json),
         ("report", json_str(&report)),
         ("ssr", json_str(&serialize(ship))),
+        ("speed_curve", format!("[{speed_curve_json}]")),
         // Blueprint geometry
         ("length", json_num(h.length)),
         ("beam", json_num(h.beam)),
@@ -592,6 +633,9 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         ("belt_thick", json_num(ship.armour.belt_main)),
         ("deck_thick", json_num(ship.armour.deck)),
         ("g1_calibre", json_num(g.batteries[0].calibre)),
+        ("g1_cal_len", json_num(g.batteries[0].cal_length)),
+        ("g1_arm_face", json_num(g.batteries[0].arm_face)),
+        ("g1_mag", json_num(g.batteries[0].magazine as f64)),
         ("g1_mounts", json_num(g.batteries[0].mounts as f64)),
         ("g1_layout1", json_num(g.batteries[0].layout_g1 as f64)),
         ("g1_layout2", json_num(g.batteries[0].layout_g2 as f64)),
@@ -600,9 +644,16 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         ("g1_bpm1", json_num(g.batteries[0].per_mount_g1 as f64)),
         ("g1_bpm2", json_num(g.batteries[0].per_mount_g2 as f64)),
         ("g2_calibre", json_num(g.batteries[1].calibre)),
+        ("g2_cal_len", json_num(g.batteries[1].cal_length)),
+        ("g2_arm_face", json_num(g.batteries[1].arm_face)),
+        ("g2_mag", json_num(g.batteries[1].magazine as f64)),
         ("g2_mounts", json_num(g.batteries[1].mounts as f64)),
         ("g2_layout1", json_num(g.batteries[1].layout_g1 as f64)),
+        ("g2_layout2", json_num(g.batteries[1].layout_g2 as f64)),
         ("g2_m1", json_num(g.batteries[1].mounts_g1 as f64)),
+        ("g2_m2", json_num(g.batteries[1].mounts_g2 as f64)),
+        ("g2_bpm1", json_num(g.batteries[1].per_mount_g1 as f64)),
+        ("g2_bpm2", json_num(g.batteries[1].per_mount_g2 as f64)),
     ];
     let body = fields
         .iter()
@@ -1036,6 +1087,9 @@ mod tests {
             "\"weights\":[[",
             "\"nearest\":[{",
             "\"ssr\":",
+            "\"speed_curve\":[[",
+            "\"g1_cal_len\":",
+            "\"g1_arm_face\":",
         ] {
             assert!(json.contains(key), "missing {key}");
         }

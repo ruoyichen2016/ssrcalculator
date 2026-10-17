@@ -108,6 +108,14 @@ iframe { width: 100%; height: 640px; border: 1px solid var(--line); border-radiu
 .btn-sm { padding: 0.2rem 0.5rem; font-size: 0.74rem; border-radius: 4px; }
 .spin.busy { background: var(--accent); animation: pulse .8s infinite alternate; }
 @keyframes pulse { from { opacity: .3; } to { opacity: 1; } }
+.bp-tip { display: none; position: fixed; pointer-events: none; z-index: 1000; background: rgba(13,27,42,0.95); border: 1px solid var(--accent); color: #f0f6fc; border-radius: 6px; padding: .4rem .65rem; font-family: var(--mono); font-size: .75rem; white-space: pre-line; box-shadow: 0 4px 16px rgba(0,0,0,0.5); max-width: 300px; }
+.bp-interactive { cursor: pointer; transition: stroke .15s, stroke-width .15s, filter .15s; }
+.bp-interactive:hover { stroke: #58a6ff !important; stroke-width: 2px !important; filter: drop-shadow(0 0 4px rgba(88,166,255,0.8)); }
+.sp-chart { background: #08131e; border: 1px solid var(--line); border-radius: 8px; width: 100%; max-width: 720px; display: block; }
+.badge-pass { color: var(--good); background: rgba(95,211,141,.12); border-color: rgba(95,211,141,.4); }
+.badge-warn { color: var(--warn); background: rgba(255,181,71,.12); border-color: rgba(255,181,71,.45); }
+.badge-fail { color: var(--bad); background: rgba(255,107,107,.12); border-color: rgba(255,107,107,.45); }
+.badge-neutral { color: var(--muted); background: rgba(139,148,158,.1); border-color: rgba(139,148,158,.3); }
 </style>
 </head>
 <body>
@@ -159,6 +167,9 @@ __FORM__
     </div>
     <div class="tab" data-tab="analysis">
       <div id="presetBench"></div>
+      <h2>Speed &amp; Power Characteristics</h2>
+      <p class="hint">Dynamic power curves comparing current calibrated resistance model (cyan) against original SpringSharp baseline (amber), with cruise and max design speeds.</p>
+      <div id="speedPowerWrap" style="overflow-x:auto;margin-bottom:1.2rem;"></div>
       <h2>Closest historical ships</h2>
       <p class="hint">Context only: ranked by type, displacement, speed and length. Reference power figures are approximate public data.</p>
       <div id="nearest"></div>
@@ -440,14 +451,17 @@ function renderBlueprint(r) {
     const bX = x0 + (drawW - bW) / 2;
     const bH = Math.max(4, Math.min(18, (r.belt_ht || 10) * fbScale));
     const bY = yWl - bH * 0.6;
-    beltSvg = `<rect x="${bX.toFixed(1)}" y="${bY.toFixed(1)}" width="${bW.toFixed(1)}" height="${bH.toFixed(1)}" fill="rgba(155,123,234,0.4)" stroke="#9b7bea" stroke-width="0.9" rx="1"/>` +
-              `<text x="${(bX + bW/2).toFixed(1)}" y="${(bY + bH/2 + 2.5).toFixed(1)}" fill="#dbe7f3" font-size="6.5" font-family="var(--mono)" text-anchor="middle">${fmt(r.belt_thick, 1)}" Belt</text>`;
+    const beltTip = `Main Armor Belt\nThickness: ${fmt(r.belt_thick, 1)}" (${(r.belt_thick * 25.4).toFixed(0)} mm)\nLength: ${fmt(r.belt_len)} ft | Height: ${fmt(r.belt_ht)} ft`;
+    beltSvg = `<rect x="${bX.toFixed(1)}" y="${bY.toFixed(1)}" width="${bW.toFixed(1)}" height="${bH.toFixed(1)}" fill="rgba(155,123,234,0.4)" stroke="#9b7bea" stroke-width="0.9" rx="1" class="bp-interactive" data-tip="${esc(beltTip)}"/>` +
+              `<text x="${(bX + bW/2).toFixed(1)}" y="${(bY + bH/2 + 2.5).toFixed(1)}" fill="#dbe7f3" font-size="6.5" font-family="var(--mono)" text-anchor="middle" pointer-events="none">${fmt(r.belt_thick, 1)}" Belt</text>`;
   }
 
   // Superstructure bridge & funnel
   const xMid = x0 + drawW * 0.48;
   const bridgeD = `M ${(xMid - 22).toFixed(1)} ${(yFdFor - 2).toFixed(1)} L ${(xMid - 22).toFixed(1)} ${(yFdFor - 12).toFixed(1)} L ${(xMid - 8).toFixed(1)} ${(yFdFor - 12).toFixed(1)} L ${(xMid - 8).toFixed(1)} ${(yFdFor - 2).toFixed(1)} Z`;
   const funnelD = `M ${(xMid + 4).toFixed(1)} ${(yFdFor - 2).toFixed(1)} L ${(xMid + 8).toFixed(1)} ${(yFdFor - 14).toFixed(1)} L ${(xMid + 16).toFixed(1)} ${(yFdFor - 14).toFixed(1)} L ${(xMid + 14).toFixed(1)} ${(yFdFor - 2).toFixed(1)} Z`;
+  const bridgeTip = `Bridge & Navigation Superstructure\nDesign: ${esc(r.name || 'Ship')}`;
+  const funnelTip = `Boiler Funnels & Uptakes\nDesign: ${esc(r.name || 'Ship')}`;
 
   function getTurretPositions(mounts, m1, l1, m2, l2) {
     const list = [];
@@ -482,13 +496,15 @@ function renderBlueprint(r) {
   let profTurretsSvg = '';
   const g1Cal = r.g1_calibre || 0;
   const tRad = Math.max(3, Math.min(5.5, g1Cal * 0.3));
+  const g1Bpm = r.g1_bpm1 || 1;
+  const g1Tip = `Main Battery #1\nCalibre: ${g1Cal}"/${r.g1_cal_len || ''} (${(g1Cal * 25.4).toFixed(0)} mm)\nMount: ${g1Bpm}-gun turret\nFace Armor: ${fmt(r.g1_arm_face, 1)}"\nAmmo: ${r.g1_mag || 0} rpg`;
   g1Positions.forEach(p => {
     const tx = xAt(p);
     const ty = deckYAt(p);
     const fwd = p < 0.5;
     const barrelEnd = fwd ? tx - tRad - 6 : tx + tRad + 6;
-    profTurretsSvg += `<rect x="${(tx - tRad).toFixed(1)}" y="${(ty - tRad * 1.3).toFixed(1)}" width="${(tRad * 2).toFixed(1)}" height="${(tRad * 1.3).toFixed(1)}" fill="#e05d6f" stroke="#fff" stroke-width="0.7" rx="1"/>` +
-                      `<line x1="${(fwd ? tx - tRad : tx + tRad).toFixed(1)}" y1="${(ty - tRad * 0.6).toFixed(1)}" x2="${barrelEnd.toFixed(1)}" y2="${(ty - tRad * 0.6).toFixed(1)}" stroke="#fff" stroke-width="1.2"/>`;
+    profTurretsSvg += `<rect x="${(tx - tRad).toFixed(1)}" y="${(ty - tRad * 1.3).toFixed(1)}" width="${(tRad * 2).toFixed(1)}" height="${(tRad * 1.3).toFixed(1)}" fill="#e05d6f" stroke="#fff" stroke-width="0.7" rx="1" class="bp-interactive" data-tip="${esc(g1Tip)}"/>` +
+                      `<line x1="${(fwd ? tx - tRad : tx + tRad).toFixed(1)}" y1="${(ty - tRad * 0.6).toFixed(1)}" x2="${barrelEnd.toFixed(1)}" y2="${(ty - tRad * 0.6).toFixed(1)}" stroke="#fff" stroke-width="1.2" pointer-events="none"/>`;
   });
 
   // Plan view geometry
@@ -508,8 +524,8 @@ function renderBlueprint(r) {
     const tx = xAt(p);
     const fwd = p < 0.5;
     const barrelEnd = fwd ? tx - tRad - 7 : tx + tRad + 7;
-    planTurretsSvg += `<circle cx="${tx.toFixed(1)}" cy="${yCl}" r="${tRad.toFixed(1)}" fill="#e05d6f" stroke="#fff" stroke-width="0.8"/>` +
-                      `<line x1="${(fwd ? tx - tRad : tx + tRad).toFixed(1)}" y1="${yCl}" x2="${barrelEnd.toFixed(1)}" y2="${yCl}" stroke="#fff" stroke-width="1.2"/>`;
+    planTurretsSvg += `<circle cx="${tx.toFixed(1)}" cy="${yCl}" r="${tRad.toFixed(1)}" fill="#e05d6f" stroke="#fff" stroke-width="0.8" class="bp-interactive" data-tip="${esc(g1Tip)}"/>` +
+                      `<line x1="${(fwd ? tx - tRad : tx + tRad).toFixed(1)}" y1="${yCl}" x2="${barrelEnd.toFixed(1)}" y2="${yCl}" stroke="#fff" stroke-width="1.2" pointer-events="none"/>`;
     if (showArcs) {
       // Firing arc projection wedge: forward turrets ~290 deg (±145°), aft turrets ~290 deg (±145°)
       const arcR = Math.max(16, Math.min(32, hb * 1.6));
@@ -520,7 +536,7 @@ function renderBlueprint(r) {
       const yA = yCl + arcR * Math.sin(rad(aStart));
       const xB = tx + arcR * Math.cos(rad(aEnd));
       const yB = yCl + arcR * Math.sin(rad(aEnd));
-      arcsSvg += `<path d="M ${tx.toFixed(1)} ${yCl} L ${xA.toFixed(1)} ${yA.toFixed(1)} A ${arcR} ${arcR} 0 1 1 ${xB.toFixed(1)} ${yB.toFixed(1)} Z" fill="rgba(224,93,111,0.12)" stroke="rgba(224,93,111,0.4)" stroke-width="0.7" stroke-dasharray="2 2"/>`;
+      arcsSvg += `<path d="M ${tx.toFixed(1)} ${yCl} L ${xA.toFixed(1)} ${yA.toFixed(1)} A ${arcR} ${arcR} 0 1 1 ${xB.toFixed(1)} ${yB.toFixed(1)} Z" fill="rgba(224,93,111,0.12)" stroke="rgba(224,93,111,0.4)" stroke-width="0.7" stroke-dasharray="2 2" pointer-events="none"/>`;
     }
   });
 
@@ -528,8 +544,11 @@ function renderBlueprint(r) {
     const p2 = getLayoutPos(r.g2_layout1 || 0, fc, fd, qd);
     const tx2 = xAt(p2);
     const sOffset = Math.max(3, hb * 0.55);
-    planTurretsSvg += `<circle cx="${tx2.toFixed(1)}" cy="${(yCl - sOffset).toFixed(1)}" r="2.6" fill="#d6b54f" stroke="#fff" stroke-width="0.6"/>` +
-                      `<circle cx="${tx2.toFixed(1)}" cy="${(yCl + sOffset).toFixed(1)}" r="2.6" fill="#d6b54f" stroke="#fff" stroke-width="0.6"/>`;
+    const g2Cal = r.g2_calibre || 0;
+    const g2Bpm = r.g2_bpm1 || 1;
+    const g2Tip = `Secondary Battery #2\nCalibre: ${g2Cal}"/${r.g2_cal_len || ''} (${(g2Cal * 25.4).toFixed(0)} mm)\nMount: ${g2Bpm}-gun mount\nFace Armor: ${fmt(r.g2_arm_face, 1)}"\nAmmo: ${r.g2_mag || 0} rpg`;
+    planTurretsSvg += `<circle cx="${tx2.toFixed(1)}" cy="${(yCl - sOffset).toFixed(1)}" r="2.6" fill="#d6b54f" stroke="#fff" stroke-width="0.6" class="bp-interactive" data-tip="${esc(g2Tip)}"/>` +
+                      `<circle cx="${tx2.toFixed(1)}" cy="${(yCl + sOffset).toFixed(1)}" r="2.6" fill="#d6b54f" stroke="#fff" stroke-width="0.6" class="bp-interactive" data-tip="${esc(g2Tip)}"/>`;
   }
 
   const svgInner = `
@@ -545,8 +564,8 @@ function renderBlueprint(r) {
     <line x1="16" y1="${yWl}" x2="404" y2="${yWl}" stroke="#4fb3ff" stroke-width="0.8" stroke-dasharray="4 3" opacity="0.45"/>
     <text x="410" y="${yWl - 2}" fill="#4fb3ff" font-size="7" font-family="var(--mono)" text-anchor="end" opacity="0.75">WL</text>
     <path d="${hullProfileD}" fill="rgba(79,179,255,0.07)" stroke="#4fb3ff" stroke-width="1.2" stroke-linejoin="round"/>
-    <path d="${bridgeD}" fill="rgba(138,164,191,0.25)" stroke="#8aa4bf" stroke-width="0.8"/>
-    <path d="${funnelD}" fill="rgba(138,164,191,0.3)" stroke="#8aa4bf" stroke-width="0.8"/>
+    <path d="${bridgeD}" fill="rgba(138,164,191,0.25)" stroke="#8aa4bf" stroke-width="0.8" class="bp-interactive" data-tip="${esc(bridgeTip)}"/>
+    <path d="${funnelD}" fill="rgba(138,164,191,0.3)" stroke="#8aa4bf" stroke-width="0.8" class="bp-interactive" data-tip="${esc(funnelTip)}"/>
     ${beltSvg}
     ${profTurretsSvg}
     <line x1="16" y1="${yCl}" x2="404" y2="${yCl}" stroke="rgba(255,255,255,0.12)" stroke-width="0.8" stroke-dasharray="5 3"/>
@@ -580,6 +599,91 @@ function exportSvg() {
   download(fileName('_blueprint.svg'), xml, 'image/svg+xml');
 }
 
+function renderSpeedPower(r) {
+  const wrap = $('#speedPowerWrap');
+  if (!wrap) return;
+  if (!r || !r.speed_curve || !r.speed_curve.length) {
+    wrap.innerHTML = '<p class="hint">No speed curve data available.</p>';
+    return;
+  }
+  const pts = r.speed_curve; // [speed, model_hp, orig_hp, fn]
+  const svgW = 660, svgH = 260;
+  const pL = 65, pR = 30, pT = 28, pB = 42;
+  const pw = svgW - pL - pR, ph = svgH - pT - pB;
+
+  let minV = pts[0][0], maxV = pts[pts.length - 1][0];
+  let maxHp = 0;
+  pts.forEach(p => {
+    if (p[1] > maxHp) maxHp = p[1];
+    if (p[2] > maxHp) maxHp = p[2];
+  });
+  if (maxHp <= 0) maxHp = 10000;
+  maxHp *= 1.12;
+
+  const xAt = v => pL + ((v - minV) / (maxV - minV)) * pw;
+  const yAt = h => pT + (1.0 - (h / maxHp)) * ph;
+
+  let svg = `<svg viewBox="0 0 ${svgW} ${svgH}" class="sp-chart">`;
+
+  // Horizontal grid lines
+  const ySteps = 4;
+  for (let i = 0; i <= ySteps; i++) {
+    const val = (maxHp / ySteps) * i;
+    const y = yAt(val);
+    svg += `<line x1="${pL}" y1="${y.toFixed(1)}" x2="${pL + pw}" y2="${y.toFixed(1)}" stroke="#1c2d42" stroke-dasharray="3,3"/>`;
+    const valStr = val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val.toFixed(0);
+    svg += `<text x="${pL - 8}" y="${(y + 3.5).toFixed(1)}" fill="#8b949e" font-size="9" text-anchor="end">${valStr} hp</text>`;
+  }
+
+  // Vertical grid lines
+  pts.forEach(p => {
+    const v = p[0];
+    const x = xAt(v);
+    svg += `<line x1="${x.toFixed(1)}" y1="${pT}" x2="${x.toFixed(1)}" y2="${pT + ph}" stroke="#162334" stroke-dasharray="2,2"/>`;
+    svg += `<text x="${x.toFixed(1)}" y="${pT + ph + 14}" fill="#8b949e" font-size="9" text-anchor="middle">${v.toFixed(0)}</text>`;
+    svg += `<text x="${x.toFixed(1)}" y="${pT + ph + 25}" fill="#58a6ff" font-size="7.5" text-anchor="middle">${p[3].toFixed(2)}</text>`;
+  });
+  svg += `<text x="${pL + pw}" y="${pT + ph + 38}" fill="#8b949e" font-size="8.5" text-anchor="end">Speed (kt) / Fn</text>`;
+
+  // Vertical reference lines: Cruise and Max speed
+  if (r.speed_cruise && r.speed_cruise >= minV && r.speed_cruise <= maxV) {
+    const cx = xAt(r.speed_cruise);
+    svg += `<line x1="${cx.toFixed(1)}" y1="${pT}" x2="${cx.toFixed(1)}" y2="${pT + ph}" stroke="#5fd38d" stroke-width="1.2" stroke-dasharray="4,4"/>`;
+    svg += `<text x="${cx.toFixed(1)}" y="${pT - 8}" fill="#5fd38d" font-size="8.5" text-anchor="middle">Cruise (${r.speed_cruise}kt)</text>`;
+  }
+  if (r.speed_max && r.speed_max >= minV && r.speed_max <= maxV) {
+    const mx = xAt(r.speed_max);
+    svg += `<line x1="${mx.toFixed(1)}" y1="${pT}" x2="${mx.toFixed(1)}" y2="${pT + ph}" stroke="#ff6b6b" stroke-width="1.2" stroke-dasharray="4,4"/>`;
+    svg += `<text x="${mx.toFixed(1)}" y="${pT - 8}" fill="#ff6b6b" font-size="8.5" text-anchor="middle">Max (${r.speed_max}kt)</text>`;
+  }
+
+  // Original path
+  const origD = pts.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${xAt(p[0]).toFixed(1)} ${yAt(p[2]).toFixed(1)}`).join(' ');
+  svg += `<path d="${origD}" fill="none" stroke="#ffb547" stroke-width="1.8" stroke-dasharray="4,4" opacity="0.85"/>`;
+
+  // Calibrated model path
+  const modelD = pts.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${xAt(p[0]).toFixed(1)} ${yAt(p[1]).toFixed(1)}`).join(' ');
+  svg += `<path d="${modelD}" fill="none" stroke="#4fb3ff" stroke-width="2.5"/>`;
+
+  // Dots on model path
+  pts.forEach(p => {
+    const x = xAt(p[0]), y = yAt(p[1]);
+    const tip = `${p[0].toFixed(1)} kt: ${fmt(p[1])} hp (Orig: ${fmt(p[2])} hp, Fn ${p[3].toFixed(2)})`;
+    svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#4fb3ff" stroke="#08131e" stroke-width="1.2" class="bp-interactive" data-tip="${esc(tip)}"/>`;
+  });
+
+  // Legend at top right
+  svg += `<g transform="translate(${pL + 12}, ${pT + 8})">` +
+    `<line x1="0" y1="4" x2="16" y2="4" stroke="#4fb3ff" stroke-width="2.5"/>` +
+    `<text x="22" y="7" fill="#dbe7f3" font-size="8.5">Current Model (${esc(r.model || 'Calibrated')})</text>` +
+    `<line x1="0" y1="16" x2="16" y2="16" stroke="#ffb547" stroke-width="1.8" stroke-dasharray="3,3"/>` +
+    `<text x="22" y="19" fill="#ffb547" font-size="8.5">Original Baseline</text>` +
+    `</g>`;
+
+  svg += `</svg>`;
+  wrap.innerHTML = svg;
+}
+
 // ---- dashboard ----
 const PALETTE = { Hull: '#4f8fd6', Armour: '#9b7bea', Machinery: '#e0864f', Armament: '#e05d6f', Magazine: '#d6b54f', Bunker: '#4fc7b4', Miscellaneous: '#7f93a8', 'Other load': '#3a5068' };
 function card(k, v, u = '', cls = '') { return `<div class="card ${cls}"><div class="k">${k}</div><div class="v">${v} <span class="u">${u}</span></div></div>`; }
@@ -595,6 +699,7 @@ function render(r) {
   ];
   $('#dBadges').innerHTML = badges.join('');
   renderBlueprint(r);
+  renderSpeedPower(r);
   const strengthCls = r.strength_comp < 0.5 ? 'bad' : r.strength_comp < 0.995 ? 'warn' : 'good';
   const stabCls = r.metacentre <= 0 ? 'bad' : r.stability < 1 ? 'warn' : '';
   $('#dCards').innerHTML = [
@@ -629,12 +734,15 @@ function render(r) {
       const errCell = (sim, ref) => {
         if (!ref || ref <= 0) return '–';
         const pct = (sim - ref) / ref * 100;
-        return (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+        const txt = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+        const abs = Math.abs(pct);
+        const cls = abs <= 10.0 ? 'badge-pass' : (abs <= 20.0 ? 'badge-warn' : 'badge-fail');
+        return `<span class="badge ${cls}">${txt}</span>`;
       };
       const rows = [
         ['Normal displacement (t)', fmt(r.disp_normal), fmt(b.ref_disp), errCell(r.disp_normal, b.ref_disp)],
         ['Hull structure (t)', fmt(b.sim_hull), fmt(b.ref_hull), errCell(b.sim_hull, b.ref_hull)],
-        ['Armour + barbettes (t)', fmt(b.sim_armour), fmt(b.ref_armour), b.ref_armour >= 500 ? errCell(b.sim_armour, b.ref_armour) : 'n/a (splinter)'],
+        ['Armour + barbettes (t)', fmt(b.sim_armour), fmt(b.ref_armour), b.ref_armour >= 500 ? errCell(b.sim_armour, b.ref_armour) : '<span class="badge badge-neutral">n/a (splinter)</span>'],
         ['Machinery (t)', fmt(b.sim_machinery), fmt(b.ref_machinery), errCell(b.sim_machinery, b.ref_machinery)],
         ['Armament + ammo (t)', fmt(b.sim_armament), fmt(b.ref_armament), errCell(b.sim_armament, b.ref_armament)],
         ['Normal bunker (t)', fmt(b.sim_bunker), fmt(b.ref_bunker), errCell(b.sim_bunker, b.ref_bunker)],
@@ -681,10 +789,39 @@ $('#design').addEventListener('input', () => {
   if (!$('#auto').checked) return;
   clearTimeout(timer); timer = setTimeout(evaluate, 350);
 });
+function initBpTooltip() {
+  const tip = $('#bpTip');
+  if (!tip) return;
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) {
+      tip.textContent = el.getAttribute('data-tip');
+      tip.style.display = 'block';
+    }
+  });
+  document.addEventListener('mousemove', e => {
+    if (tip.style.display === 'block') {
+      const pad = 14;
+      const x = Math.min(window.innerWidth - tip.offsetWidth - 10, e.clientX + pad);
+      const y = Math.min(window.innerHeight - tip.offsetHeight - 10, e.clientY + pad);
+      tip.style.left = x + 'px';
+      tip.style.top = y + 'px';
+    }
+  });
+  document.addEventListener('mouseout', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) {
+      tip.style.display = 'none';
+    }
+  });
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   initPresets();
+  initBpTooltip();
   loadDemo();
 });
 </script>
+<div id="bpTip" class="bp-tip"></div>
 </body>
 </html>

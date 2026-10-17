@@ -473,3 +473,16 @@ still 10.36% / blended 9.81%):
   - Configured high-pressure lightweight steam turbine scaling for *USS Fletcher* (`0.50`) and *IJN Shimakaze* (`0.42`).
   - Slashed WWII destroyer machinery error from ~+106%/+150% down to +3% (*Fletcher* 709t vs 690t ref) and +5% (*Shimakaze* 859t vs 820t ref).
   - Improved overall 8-preset machinery weight MAPE from **60.63%** down to **29.69%**, relieving residual hull weight squeeze while maintaining all physical feasibility guarantees and GM stability within regression gates (`<= 35%` machinery MAPE gate added to `tests/accuracy_regression.rs`).
+
+## Phase 33 — speed-power curve, blueprint tooltips, and native GUI modernization (completed 2026-10-18)
+
+- **Track A: Web Workbench Advanced Visualization & Interactive Tooltips**:
+  - Dynamic Speed-Power Curve Chart: exposed `EngineValues::speed_hp_calc(&mut self, speed: f64, hull: &HullValues) -> f64` and generated `speed_curve` in `evaluation_json()` covering 10 kt to max speed + 2 kt. Rendered comparative SVG chart in the Analysis tab plotting calibrated model vs original baseline with cruise/max speed markers.
+  - Interactive Blueprint Tooltips: implemented rich hover tooltips (`#bpTip`) across blueprint SVG elements (main belt, bridge/superstructure, turrets with caliber/mount/armor/ammo details, secondary batteries).
+  - Compartment Deck-Plan Schematic: added longitudinal multi-deck SVG layout diagram in `compartment_placement_html()` visualizing magazines, machinery spaces, and steering gear across deck levels.
+  - Subsystem Benchmark Tolerance Badges: added color-coded error badges (green $\le 10\%$, yellow $10\%\sim 20\%$, red $> 20\%$) in the preset weight validation table.
+- **Track B: Native Desktop GUI Modernization (`gui/`)**:
+  - Historical Preset Dropdown: integrated 8 built-in historical warship presets (`PRESET_LIST`, `get_preset()`) in the left navigation panel for instant loading.
+  - Semantic Combo Boxes: replaced raw integer indices with human-readable combo boxes for Bow forms, Stern types, Gun types, Mount types, and Turret layout positions, plus descriptive engine/drive options and `machinery_weight_factor`.
+  - Live Dashboard Header: real-time summary header with convergence status, primary naval metrics (displacement, speed, SHP, GM), and a painted segmented weight distribution bar (Hull, Armour, Machinery, Armament, Magazine, Bunker).
+  - Dual-View Blueprint (`Page::Blueprint`): high-performance vector schematic drawn with `egui::Painter` providing Profile View (freeboard deckline, armor belt, keel, superstructure, turrets) and Plan View (beam curvature, centerline, turrets, and toggleable 290° firing arc sectors).

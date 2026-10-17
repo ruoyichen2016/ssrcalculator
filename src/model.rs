@@ -1215,7 +1215,7 @@ pub struct EngineValues {
 }
 
 impl EngineValues {
-    fn speed_hp_calc(&mut self, speed: f64, hull: &HullValues) -> f64 {
+    pub fn speed_hp_calc(&mut self, speed: f64, hull: &HullValues) -> f64 {
         self.length_hp = if speed > 15.0 {
             if speed < 25.0 {
                 (hull.length_effect - hull.length) * ((speed - 20.0) / 5.0) + hull.length
