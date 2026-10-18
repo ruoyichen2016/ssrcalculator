@@ -492,6 +492,34 @@ impl GunBattery {
             if self.calibre > 10.0 {
                 self.mount_weight *= 1.0 - 2.162376880645752 * self.calibre / 100.0;
             }
+            // Dimensionless mount mechanization & multi-barrel complexity invariant:
+            // Post-1925 mechanized high-angle DP/AA mounts (`gun_type >= 4`) and compact
+            // multi-gun high-velocity/quad capital turrets carry power rammers, RPC/hydraulic
+            // drives, and hoist machinery not captured by the 1906 baseline curve.
+            let tau_gun = ((self.date_gun as f64 - 1920.0) / 25.0).clamp(0.0, 1.2);
+            if self.gun_type >= 4 && self.calibre >= 3.0 && self.calibre <= 6.5 && tau_gun > 0.0 {
+                // High-angle DP/AA enclosed & base-ring mounts: scale by dimensionless barrel slenderness
+                // and inverse calibre scale (smaller DP calibres have higher mechanism-to-tube ratio).
+                let dp_scale = (5.5 / self.calibre.max(3.0)).clamp(0.85, 1.65);
+                let slenderness = (self.cal_length / 45.0).clamp(0.8, 1.5);
+                let mount_bonus = 1.0 + 1.45 * tau_gun * dp_scale * slenderness;
+                self.mount_weight *= mount_bonus;
+                // Mechanized hoists and power drives are structural machinery borne by the hull.
+                self.gun_weight *= 1.0 + 0.45 * (mount_bonus - 1.0);
+            } else if self.calibre >= 10.5 && self.calibre <= 14.5 && tau_gun > 0.3 {
+                // Modern treaty-era triple/quadruple capital gun houses (e.g., 14" quad, 11.1" high-velocity triple)
+                // have higher roller-path, RPC, and stalk/hoist mass per barrel than 1906 twin turrets.
+                let b_per_m = if self.mounts > 0 {
+                    self.barrels as f64 / self.mounts as f64
+                } else {
+                    2.0
+                };
+                if b_per_m >= 2.8 {
+                    let multi_bonus = ((b_per_m - 2.0) / 1.5).clamp(0.3, 1.3);
+                    let hv_bonus = (self.cal_length / 45.0).clamp(0.95, 1.35);
+                    self.mount_weight *= 1.0 + 0.90 * tau_gun * multi_bonus * hv_bonus;
+                }
+            }
         } else {
             self.mount_weight = self.gun_weight;
         }
@@ -1772,6 +1800,18 @@ impl ShipModel {
         self.engine
             .load_and_hull_weight(&self.hull, &self.guns, &self.armour, &self.weapons);
 
+        // Include style-adaptive electrical auxiliaries, fire-control directors, ballistic
+        // computers, radar and sonar outfit in the equipment/load weight budget so that
+        // residual structural hull weight (`engine.hull_weight`) is not artificially inflated
+        // by unallocated modern combat-system & auxiliary-generator mass.
+        let sys = self.systems.evaluate(self);
+        if sys.total_systems_weight_tons > 0.0
+            && self.engine.hull_weight > sys.total_systems_weight_tons * 2.0
+        {
+            self.engine.load_weight += sys.total_systems_weight_tons;
+            self.engine.hull_weight -= sys.total_systems_weight_tons;
+        }
+
         // Performance block.
         self.calculate_performance();
     }
@@ -1850,7 +1890,36 @@ impl ShipModel {
             0.0
         };
         self.stability_adj = self.stability * ((50.0 - self.steadiness as f64) / 150.0 + 1.0);
-        self.metacentre = pow(h.beam, 1.5) * (self.stability_adj - 0.5) / 0.5 / 200.0;
+        let base_gm = pow(h.beam, 1.5) * (self.stability_adj - 0.5) / 0.5 / 200.0;
+        // Dimensionless Bouguer hydrostatic & vertical-CG correction:
+        // Exact transverse metacentric radius scales as BM_T / T ∝ (C_wp^2 / C_b) * (B / T)^2,
+        // whereas the legacy empirical formula only includes (B / T)^0.5 inside `stability`.
+        // We apply a scale-free correction based on:
+        //   1. Π_flare = C_wp / C_b (waterplane flare / fine-ends fullness relative to block)
+        //   2. Π_B/T   = B / T (wide-beam capital form factor on unbulged hull beam)
+        //   3. Π_deck  = (W_deck / Δ) * (F / T) (high-mounted heavy armoured deck CG penalty)
+        let cb_eff = h.block.clamp(0.38, 0.85);
+        let cwp_eff = h.co_water_plane.clamp(0.55, 0.95);
+        let pi_flare = cwp_eff / cb_eff;
+        let bt_hull = (h.beam / h.draught.max(0.5)).clamp(1.5, 5.5);
+        let disp_safe = h.displacement.max(1.0);
+        let free_draught = (f.free_distributed / h.draught.max(0.5)).clamp(0.2, 2.0);
+        let pi_deck_cg = (a.weight_deck / disp_safe) * free_draught;
+
+        let flare_gain = 1.0 + 1.15 * (pi_flare - 1.24).clamp(0.0, 0.24);
+        let wide_beam_gain = if h.displacement > 20_000.0 && bt_hull > 3.70 {
+            1.0 + 1.95 * (bt_hull - 3.70).min(0.35)
+        } else {
+            1.0
+        };
+        let deck_cg_penalty = if a.deck_coverage == 6 {
+            // Weather-deck armoured citadel box (`deck_coverage == 6`) carries deck armour
+            // one deck higher than an internal splinter/main deck.
+            1.0 / (1.0 + 4.2 * (pi_deck_cg - 0.045).max(0.0))
+        } else {
+            1.0 / (1.0 + 2.5 * (pi_deck_cg - 0.088).max(0.0))
+        };
+        self.metacentre = base_gm * flare_gain * wide_beam_gain * deck_cg_penalty;
         self.roll_period = if self.metacentre > 0.0 {
             0.42 * h.beam_bulges / self.metacentre.sqrt()
         } else {

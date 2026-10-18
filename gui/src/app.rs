@@ -964,24 +964,24 @@ impl SpringSharpApp {
         );
 
         ui.separator();
-        ui.heading("Electrical Plant & Combat Systems (Adaptive & Mix-and-Match)");
+        ui.heading("Electrical Plant & Combat Systems (Dimensionless Ideal-Type & Mix-and-Match)");
         let sys_eval = self.ship.systems.evaluate(&self.ship);
 
         ui.horizontal(|ui| {
             ui.label(
                 egui::RichText::new(format!(
-                    "● Inferred Doctrine: {}",
+                    "● Inferred Style Ideal Type: {}",
                     sys_eval.resolved_doctrine.display_name()
                 ))
                 .color(egui::Color32::from_rgb(88, 166, 255))
                 .strong(),
             );
             ui.label(format!(
-                "(USN: {:.0}% · RN: {:.0}% · IJN: {:.0}% · KM: {:.0}%)",
-                sys_eval.usn_affinity * 100.0,
-                sys_eval.rn_affinity * 100.0,
-                sys_eval.ijn_affinity * 100.0,
-                sys_eval.km_affinity * 100.0
+                "(Type I: {:.0}% · Type II: {:.0}% · Type III: {:.0}% · Type IV: {:.0}%)",
+                sys_eval.type1_affinity * 100.0,
+                sys_eval.type2_affinity * 100.0,
+                sys_eval.type3_affinity * 100.0,
+                sys_eval.type4_affinity * 100.0
             ));
         });
         ui.label(
@@ -1035,7 +1035,7 @@ impl SpringSharpApp {
             .num_columns(2)
             .spacing([12.0, 6.0])
             .show(ui, |ui| {
-                ui.label("Doctrine Style Preset:");
+                ui.label("Style Ideal Type:");
                 egui::ComboBox::from_id_salt("sys_doctrine")
                     .selected_text(self.ship.systems.doctrine.display_name())
                     .show_ui(ui, |ui| {
@@ -1046,23 +1046,23 @@ impl SpringSharpApp {
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.doctrine,
-                            StyleDoctrine::UsnRadarCentric,
-                            StyleDoctrine::UsnRadarCentric.display_name(),
+                            StyleDoctrine::AutomationAllElectric,
+                            StyleDoctrine::AutomationAllElectric.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.doctrine,
-                            StyleDoctrine::RnAllWeather,
-                            StyleDoctrine::RnAllWeather.display_name(),
+                            StyleDoctrine::AllWeatherSeakeeping,
+                            StyleDoctrine::AllWeatherSeakeeping.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.doctrine,
-                            StyleDoctrine::IjnOpticalLongRange,
-                            StyleDoctrine::IjnOpticalLongRange.display_name(),
+                            StyleDoctrine::LongRangeOpticalStrike,
+                            StyleDoctrine::LongRangeOpticalStrike.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.doctrine,
-                            StyleDoctrine::KmStereoscopicDiesel,
-                            StyleDoctrine::KmStereoscopicDiesel.display_name(),
+                            StyleDoctrine::StereoscopicSubdivided,
+                            StyleDoctrine::StereoscopicSubdivided.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.doctrine,
@@ -1083,7 +1083,7 @@ impl SpringSharpApp {
                         ui.selectable_value(
                             &mut self.ship.systems.main_director,
                             MainDirector::Auto,
-                            "Auto (Adaptive Match)",
+                            "Auto (Dimensionless Match)",
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.main_director,
@@ -1097,23 +1097,23 @@ impl SpringSharpApp {
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.main_director,
-                            MainDirector::RnDctOptical,
-                            MainDirector::RnDctOptical.display_name(),
+                            MainDirector::WeatherproofDct,
+                            MainDirector::WeatherproofDct.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.main_director,
-                            MainDirector::KmStereoscopic10m,
-                            MainDirector::KmStereoscopic10m.display_name(),
+                            MainDirector::ArmouredStereoscopic10m,
+                            MainDirector::ArmouredStereoscopic10m.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.main_director,
-                            MainDirector::IjnPagoda15m,
-                            MainDirector::IjnPagoda15m.display_name(),
+                            MainDirector::DuplexOpticalTower15m,
+                            MainDirector::DuplexOpticalTower15m.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.main_director,
-                            MainDirector::UsnMk38Radar,
-                            MainDirector::UsnMk38Radar.display_name(),
+                            MainDirector::GyrostabilizedRadarBlindFire,
+                            MainDirector::GyrostabilizedRadarBlindFire.display_name(),
                         );
                     });
                 ui.end_row();
@@ -1129,7 +1129,7 @@ impl SpringSharpApp {
                         ui.selectable_value(
                             &mut self.ship.systems.aa_director,
                             AaDirector::Auto,
-                            "Auto (Adaptive Match)",
+                            "Auto (Dimensionless Match)",
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.aa_director,
@@ -1138,23 +1138,23 @@ impl SpringSharpApp {
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.aa_director,
-                            AaDirector::RnHacs,
-                            AaDirector::RnHacs.display_name(),
+                            AaDirector::HighAngleTachymetric,
+                            AaDirector::HighAngleTachymetric.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.aa_director,
-                            AaDirector::KmWackeltopf,
-                            AaDirector::KmWackeltopf.display_name(),
+                            AaDirector::TriAxialStabilizedSphere,
+                            AaDirector::TriAxialStabilizedSphere.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.aa_director,
-                            AaDirector::IjnType94,
-                            AaDirector::IjnType94.display_name(),
+                            AaDirector::OpticalLeadComputing,
+                            AaDirector::OpticalLeadComputing.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.aa_director,
-                            AaDirector::UsnMk37,
-                            AaDirector::UsnMk37.display_name(),
+                            AaDirector::DualPurposeRadarDirector,
+                            AaDirector::DualPurposeRadarDirector.display_name(),
                         );
                     });
                 ui.end_row();
@@ -1179,7 +1179,7 @@ impl SpringSharpApp {
                         ui.selectable_value(
                             &mut self.ship.systems.ballistic_computer,
                             BallisticComputer::Auto,
-                            "Auto (Adaptive Match)",
+                            "Auto (Dimensionless Match)",
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.ballistic_computer,
@@ -1188,28 +1188,28 @@ impl SpringSharpApp {
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.ballistic_computer,
-                            BallisticComputer::VickersDreyer,
-                            BallisticComputer::VickersDreyer.display_name(),
+                            BallisticComputer::MechanicalRateClock,
+                            BallisticComputer::MechanicalRateClock.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.ballistic_computer,
-                            BallisticComputer::RnAfct,
-                            BallisticComputer::RnAfct.display_name(),
+                            BallisticComputer::ElectroMechanicalTable,
+                            BallisticComputer::ElectroMechanicalTable.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.ballistic_computer,
-                            BallisticComputer::KmC38Analog,
-                            BallisticComputer::KmC38Analog.display_name(),
+                            BallisticComputer::HighVelocityAnalog,
+                            BallisticComputer::HighVelocityAnalog.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.ballistic_computer,
-                            BallisticComputer::IjnType98Hoiban,
-                            BallisticComputer::IjnType98Hoiban.display_name(),
+                            BallisticComputer::MultiAxisTriangulator,
+                            BallisticComputer::MultiAxisTriangulator.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.ballistic_computer,
-                            BallisticComputer::UsnFordMk1a,
-                            BallisticComputer::UsnFordMk1a.display_name(),
+                            BallisticComputer::GyroCamRangekeeper,
+                            BallisticComputer::GyroCamRangekeeper.display_name(),
                         );
                     });
                 ui.end_row();
@@ -1225,7 +1225,7 @@ impl SpringSharpApp {
                         ui.selectable_value(
                             &mut self.ship.systems.radar_suite,
                             RadarSuite::Auto,
-                            "Auto (Adaptive Match)",
+                            "Auto (Dimensionless Match)",
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.radar_suite,
@@ -1234,28 +1234,28 @@ impl SpringSharpApp {
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.radar_suite,
-                            RadarSuite::KmFumoDecimetric,
-                            RadarSuite::KmFumoDecimetric.display_name(),
+                            RadarSuite::DecimetricSurfaceFc,
+                            RadarSuite::DecimetricSurfaceFc.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.radar_suite,
-                            RadarSuite::IjnType21_22,
-                            RadarSuite::IjnType21_22.display_name(),
+                            RadarSuite::MetricSearchMagnetron,
+                            RadarSuite::MetricSearchMagnetron.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.radar_suite,
-                            RadarSuite::RnCentimetricHfdf,
-                            RadarSuite::RnCentimetricHfdf.display_name(),
+                            RadarSuite::CentimetricFcDirectionFinder,
+                            RadarSuite::CentimetricFcDirectionFinder.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.radar_suite,
-                            RadarSuite::UsnCentimetricCic,
-                            RadarSuite::UsnCentimetricCic.display_name(),
+                            RadarSuite::DualBandBlindFireCic,
+                            RadarSuite::DualBandBlindFireCic.display_name(),
                         );
                     });
                 ui.end_row();
 
-                ui.label("Sonar Suite:");
+                ui.label("Subsurface Sonar Suite:");
                 egui::ComboBox::from_id_salt("sys_sonar")
                     .selected_text(if self.ship.systems.sonar_suite == SonarSuite::Auto {
                         format!("Auto ({})", sys_eval.resolved_sonar_suite.display_name())
@@ -1266,7 +1266,7 @@ impl SpringSharpApp {
                         ui.selectable_value(
                             &mut self.ship.systems.sonar_suite,
                             SonarSuite::Auto,
-                            "Auto (Adaptive Match)",
+                            "Auto (Dimensionless Match)",
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.sonar_suite,
@@ -1280,18 +1280,18 @@ impl SpringSharpApp {
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.sonar_suite,
-                            SonarSuite::RnAsdic,
-                            SonarSuite::RnAsdic.display_name(),
+                            SonarSuite::ActiveQuartzDome,
+                            SonarSuite::ActiveQuartzDome.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.sonar_suite,
-                            SonarSuite::KmGhgArray,
-                            SonarSuite::KmGhgArray.display_name(),
+                            SonarSuite::MultiElementPassiveArray,
+                            SonarSuite::MultiElementPassiveArray.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.sonar_suite,
-                            SonarSuite::UsnQcSonar,
-                            SonarSuite::UsnQcSonar.display_name(),
+                            SonarSuite::HighPowerSearchSonar,
+                            SonarSuite::HighPowerSearchSonar.display_name(),
                         );
                     });
                 ui.end_row();
@@ -1316,7 +1316,7 @@ impl SpringSharpApp {
                         ui.selectable_value(
                             &mut self.ship.systems.electrical_plant,
                             ElectricalPlantStyle::Auto,
-                            "Auto (Adaptive Match)",
+                            "Auto (Dimensionless Match)",
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.electrical_plant,
@@ -1325,18 +1325,18 @@ impl SpringSharpApp {
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.electrical_plant,
-                            ElectricalPlantStyle::RnBalanced,
-                            ElectricalPlantStyle::RnBalanced.display_name(),
+                            ElectricalPlantStyle::BalancedTurboDiesel,
+                            ElectricalPlantStyle::BalancedTurboDiesel.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.electrical_plant,
-                            ElectricalPlantStyle::KmHeavyDiesel,
-                            ElectricalPlantStyle::KmHeavyDiesel.display_name(),
+                            ElectricalPlantStyle::SubdividedHeavyDiesel,
+                            ElectricalPlantStyle::SubdividedHeavyDiesel.display_name(),
                         );
                         ui.selectable_value(
                             &mut self.ship.systems.electrical_plant,
-                            ElectricalPlantStyle::UsnHighMarginAc,
-                            ElectricalPlantStyle::UsnHighMarginAc.display_name(),
+                            ElectricalPlantStyle::HighMarginAcGrid,
+                            ElectricalPlantStyle::HighMarginAcGrid.display_name(),
                         );
                     });
                 ui.end_row();

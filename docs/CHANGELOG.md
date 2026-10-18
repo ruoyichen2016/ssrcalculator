@@ -1,7 +1,17 @@
 # Project change log
 
-## Unreleased (Phases 29–36) — Electrical Auxiliaries, Combat Systems & Salvo Hit Probability
+## Unreleased (Phases 29–37) — Pure Style Ideal Types, Dimensionless Adaptive Estimation & Combat Systems
 
+- **Pure extracted style ideal types & zero flag-state leakage** (Phase 37 Track A):
+  - Removed all country/flag-state (`ship.country`) and ship-name (`ship.name`) identifiers from `src/systems.rs`, Web Workbench, and Native Desktop GUI to guarantee zero national label leakage on held-out or custom designs.
+  - Added `DimensionlessFeatures` extracting 14 scale-free physical invariants ($\Pi$-groups: $Fn$, $L/\nabla^{1/3}$, $L/B$, $B/T$, $C_b$, $(C_{wp}^2/C_b)(B/T)$, $F/T$, $W_{\text{arm}}/\Delta$, $W_{\text{ord}}/\Delta$, $N_{\text{dp}}/\Delta^{1/3}$, torpedo strike density, $d_{\text{main}}/\sqrt{B}$, $L_{\text{cal}}/45$, endurance ratio, and $\tau$).
+  - Replaced national `StyleDoctrine` variants with 4 **Pure Extracted Weberian Engineering Ideal Types**: *Type I · Automated Radar & High-Margin All-Electric*, *Type II · All-Weather Seakeeping & Balanced ASW*, *Type III · Long-Range Optical & Heavy-Ordnance Strike*, and *Type IV · Stereoscopic Precision & Subdivided Survivability*, while preserving full manual mix-and-match across all 6 subsystem slots.
+- **Dimensionless hydrodynamic ideal-type speed–power estimation** (Phase 37 Track B):
+  - Added `HydroDimensionlessFeatures` and `HydroIdealType` in `src/regime.rs`, reworking `run_loocv_regime()`, `apply_regime_calibration()`, and `apply_blend_calibration()` to weight training cases by dimensionless hydrodynamic similarity and soft ideal-type affinity.
+  - Improved 146-case out-of-sample **Nested LOOCV** from **10.36% $\to$ 10.19%** (`validate-regime`, curated core **7.97% $\to$ 7.87%**) and **9.81% $\to$ 9.70%** (`validate-blend`, curated core **7.47% $\to$ 7.45%**).
+- **Dimensionless Bouguer stability ($GM$) & subsystem weight rework** (Phase 37 Track C):
+  - Reworked transverse metacentric height ($GM$) in `src/model.rs` using dimensionless waterplane flare ($\Pi_{\text{flare}} = C_{wp}/C_b$), wide-beam form factor ($\Pi_{B/T} = B/T$), and high-mounted armoured deck CG leverage ($\Pi_{\text{deck}} = (W_{\text{deck}}/\Delta)(F/T)$), slashing 12-preset **$GM$ MAPE from 13.44% down to 6.60%**.
+  - Added dimensionless mount mechanization scaling in `GunBattery::calculate()` and allocated combat-system/auxiliary-generator outfit mass in `ShipModel::calculate()`, reducing 12-preset **Armament+Ammo MAPE from 24.96% down to 15.27%** (`20.82%` $\to$ `14.08%` armoured) and **Hull weight MAPE from 16.84% down to 13.57%** (`11.44%` $\to$ `10.13%` armoured), with tightened regression bounds in `tests/accuracy_regression.rs`.
 - **Electrical auxiliaries, adaptive doctrine matcher & mix-and-match combat systems** (Phase 36 Track A):
   - Created `src/systems.rs` implementing naval doctrine styles (`StyleDoctrine`), continuous multi-dimensional **Adaptive Style Matcher** scoring doctrinal fit across ship era, displacement scale, armament, torpedo/ASW density, and stability margin.
   - Full per-slot **manual mix-and-match** for Main Battery Directors (with optical baseline), Secondary/AA Directors, Ballistic Computers, Surface/Air Radar Suites, Sonar Suites, and Electrical Generation Plants.

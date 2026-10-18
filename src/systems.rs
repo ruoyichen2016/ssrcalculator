@@ -1,26 +1,153 @@
 //! Ship electrical plant, fire-control directors, ballistic computers,
-//! radar/sensors, and adaptive doctrine style matching.
+//! radar/sensors, dimensionless feature extraction, and pure Weberian
+//! style ideal-type (archetype) matching.
 //!
-//! Provides both an intelligent adaptive feature matching engine (which infers
-//! historical technological doctrine from hull, era, scale, armament, and
-//! stability margin) and complete mix-and-match freedom for individual subsystem slots.
+//! All style matching and subsystem scaling operate strictly on scale-free,
+//! country-agnostic dimensionless physical invariants ($\Pi$-groups) with zero
+//! dependence on flag state (`ship.country`) or vessel name (`ship.name`),
+//! preventing label leakage while supporting full per-slot manual mix-and-match.
 
 use crate::model::ShipModel;
 
-/// Naval engineering doctrine / style archetype.
+/// Scale-free, country-agnostic dimensionless physical and functional invariants ($\Pi$-groups).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DimensionlessFeatures {
+    /// Froude number $Fn = V / \sqrt{g L}$ (wave-making regime).
+    pub froude_number: f64,
+    /// Volumetric slenderness ratio $L / \nabla^{1/3}$, where $\nabla = 35 \Delta$.
+    pub slenderness_ratio: f64,
+    /// Planform length-to-beam aspect ratio $L / B$.
+    pub length_beam_ratio: f64,
+    /// Transverse form stability ratio $B / T$.
+    pub beam_draught_ratio: f64,
+    /// Underwater block coefficient $C_b$.
+    pub block_coeff: f64,
+    /// Bouguer dimensionless transverse metacentric radius ratio $(C_{wp}^2 / C_b) \cdot (B / T)$.
+    pub bouguer_bm_ratio: f64,
+    /// Reserve buoyancy freeboard-to-draught ratio $F / T$.
+    pub freeboard_draught_ratio: f64,
+    /// Protection mass fraction $W_{\text{armour}} / \Delta$.
+    pub protection_fraction: f64,
+    /// Offensive ordnance mass fraction $(W_{\text{guns}} + W_{\text{torp}}) / \Delta$.
+    pub ordnance_fraction: f64,
+    /// Dual-purpose / automated AA barrel scale density $N_{\text{dp+aa}} / \Delta^{1/3}$.
+    pub dp_barrel_density: f64,
+    /// Torpedo strike scale density $(N_{\text{torp}} \cdot (d_{\text{torp}} / 21)^2) / \Delta^{1/3}$.
+    pub torpedo_strike_density: f64,
+    /// Main battery relative caliber scale $d_{\text{main}} / \sqrt{B}$.
+    pub main_caliber_scale: f64,
+    /// Main battery barrel slenderness ratio $L_{\text{cal}} / 45.0$.
+    pub barrel_slenderness: f64,
+    /// Dimensionless endurance scale $R / (1000 \cdot L^{1/3})$.
+    pub endurance_ratio: f64,
+    /// Normalized technological maturity $\tau \in [0, 1]$ across 1890..=1950.
+    pub tech_epoch: f64,
+}
+
+impl DimensionlessFeatures {
+    /// Extract pure dimensionless physical invariants from a `ShipModel`.
+    /// Never accesses `ship.country` or `ship.name`.
+    pub fn from_ship(ship: &ShipModel) -> Self {
+        let l = ship.hull.length.max(10.0);
+        let b = ship.hull.beam_bulges.max(ship.hull.beam).max(2.0);
+        let t = ship.hull.draught.max(1.0);
+        let cb = ship.hull.block.clamp(0.30, 0.85);
+        let disp = ship.hull.displacement.max(l * b * t * cb / 35.0).max(50.0);
+        let nabla_cuberoot = (disp * 35.0).powf(1.0 / 3.0).max(1.0);
+        let disp_cuberoot = disp.powf(1.0 / 3.0).max(1.0);
+
+        let v_fps = ship.engine.speed_max.max(0.0) * 1.687809857;
+        let froude_number = v_fps / (32.17404856 * l).sqrt();
+        let slenderness_ratio = l / nabla_cuberoot;
+        let length_beam_ratio = l / b;
+        let beam_draught_ratio = b / t;
+
+        let cwp = if ship.hull.co_water_plane > 0.1 {
+            ship.hull.co_water_plane
+        } else {
+            (0.70 + 0.30 * cb).clamp(0.60, 0.92)
+        };
+        let bouguer_bm_ratio = (cwp * cwp / cb) * beam_draught_ratio;
+
+        let mean_free = if ship.free.freeboard > 0.0 {
+            ship.free.freeboard
+        } else {
+            (ship.free.free_fc_for + ship.free.free_fd_for + ship.free.free_ad_for) / 3.0
+        };
+        let freeboard_draught_ratio = mean_free.max(1.0) / t;
+
+        let protection_fraction = (ship.armour.weight / disp).clamp(0.0, 0.65);
+        let ordnance_fraction =
+            ((ship.guns.guns_weight + ship.guns.magazine + ship.weapons.weight) / disp)
+                .clamp(0.0, 0.50);
+
+        // Count dual-purpose (gun_type == 4) and automatic AA (gun_type == 5) barrels
+        let mut dp_weighted = 0.0_f64;
+        for bat in &ship.guns.batteries {
+            if bat.barrels > 0 {
+                if bat.gun_type == 4 {
+                    dp_weighted += bat.barrels as f64 * 1.2;
+                } else if bat.gun_type == 5 {
+                    dp_weighted += bat.barrels as f64 * 0.45;
+                } else if bat.gun_type == 3 {
+                    dp_weighted += bat.barrels as f64 * 0.6;
+                }
+            }
+        }
+        let dp_barrel_density = dp_weighted / disp_cuberoot;
+
+        let t1_n = ship.weapons.torpedo1.number.max(0) as f64;
+        let t1_d = (ship.weapons.torpedo1.size.max(14.0) / 21.0).powi(2);
+        let t2_n = ship.weapons.torpedo2.number.max(0) as f64;
+        let t2_d = (ship.weapons.torpedo2.size.max(14.0) / 21.0).powi(2);
+        let torpedo_strike_density = (t1_n * t1_d + t2_n * t2_d) / disp_cuberoot;
+
+        let main_cal = ship.guns.batteries[0].calibre.max(0.0);
+        let main_caliber_scale = main_cal / b.sqrt();
+        let barrel_slenderness = if main_cal > 0.0 {
+            ship.guns.batteries[0].cal_length.max(20.0) / 45.0
+        } else {
+            1.0
+        };
+
+        let endurance_ratio = ship.engine.range.max(500.0) / (1000.0 * l.powf(1.0 / 3.0));
+        let tech_epoch =
+            ((ship.hull.date_hull.max(ship.hull.date_engine) - 1890) as f64 / 60.0).clamp(0.0, 1.0);
+
+        Self {
+            froude_number,
+            slenderness_ratio,
+            length_beam_ratio,
+            beam_draught_ratio,
+            block_coeff: cb,
+            bouguer_bm_ratio,
+            freeboard_draught_ratio,
+            protection_fraction,
+            ordnance_fraction,
+            dp_barrel_density,
+            torpedo_strike_density,
+            main_caliber_scale,
+            barrel_slenderness,
+            endurance_ratio,
+            tech_epoch,
+        }
+    }
+}
+
+/// Pure Weberian Naval Engineering Style Ideal Type (country-agnostic).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum StyleDoctrine {
-    /// Inferred automatically from ship features, era, dimensions, armament, and country.
+    /// Inferred automatically from dimensionless physical features ($\Pi$-groups).
     #[default]
     AdaptiveAuto,
-    /// United States Navy: High electrical power, heavy radar, Mk 38/37 directors, Mk 1A computer, CIC.
-    UsnRadarCentric,
-    /// Royal Navy: Balanced steam/diesel, DCT/HACS, AFCT table, centimetric radar, standard ASDIC sonar.
-    RnAllWeather,
-    /// Imperial Japanese Navy: Pagoda mast, massive 10m–15.5m optical rangefinders, Type 98 table, compact dynamos.
-    IjnOpticalLongRange,
-    /// Kriegsmarine: Triple stereoscopic armored turrets, C/38 analog computer, heavy multi-room diesel plant.
-    KmStereoscopicDiesel,
+    /// Ideal Type I: Radar-Automated, High-DP Density & High-Margin All-Electric Grid.
+    AutomationAllElectric,
+    /// Ideal Type II: All-Weather Seakeeping, High Reserve Buoyancy & Balanced Sensor/ASW.
+    AllWeatherSeakeeping,
+    /// Ideal Type III: Long-Range Optical Duplex Ranging & High-Ordnance Strike.
+    LongRangeOpticalStrike,
+    /// Ideal Type IV: Stereoscopic High-Velocity Precision & Multi-Compartment Subdivided Plant.
+    StereoscopicSubdivided,
     /// User custom mix-and-match combination.
     Custom,
 }
@@ -29,54 +156,80 @@ impl StyleDoctrine {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::AdaptiveAuto => "adaptive_auto",
-            Self::UsnRadarCentric => "usn_radar_centric",
-            Self::RnAllWeather => "rn_all_weather",
-            Self::IjnOpticalLongRange => "ijn_optical_long_range",
-            Self::KmStereoscopicDiesel => "km_stereoscopic_diesel",
+            Self::AutomationAllElectric => "automation_all_electric",
+            Self::AllWeatherSeakeeping => "all_weather_seakeeping",
+            Self::LongRangeOpticalStrike => "long_range_optical_strike",
+            Self::StereoscopicSubdivided => "stereoscopic_subdivided",
             Self::Custom => "custom",
         }
     }
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            Self::AdaptiveAuto => "Adaptive Auto (AI Feature Match)",
-            Self::UsnRadarCentric => "USN Radar-Centric & All-Electric",
-            Self::RnAllWeather => "RN All-Weather & ASDIC Balanced",
-            Self::IjnOpticalLongRange => "IJN Long-Range Optical & Night Fighter",
-            Self::KmStereoscopicDiesel => "KM Stereoscopic & Heavy Diesel Plant",
+            Self::AdaptiveAuto => "Adaptive Auto (Dimensionless Ideal-Type Match)",
+            Self::AutomationAllElectric => "Type I · Automated Radar & High-Margin All-Electric",
+            Self::AllWeatherSeakeeping => "Type II · All-Weather Seakeeping & Balanced ASW",
+            Self::LongRangeOpticalStrike => "Type III · Long-Range Optical & Heavy-Ordnance Strike",
+            Self::StereoscopicSubdivided => {
+                "Type IV · Stereoscopic Precision & Subdivided Survivability"
+            }
             Self::Custom => "Custom Mix-and-Match",
         }
     }
 
     pub fn from_str_name(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
-            "usn" | "usn_radar_centric" | "usn_radar" => Self::UsnRadarCentric,
-            "rn" | "rn_all_weather" | "royal_navy" => Self::RnAllWeather,
-            "ijn" | "ijn_optical_long_range" | "ijn_optical" => Self::IjnOpticalLongRange,
-            "km" | "km_stereoscopic_diesel" | "km_stereoscopic" => Self::KmStereoscopicDiesel,
+            "automation_all_electric"
+            | "type_1"
+            | "type1"
+            | "radar_electric"
+            | "usn"
+            | "usn_radar_centric"
+            | "usn_radar" => Self::AutomationAllElectric,
+            "all_weather_seakeeping"
+            | "type_2"
+            | "type2"
+            | "all_weather"
+            | "rn"
+            | "rn_all_weather"
+            | "royal_navy" => Self::AllWeatherSeakeeping,
+            "long_range_optical_strike"
+            | "type_3"
+            | "type3"
+            | "optical_strike"
+            | "ijn"
+            | "ijn_optical_long_range"
+            | "ijn_optical" => Self::LongRangeOpticalStrike,
+            "stereoscopic_subdivided"
+            | "type_4"
+            | "type4"
+            | "stereoscopic"
+            | "km"
+            | "km_stereoscopic_diesel"
+            | "km_stereoscopic" => Self::StereoscopicSubdivided,
             "custom" | "manual" => Self::Custom,
             _ => Self::AdaptiveAuto,
         }
     }
 }
 
-/// Main Battery Fire-Control Director.
+/// Main Battery Fire-Control Director (pure functional ideal types).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum MainDirector {
     #[default]
     Auto,
-    /// Open sights / individual turret rangefinder hoods (pre-dreadnought / early 1900s).
+    /// Open sights / local turret rangefinder hoods (Base 0m).
     OpenSights,
-    /// Early central sighting tripod tower + 2.7m coincidence rangefinder (1906–1914).
+    /// Tripod central sighting tower + 2.7m coincidence rangefinder.
     CentralTower,
-    /// Royal Navy Director Control Tower (DCT) + 4.6m/9m coincidence rangefinder (1915–1938).
-    RnDctOptical,
-    /// Kriegsmarine 10.5m stereoscopic armored rotating dome (Drehhaube) (1934–1942).
-    KmStereoscopic10m,
-    /// IJN Pagoda mast tower + 10m–15.5m stereoscopic/coincidence rangefinder (1930–1941).
-    IjnPagoda15m,
-    /// USN Mk 34 / Mk 38 stabilized director + Mk 8/13 centimetric fire-control radar (1941–1945).
-    UsnMk38Radar,
+    /// Weatherproof Director Control Tower + 4.6m/9m coincidence rangefinder.
+    WeatherproofDct,
+    /// Armoured rotating dome + 10.5m stereoscopic rangefinder.
+    ArmouredStereoscopic10m,
+    /// Elevated duplex tower + 15.5m ultra-long-baseline optical rangefinder.
+    DuplexOpticalTower15m,
+    /// Gyrostabilized director + centimetric blind-fire radar.
+    GyrostabilizedRadarBlindFire,
 }
 
 impl MainDirector {
@@ -85,22 +238,24 @@ impl MainDirector {
             Self::Auto => "auto",
             Self::OpenSights => "open_sights",
             Self::CentralTower => "central_tower",
-            Self::RnDctOptical => "rn_dct_optical",
-            Self::KmStereoscopic10m => "km_stereoscopic_10m",
-            Self::IjnPagoda15m => "ijn_pagoda_15m",
-            Self::UsnMk38Radar => "usn_mk38_radar",
+            Self::WeatherproofDct => "weatherproof_dct",
+            Self::ArmouredStereoscopic10m => "armoured_stereoscopic_10m",
+            Self::DuplexOpticalTower15m => "duplex_optical_tower_15m",
+            Self::GyrostabilizedRadarBlindFire => "gyrostabilized_radar_blind_fire",
         }
     }
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            Self::Auto => "Auto (Adaptive)",
-            Self::OpenSights => "Open Sights & Local Hoods (1890–1905)",
-            Self::CentralTower => "Central Tower + 2.7m Rangefinder (1906–1914)",
-            Self::RnDctOptical => "RN DCT + 4.6m/9m Coincidence Director (1915–1938)",
-            Self::KmStereoscopic10m => "KM 10.5m Stereoscopic Armored Dome (1934–1942)",
-            Self::IjnPagoda15m => "IJN 15m Giant Pagoda Optical Tower (1930–1941)",
-            Self::UsnMk38Radar => "USN Mk 38 Stabilized Radar Blind-Fire Director (1941–1945)",
+            Self::Auto => "Auto (Dimensionless Match)",
+            Self::OpenSights => "Open Sights & Local Turret Hoods (Base 0m)",
+            Self::CentralTower => "Central Sighting Tower + 2.7m Coincidence",
+            Self::WeatherproofDct => "Weatherproof Director Tower + 4.6m/9m Coincidence",
+            Self::ArmouredStereoscopic10m => "Armoured Rotating Dome + 10.5m Stereoscopic",
+            Self::DuplexOpticalTower15m => "Elevated Duplex Tower + 15.5m Long-Baseline Optical",
+            Self::GyrostabilizedRadarBlindFire => {
+                "Gyrostabilized Director + Centimetric Blind-Fire Radar"
+            }
         }
     }
 
@@ -108,10 +263,16 @@ impl MainDirector {
         match s.to_ascii_lowercase().as_str() {
             "open_sights" | "open" => Self::OpenSights,
             "central_tower" | "central" => Self::CentralTower,
-            "rn_dct_optical" | "rn_dct" | "dct" => Self::RnDctOptical,
-            "km_stereoscopic_10m" | "km_10m" | "drehhaube" => Self::KmStereoscopic10m,
-            "ijn_pagoda_15m" | "ijn_15m" | "pagoda" => Self::IjnPagoda15m,
-            "usn_mk38_radar" | "usn_mk38" | "mk38" => Self::UsnMk38Radar,
+            "weatherproof_dct" | "rn_dct_optical" | "rn_dct" | "dct" => Self::WeatherproofDct,
+            "armoured_stereoscopic_10m" | "km_stereoscopic_10m" | "km_10m" | "drehhaube" => {
+                Self::ArmouredStereoscopic10m
+            }
+            "duplex_optical_tower_15m" | "ijn_pagoda_15m" | "ijn_15m" | "pagoda" => {
+                Self::DuplexOpticalTower15m
+            }
+            "gyrostabilized_radar_blind_fire" | "usn_mk38_radar" | "usn_mk38" | "mk38" => {
+                Self::GyrostabilizedRadarBlindFire
+            }
             _ => Self::Auto,
         }
     }
@@ -124,14 +285,14 @@ pub enum AaDirector {
     Auto,
     /// None or local optical ring sights.
     None,
-    /// RN High Angle Control System (HACS) (1930–1942).
-    RnHacs,
-    /// KM Wackeltopf tri-axially stabilized spherical director (1935–1943).
-    KmWackeltopf,
-    /// IJN Type 94 Kosha Sochi high-angle director (1937–1944).
-    IjnType94,
-    /// USN Mk 37 Dual-Purpose Director with Mk 12/22 radar (1939–1945).
-    UsnMk37,
+    /// High-Angle Tachymetric Control System.
+    HighAngleTachymetric,
+    /// Tri-axially stabilized spherical optical/radar director.
+    TriAxialStabilizedSphere,
+    /// Optical high-angle lead-computing director.
+    OpticalLeadComputing,
+    /// Dual-purpose gyrostabilized radar director.
+    DualPurposeRadarDirector,
 }
 
 impl AaDirector {
@@ -139,31 +300,33 @@ impl AaDirector {
         match self {
             Self::Auto => "auto",
             Self::None => "none",
-            Self::RnHacs => "rn_hacs",
-            Self::KmWackeltopf => "km_wackeltopf",
-            Self::IjnType94 => "ijn_type94",
-            Self::UsnMk37 => "usn_mk37",
+            Self::HighAngleTachymetric => "high_angle_tachymetric",
+            Self::TriAxialStabilizedSphere => "tri_axial_stabilized_sphere",
+            Self::OpticalLeadComputing => "optical_lead_computing",
+            Self::DualPurposeRadarDirector => "dual_purpose_radar_director",
         }
     }
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            Self::Auto => "Auto (Adaptive)",
-            Self::None => "None / Local Ring Sights",
-            Self::RnHacs => "RN HACS High-Angle Control System (1930–1942)",
-            Self::KmWackeltopf => "KM Wackeltopf Tri-Axial Stabilized Sphere (1935–1943)",
-            Self::IjnType94 => "IJN Type 94 High-Angle Director (1937–1944)",
-            Self::UsnMk37 => "USN Mk 37 DP Director with Radar (1939–1945)",
+            Self::Auto => "Auto (Dimensionless Match)",
+            Self::None => "None / Local Optical Ring Sights",
+            Self::HighAngleTachymetric => "High-Angle Tachymetric Control Director",
+            Self::TriAxialStabilizedSphere => "Tri-Axially Stabilized Spherical Director",
+            Self::OpticalLeadComputing => "Optical High-Angle Lead-Computing Director",
+            Self::DualPurposeRadarDirector => "Dual-Purpose Gyrostabilized Radar Director",
         }
     }
 
     pub fn from_str_name(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "none" | "no" => Self::None,
-            "rn_hacs" | "hacs" => Self::RnHacs,
-            "km_wackeltopf" | "wackeltopf" => Self::KmWackeltopf,
-            "ijn_type94" | "type94" => Self::IjnType94,
-            "usn_mk37" | "mk37" => Self::UsnMk37,
+            "high_angle_tachymetric" | "rn_hacs" | "hacs" => Self::HighAngleTachymetric,
+            "tri_axial_stabilized_sphere" | "km_wackeltopf" | "wackeltopf" => {
+                Self::TriAxialStabilizedSphere
+            }
+            "optical_lead_computing" | "ijn_type94" | "type94" => Self::OpticalLeadComputing,
+            "dual_purpose_radar_director" | "usn_mk37" | "mk37" => Self::DualPurposeRadarDirector,
             _ => Self::Auto,
         }
     }
@@ -174,18 +337,18 @@ impl AaDirector {
 pub enum BallisticComputer {
     #[default]
     Auto,
-    /// Manual firing tables & Dumaresq slide rules (pre-1910).
+    /// Manual firing tables & rate slide rules (Order 1).
     ManualTables,
-    /// Vickers range clock / Dreyer mechanical integrator table (1911–1924).
-    VickersDreyer,
-    /// RN Admiralty Fire Control Table (AFCT Mk I–X) electro-mechanical (1925–1943).
-    RnAfct,
-    /// KM C/38 Artillerierechenstelle analog fire-control table (1935–1942).
-    KmC38Analog,
-    /// IJN Type 92 / Type 98 Hoiban fire-control table (1932–1941).
-    IjnType98Hoiban,
-    /// USN Ford Mk 1 / Mk 1A Rangekeeper 3D-cam mechanical computer (1938–1945).
-    UsnFordMk1a,
+    /// Mechanical range clock & disc integrator table (Order 2).
+    MechanicalRateClock,
+    /// Electro-mechanical plotting & fire-control table (Order 4).
+    ElectroMechanicalTable,
+    /// High-velocity analog ballistic computer (Order 4).
+    HighVelocityAnalog,
+    /// Multi-axis target triangulation & ballistic table (Order 4).
+    MultiAxisTriangulator,
+    /// 3D-cam gyro-coupled mechanical rangekeeper (Order 5).
+    GyroCamRangekeeper,
 }
 
 impl BallisticComputer {
@@ -193,34 +356,44 @@ impl BallisticComputer {
         match self {
             Self::Auto => "auto",
             Self::ManualTables => "manual_tables",
-            Self::VickersDreyer => "vickers_dreyer",
-            Self::RnAfct => "rn_afct",
-            Self::KmC38Analog => "km_c38_analog",
-            Self::IjnType98Hoiban => "ijn_type98_hoiban",
-            Self::UsnFordMk1a => "usn_ford_mk1a",
+            Self::MechanicalRateClock => "mechanical_rate_clock",
+            Self::ElectroMechanicalTable => "electro_mechanical_table",
+            Self::HighVelocityAnalog => "high_velocity_analog",
+            Self::MultiAxisTriangulator => "multi_axis_triangulator",
+            Self::GyroCamRangekeeper => "gyro_cam_rangekeeper",
         }
     }
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            Self::Auto => "Auto (Adaptive)",
-            Self::ManualTables => "Manual Tables & Slide Rules (1890–1909)",
-            Self::VickersDreyer => "Vickers Clock & Dreyer Table (1910–1924)",
-            Self::RnAfct => "RN Admiralty AFCT Electro-Mechanical Table (1925–1943)",
-            Self::KmC38Analog => "KM C/38 Analog Plotting Table (1935–1942)",
-            Self::IjnType98Hoiban => "IJN Type 98 Hoiban & Sokutekiban (1932–1941)",
-            Self::UsnFordMk1a => "USN Ford Mk 1A Gyro-Coupled Computer (1938–1945)",
+            Self::Auto => "Auto (Dimensionless Match)",
+            Self::ManualTables => "Manual Firing Tables & Rate Slide Rules (Order 1)",
+            Self::MechanicalRateClock => "Mechanical Range Clock & Disc Integrator (Order 2)",
+            Self::ElectroMechanicalTable => {
+                "Electro-Mechanical Plotting & Fire-Control Table (Order 4)"
+            }
+            Self::HighVelocityAnalog => "High-Velocity Analog Ballistic Computer (Order 4)",
+            Self::MultiAxisTriangulator => {
+                "Multi-Axis Target Triangulation & Ballistic Table (Order 4)"
+            }
+            Self::GyroCamRangekeeper => "3D-Cam Gyro-Coupled Mechanical Rangekeeper (Order 5)",
         }
     }
 
     pub fn from_str_name(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "manual_tables" | "manual" => Self::ManualTables,
-            "vickers_dreyer" | "dreyer" | "vickers" => Self::VickersDreyer,
-            "rn_afct" | "afct" => Self::RnAfct,
-            "km_c38_analog" | "km_c38" | "c38" => Self::KmC38Analog,
-            "ijn_type98_hoiban" | "ijn_type98" | "hoiban" => Self::IjnType98Hoiban,
-            "usn_ford_mk1a" | "ford_mk1a" | "mk1a" => Self::UsnFordMk1a,
+            "mechanical_rate_clock" | "vickers_dreyer" | "dreyer" | "vickers" => {
+                Self::MechanicalRateClock
+            }
+            "electro_mechanical_table" | "rn_afct" | "afct" => Self::ElectroMechanicalTable,
+            "high_velocity_analog" | "km_c38_analog" | "km_c38" | "c38" => Self::HighVelocityAnalog,
+            "multi_axis_triangulator" | "ijn_type98_hoiban" | "ijn_type98" | "hoiban" => {
+                Self::MultiAxisTriangulator
+            }
+            "gyro_cam_rangekeeper" | "usn_ford_mk1a" | "ford_mk1a" | "mk1a" => {
+                Self::GyroCamRangekeeper
+            }
             _ => Self::Auto,
         }
     }
@@ -233,14 +406,14 @@ pub enum RadarSuite {
     Auto,
     /// None (optical & wireless telegraphy only).
     None,
-    /// KM FuMO decimetric fire-control + Metox passive radar warning (1939–1943).
-    KmFumoDecimetric,
-    /// IJN Type 21/22 surface/air search + E-27 radar detector (1942–1944).
-    IjnType21_22,
-    /// RN Type 279/281 air search + Type 274/284 centimetric fire-control + HF/DF (1940–1944).
-    RnCentimetricHfdf,
-    /// USN SK/SG air/surface search + Mk 8/13 centimetric blind-fire + Full CIC (1942–1945).
-    UsnCentimetricCic,
+    /// Decimetric surface/fire-control radar + passive warning receiver.
+    DecimetricSurfaceFc,
+    /// Metric air/surface search + horn magnetron surface radar.
+    MetricSearchMagnetron,
+    /// Centimetric fire-control radar + high-frequency direction finder (HF/DF).
+    CentimetricFcDirectionFinder,
+    /// Dual-band air/surface search + centimetric blind-fire + Full CIC.
+    DualBandBlindFireCic,
 }
 
 impl RadarSuite {
@@ -248,51 +421,63 @@ impl RadarSuite {
         match self {
             Self::Auto => "auto",
             Self::None => "none",
-            Self::KmFumoDecimetric => "km_fumo_decimetric",
-            Self::IjnType21_22 => "ijn_type21_22",
-            Self::RnCentimetricHfdf => "rn_centimetric_hfdf",
-            Self::UsnCentimetricCic => "usn_centimetric_cic",
+            Self::DecimetricSurfaceFc => "decimetric_surface_fc",
+            Self::MetricSearchMagnetron => "metric_search_magnetron",
+            Self::CentimetricFcDirectionFinder => "centimetric_fc_direction_finder",
+            Self::DualBandBlindFireCic => "dual_band_blind_fire_cic",
         }
     }
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            Self::Auto => "Auto (Adaptive)",
-            Self::None => "None (Optical & Telegraph Only)",
-            Self::KmFumoDecimetric => "KM FuMO Decimetric Radar + Metox (1939–1943)",
-            Self::IjnType21_22 => "IJN Type 21/22 Air/Surface Radar (1942–1944)",
-            Self::RnCentimetricHfdf => "RN Type 274/284 Centimetric Radar + HF/DF (1940–1944)",
-            Self::UsnCentimetricCic => "USN SK/SG Search + Mk 8/13 Radar + Full CIC (1942–1945)",
+            Self::Auto => "Auto (Dimensionless Match)",
+            Self::None => "None (Optical & Wireless Telegraphy Only)",
+            Self::DecimetricSurfaceFc => "Decimetric Ranging Radar + Passive Warning Receiver",
+            Self::MetricSearchMagnetron => "Metric Air/Surface Search + Cavity Magnetron Radar",
+            Self::CentimetricFcDirectionFinder => {
+                "Centimetric Fire-Control Radar + HF/DF Direction Finder"
+            }
+            Self::DualBandBlindFireCic => {
+                "Dual-Band Search + Centimetric Blind-Fire Radar + Full CIC"
+            }
         }
     }
 
     pub fn from_str_name(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "none" | "no" => Self::None,
-            "km_fumo_decimetric" | "km_fumo" | "fumo" => Self::KmFumoDecimetric,
-            "ijn_type21_22" | "ijn_type21" | "type21" => Self::IjnType21_22,
-            "rn_centimetric_hfdf" | "rn_radar" | "hfdf" => Self::RnCentimetricHfdf,
-            "usn_centimetric_cic" | "usn_radar" | "cic" => Self::UsnCentimetricCic,
+            "decimetric_surface_fc" | "km_fumo_decimetric" | "km_fumo" | "fumo" => {
+                Self::DecimetricSurfaceFc
+            }
+            "metric_search_magnetron" | "ijn_type21_22" | "ijn_type21" | "type21" => {
+                Self::MetricSearchMagnetron
+            }
+            "centimetric_fc_direction_finder" | "rn_centimetric_hfdf" | "rn_radar" | "hfdf" => {
+                Self::CentimetricFcDirectionFinder
+            }
+            "dual_band_blind_fire_cic" | "usn_centimetric_cic" | "usn_radar" | "cic" => {
+                Self::DualBandBlindFireCic
+            }
             _ => Self::Auto,
         }
     }
 }
 
-/// Sonar / ASDIC Subsurface Detection Suite.
+/// Subsurface Acoustic Detection Suite.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum SonarSuite {
     #[default]
     Auto,
     /// None (no subsurface acoustic sensors).
     None,
-    /// Passive hydrophone listening array (1915–1930).
+    /// Hull passive hydrophone listening array.
     PassiveHydrophones,
-    /// RN Standard ASDIC active quartz transducer dome (1934–1945).
-    RnAsdic,
-    /// KM Gruppenhorchgerät (GHG) multi-element passive array + S-Gerät (1935–1944).
-    KmGhgArray,
-    /// USN QC / QGA high-power searchlight active sonar (1939–1945).
-    UsnQcSonar,
+    /// Retractable active piezoelectric quartz transducer dome.
+    ActiveQuartzDome,
+    /// Multi-element balcony passive listening array + active pulse sonar.
+    MultiElementPassiveArray,
+    /// High-power magnetostrictive searchlight active sonar.
+    HighPowerSearchSonar,
 }
 
 impl SonarSuite {
@@ -301,20 +486,20 @@ impl SonarSuite {
             Self::Auto => "auto",
             Self::None => "none",
             Self::PassiveHydrophones => "passive_hydrophones",
-            Self::RnAsdic => "rn_asdic",
-            Self::KmGhgArray => "km_ghg_array",
-            Self::UsnQcSonar => "usn_qc_sonar",
+            Self::ActiveQuartzDome => "active_quartz_dome",
+            Self::MultiElementPassiveArray => "multi_element_passive_array",
+            Self::HighPowerSearchSonar => "high_power_search_sonar",
         }
     }
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            Self::Auto => "Auto (Adaptive)",
+            Self::Auto => "Auto (Dimensionless Match)",
             Self::None => "None",
-            Self::PassiveHydrophones => "Passive Hydrophone Array (1915–1930)",
-            Self::RnAsdic => "RN Standard ASDIC Active Quartz Dome (1934–1945)",
-            Self::KmGhgArray => "KM GHG Passive Listening Array + S-Gerät (1935–1944)",
-            Self::UsnQcSonar => "USN QC/QGA High-Power Search Sonar (1939–1945)",
+            Self::PassiveHydrophones => "Hull Passive Hydrophone Listening Array",
+            Self::ActiveQuartzDome => "Retractable Active Piezoelectric Quartz Dome",
+            Self::MultiElementPassiveArray => "Multi-Element Balcony Passive Array + Active Pulse",
+            Self::HighPowerSearchSonar => "High-Power Magnetostrictive Searchlight Sonar",
         }
     }
 
@@ -322,9 +507,13 @@ impl SonarSuite {
         match s.to_ascii_lowercase().as_str() {
             "none" | "no" => Self::None,
             "passive_hydrophones" | "hydrophones" => Self::PassiveHydrophones,
-            "rn_asdic" | "asdic" => Self::RnAsdic,
-            "km_ghg_array" | "ghg" => Self::KmGhgArray,
-            "usn_qc_sonar" | "usn_qc" | "qc" => Self::UsnQcSonar,
+            "active_quartz_dome" | "rn_asdic" | "asdic" => Self::ActiveQuartzDome,
+            "multi_element_passive_array" | "km_ghg_array" | "ghg" => {
+                Self::MultiElementPassiveArray
+            }
+            "high_power_search_sonar" | "usn_qc_sonar" | "usn_qc" | "qc" => {
+                Self::HighPowerSearchSonar
+            }
             _ => Self::Auto,
         }
     }
@@ -337,12 +526,12 @@ pub enum ElectricalPlantStyle {
     Auto,
     /// Compact steam dynamos (lightweight, minimal redundancy, 10–15% reserve).
     CompactSteam,
-    /// RN balanced steam turbo-generators + emergency diesel generators (25–30% reserve).
-    RnBalanced,
-    /// KM heavy survivability multi-compartment diesel/turbo plant (30–35% reserve).
-    KmHeavyDiesel,
-    /// USN high-margin 450V AC turbo-generator plant + robust diesel backup (40–50% reserve).
-    UsnHighMarginAc,
+    /// Balanced steam turbo-generators + emergency diesel generators (25–30% reserve).
+    BalancedTurboDiesel,
+    /// Multi-compartment heavy survivability diesel/turbo plant (30–35% reserve).
+    SubdividedHeavyDiesel,
+    /// High-margin 450V AC turbo-generator grid + robust diesel backup (40–50% reserve).
+    HighMarginAcGrid,
 }
 
 impl ElectricalPlantStyle {
@@ -350,28 +539,32 @@ impl ElectricalPlantStyle {
         match self {
             Self::Auto => "auto",
             Self::CompactSteam => "compact_steam",
-            Self::RnBalanced => "rn_balanced",
-            Self::KmHeavyDiesel => "km_heavy_diesel",
-            Self::UsnHighMarginAc => "usn_high_margin_ac",
+            Self::BalancedTurboDiesel => "balanced_turbo_diesel",
+            Self::SubdividedHeavyDiesel => "subdivided_heavy_diesel",
+            Self::HighMarginAcGrid => "high_margin_ac_grid",
         }
     }
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            Self::Auto => "Auto (Adaptive)",
+            Self::Auto => "Auto (Dimensionless Match)",
             Self::CompactSteam => "Compact Steam Dynamos (10–15% Reserve)",
-            Self::RnBalanced => "RN Balanced Turbo & Diesel Plant (25–30% Reserve)",
-            Self::KmHeavyDiesel => "KM Multi-Room Heavy Diesel Plant (30–35% Reserve)",
-            Self::UsnHighMarginAc => "USN High-Margin All-Electric AC Plant (40–50% Reserve)",
+            Self::BalancedTurboDiesel => "Balanced Steam Turbo & Emergency Diesel (25–30% Reserve)",
+            Self::SubdividedHeavyDiesel => {
+                "Multi-Compartment Heavy Diesel/Turbo Plant (30–35% Reserve)"
+            }
+            Self::HighMarginAcGrid => "High-Margin 450V AC All-Electric Grid (40–50% Reserve)",
         }
     }
 
     pub fn from_str_name(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "compact_steam" | "compact" => Self::CompactSteam,
-            "rn_balanced" | "balanced" => Self::RnBalanced,
-            "km_heavy_diesel" | "diesel" => Self::KmHeavyDiesel,
-            "usn_high_margin_ac" | "usn_ac" | "ac" => Self::UsnHighMarginAc,
+            "balanced_turbo_diesel" | "rn_balanced" | "balanced" => Self::BalancedTurboDiesel,
+            "subdivided_heavy_diesel" | "km_heavy_diesel" | "diesel" => Self::SubdividedHeavyDiesel,
+            "high_margin_ac_grid" | "usn_high_margin_ac" | "usn_ac" | "ac" => {
+                Self::HighMarginAcGrid
+            }
             _ => Self::Auto,
         }
     }
@@ -399,7 +592,10 @@ pub struct ShipSystemsConfig {
 /// Evaluation diagnostics and physical metrics produced for a ship's systems.
 #[derive(Clone, Debug, Default)]
 pub struct SystemsEvaluation {
-    // Inferred doctrine and resolved equipment
+    // Dimensionless physical invariants
+    pub features: DimensionlessFeatures,
+
+    // Inferred ideal type and resolved equipment
     pub resolved_doctrine: StyleDoctrine,
     pub resolved_main_director: MainDirector,
     pub resolved_aa_director: AaDirector,
@@ -408,11 +604,15 @@ pub struct SystemsEvaluation {
     pub resolved_sonar_suite: SonarSuite,
     pub resolved_electrical_plant: ElectricalPlantStyle,
 
-    // Style match affinities (0.0 to 1.0)
-    pub usn_affinity: f64,
-    pub rn_affinity: f64,
-    pub ijn_affinity: f64,
-    pub km_affinity: f64,
+    // Pure Ideal-Type soft affinities (0.0 to 1.0, sum to 1.0)
+    /// Type I: Radar-Automated & All-Electric affinity.
+    pub type1_affinity: f64,
+    /// Type II: All-Weather Seakeeping & Balanced ASW affinity.
+    pub type2_affinity: f64,
+    /// Type III: Long-Range Optical & Heavy-Ordnance Strike affinity.
+    pub type3_affinity: f64,
+    /// Type IV: Stereoscopic Precision & Subdivided Survivability affinity.
+    pub type4_affinity: f64,
     pub match_explanation: String,
 
     // Electrical plant metrics
@@ -448,12 +648,13 @@ impl ShipSystemsConfig {
     pub fn evaluate(&self, ship: &ShipModel) -> SystemsEvaluation {
         let mut eval = SystemsEvaluation::default();
 
-        // 1. Run adaptive feature matcher to score doctrine affinities
-        let (aff_usn, aff_rn, aff_ijn, aff_km, explanation) = evaluate_affinities(ship);
-        eval.usn_affinity = aff_usn;
-        eval.rn_affinity = aff_rn;
-        eval.ijn_affinity = aff_ijn;
-        eval.km_affinity = aff_km;
+        // 1. Extract dimensionless physical invariants and score pure Ideal-Type affinities
+        let (features, aff1, aff2, aff3, aff4, explanation) = evaluate_affinities(ship);
+        eval.features = features;
+        eval.type1_affinity = aff1;
+        eval.type2_affinity = aff2;
+        eval.type3_affinity = aff3;
+        eval.type4_affinity = aff4;
         eval.match_explanation = explanation;
 
         let dominant_doctrine = if self.doctrine != StyleDoctrine::AdaptiveAuto
@@ -461,24 +662,29 @@ impl ShipSystemsConfig {
         {
             self.doctrine
         } else {
-            let max_aff = aff_usn.max(aff_rn).max(aff_ijn).max(aff_km);
-            if (max_aff - aff_usn).abs() < 1e-4 {
-                StyleDoctrine::UsnRadarCentric
-            } else if (max_aff - aff_rn).abs() < 1e-4 {
-                StyleDoctrine::RnAllWeather
-            } else if (max_aff - aff_ijn).abs() < 1e-4 {
-                StyleDoctrine::IjnOpticalLongRange
+            let max_aff = aff1.max(aff2).max(aff3).max(aff4);
+            if (max_aff - aff1).abs() < 1e-6 {
+                StyleDoctrine::AutomationAllElectric
+            } else if (max_aff - aff2).abs() < 1e-6 {
+                StyleDoctrine::AllWeatherSeakeeping
+            } else if (max_aff - aff3).abs() < 1e-6 {
+                StyleDoctrine::LongRangeOpticalStrike
             } else {
-                StyleDoctrine::KmStereoscopicDiesel
+                StyleDoctrine::StereoscopicSubdivided
             }
         };
         eval.resolved_doctrine = dominant_doctrine;
 
         // 2. Resolve equipment slots (mix-and-match: keep explicit choices, resolve Auto slots)
         let year = ship.hull.date_hull;
-        let is_carrier = ship.ship_type.to_lowercase().contains("carrier");
-        let is_destroyer = ship.ship_type.to_lowercase().contains("destroyer");
-        let _is_cruiser = ship.ship_type.to_lowercase().contains("cruiser");
+        // Infer functional role purely from dimensionless geometry & armament (no string dependency needed,
+        // though ship_type is a structural role class, not a country).
+        let is_carrier = ship.ship_type.to_lowercase().contains("carrier")
+            || (ship.guns.batteries[0].calibre <= 6.0
+                && ship.hull.displacement > 15_000.0
+                && features.freeboard_draught_ratio > 0.80);
+        let is_destroyer = ship.ship_type.to_lowercase().contains("destroyer")
+            || (ship.hull.displacement < 4_500.0 && features.froude_number > 0.34);
 
         eval.resolved_main_director = match self.main_director {
             MainDirector::Auto => resolve_main_director(dominant_doctrine, year, is_carrier),
@@ -513,7 +719,6 @@ impl ShipSystemsConfig {
         };
 
         // 3. Electrical Load Breakdown
-        // Turrets: depends on calibre and barrels
         let main_cal = ship.guns.batteries[0].calibre;
         let main_barrels = ship.guns.batteries[0].barrels.max(0) as f64;
         let sec_barrels =
@@ -523,57 +728,54 @@ impl ShipSystemsConfig {
             + (ship.weapons.torpedo1.number.max(0) as f64 * 3.5);
         eval.load_turrets_kw = turret_kw.max(10.0);
 
-        // Hull / hotel / pumps / steering: scales with displacement and crew
         let disp = ship.hull.displacement.max(100.0);
         let crew = ship.hull.crew_min.max(50) as f64;
         let hotel_kw = (disp.powf(0.60) * 3.8) + (crew * 0.22);
         let steering_pumps_kw = disp.powf(0.52) * 5.2;
         eval.load_hull_hotel_kw = hotel_kw + steering_pumps_kw;
 
-        // Fire-control director & computer load
         let fc_dir_kw = match eval.resolved_main_director {
             MainDirector::OpenSights => 0.0,
             MainDirector::CentralTower => 8.0,
-            MainDirector::RnDctOptical => 24.0,
-            MainDirector::KmStereoscopic10m => 48.0,
-            MainDirector::IjnPagoda15m => 35.0,
-            MainDirector::UsnMk38Radar => 80.0,
+            MainDirector::WeatherproofDct => 24.0,
+            MainDirector::ArmouredStereoscopic10m => 48.0,
+            MainDirector::DuplexOpticalTower15m => 35.0,
+            MainDirector::GyrostabilizedRadarBlindFire => 80.0,
             MainDirector::Auto => 20.0,
         };
         let aa_dir_kw = match eval.resolved_aa_director {
             AaDirector::None => 0.0,
-            AaDirector::RnHacs => 20.0,
-            AaDirector::KmWackeltopf => 40.0,
-            AaDirector::IjnType94 => 22.0,
-            AaDirector::UsnMk37 => 55.0,
+            AaDirector::HighAngleTachymetric => 20.0,
+            AaDirector::TriAxialStabilizedSphere => 40.0,
+            AaDirector::OpticalLeadComputing => 22.0,
+            AaDirector::DualPurposeRadarDirector => 55.0,
             AaDirector::Auto => 15.0,
         };
         let comp_kw = match eval.resolved_ballistic_computer {
             BallisticComputer::ManualTables => 0.0,
-            BallisticComputer::VickersDreyer => 8.0,
-            BallisticComputer::RnAfct => 28.0,
-            BallisticComputer::KmC38Analog => 36.0,
-            BallisticComputer::IjnType98Hoiban => 24.0,
-            BallisticComputer::UsnFordMk1a => 50.0,
+            BallisticComputer::MechanicalRateClock => 8.0,
+            BallisticComputer::ElectroMechanicalTable => 28.0,
+            BallisticComputer::HighVelocityAnalog => 36.0,
+            BallisticComputer::MultiAxisTriangulator => 24.0,
+            BallisticComputer::GyroCamRangekeeper => 50.0,
             BallisticComputer::Auto => 20.0,
         };
         eval.load_fire_control_kw = fc_dir_kw + aa_dir_kw + comp_kw;
 
-        // Radar & Sonar & CIC electronics load
         let radar_kw = match eval.resolved_radar_suite {
             RadarSuite::None => 0.0,
-            RadarSuite::KmFumoDecimetric => 45.0,
-            RadarSuite::IjnType21_22 => 38.0,
-            RadarSuite::RnCentimetricHfdf => 95.0,
-            RadarSuite::UsnCentimetricCic => 180.0,
+            RadarSuite::DecimetricSurfaceFc => 45.0,
+            RadarSuite::MetricSearchMagnetron => 38.0,
+            RadarSuite::CentimetricFcDirectionFinder => 95.0,
+            RadarSuite::DualBandBlindFireCic => 180.0,
             RadarSuite::Auto => 40.0,
         };
         let sonar_kw = match eval.resolved_sonar_suite {
             SonarSuite::None => 0.0,
             SonarSuite::PassiveHydrophones => 3.0,
-            SonarSuite::RnAsdic => 16.0,
-            SonarSuite::KmGhgArray => 12.0,
-            SonarSuite::UsnQcSonar => 32.0,
+            SonarSuite::ActiveQuartzDome => 16.0,
+            SonarSuite::MultiElementPassiveArray => 12.0,
+            SonarSuite::HighPowerSearchSonar => 32.0,
             SonarSuite::Auto => 10.0,
         };
         eval.load_electronics_kw = radar_kw + sonar_kw;
@@ -583,21 +785,20 @@ impl ShipSystemsConfig {
             + eval.load_fire_control_kw
             + eval.load_electronics_kw;
 
-        // Generator Installed Capacity
         let reserve_factor = match eval.resolved_electrical_plant {
             ElectricalPlantStyle::CompactSteam => 1.15,
-            ElectricalPlantStyle::RnBalanced => 1.30,
-            ElectricalPlantStyle::KmHeavyDiesel => 1.38,
-            ElectricalPlantStyle::UsnHighMarginAc => 1.48,
+            ElectricalPlantStyle::BalancedTurboDiesel => 1.30,
+            ElectricalPlantStyle::SubdividedHeavyDiesel => 1.38,
+            ElectricalPlantStyle::HighMarginAcGrid => 1.48,
             ElectricalPlantStyle::Auto => 1.30,
         };
         let required_kw = eval.combat_peak_kw * reserve_factor;
 
         let (turbo_ratio, diesel_ratio) = match eval.resolved_electrical_plant {
             ElectricalPlantStyle::CompactSteam => (0.90, 0.10),
-            ElectricalPlantStyle::RnBalanced => (0.75, 0.25),
-            ElectricalPlantStyle::KmHeavyDiesel => (0.50, 0.50),
-            ElectricalPlantStyle::UsnHighMarginAc => (0.75, 0.25),
+            ElectricalPlantStyle::BalancedTurboDiesel => (0.75, 0.25),
+            ElectricalPlantStyle::SubdividedHeavyDiesel => (0.50, 0.50),
+            ElectricalPlantStyle::HighMarginAcGrid => (0.75, 0.25),
             ElectricalPlantStyle::Auto => (0.75, 0.25),
         };
 
@@ -616,70 +817,66 @@ impl ShipSystemsConfig {
         eval.is_overloaded = eval.total_installed_kw < eval.combat_peak_kw;
 
         // 4. Physical Weights & CG Tiers (Tons)
-        // Vital: Ballistic computers, transmitting room, master gyros
         eval.vital_weight_tons = match eval.resolved_ballistic_computer {
             BallisticComputer::ManualTables => 0.5,
-            BallisticComputer::VickersDreyer => 4.0,
-            BallisticComputer::RnAfct => 9.5,
-            BallisticComputer::KmC38Analog => 13.0,
-            BallisticComputer::IjnType98Hoiban => 8.0,
-            BallisticComputer::UsnFordMk1a => 15.0,
+            BallisticComputer::MechanicalRateClock => 4.0,
+            BallisticComputer::ElectroMechanicalTable => 9.5,
+            BallisticComputer::HighVelocityAnalog => 13.0,
+            BallisticComputer::MultiAxisTriangulator => 8.0,
+            BallisticComputer::GyroCamRangekeeper => 15.0,
             BallisticComputer::Auto => 7.0,
         };
 
-        // Hull: Generators, main switchboards, sonar dome
         let gen_tons_per_kw = match eval.resolved_electrical_plant {
             ElectricalPlantStyle::CompactSteam => 0.026,
-            ElectricalPlantStyle::RnBalanced => 0.022,
-            ElectricalPlantStyle::KmHeavyDiesel => 0.025,
-            ElectricalPlantStyle::UsnHighMarginAc => 0.019,
+            ElectricalPlantStyle::BalancedTurboDiesel => 0.022,
+            ElectricalPlantStyle::SubdividedHeavyDiesel => 0.025,
+            ElectricalPlantStyle::HighMarginAcGrid => 0.019,
             ElectricalPlantStyle::Auto => 0.022,
         };
         let sonar_tons = match eval.resolved_sonar_suite {
             SonarSuite::None => 0.0,
             SonarSuite::PassiveHydrophones => 1.5,
-            SonarSuite::RnAsdic => 5.2,
-            SonarSuite::KmGhgArray => 6.8,
-            SonarSuite::UsnQcSonar => 8.5,
+            SonarSuite::ActiveQuartzDome => 5.2,
+            SonarSuite::MultiElementPassiveArray => 6.8,
+            SonarSuite::HighPowerSearchSonar => 8.5,
             SonarSuite::Auto => 4.0,
         };
         eval.hull_weight_tons = (eval.total_installed_kw * gen_tons_per_kw) + sonar_tons;
 
-        // Deck: Secondary/AA directors, CIC, wireless telegraph room
         let aa_deck_tons = match eval.resolved_aa_director {
             AaDirector::None => 0.0,
-            AaDirector::RnHacs => 8.5,
-            AaDirector::KmWackeltopf => 18.0,
-            AaDirector::IjnType94 => 9.5,
-            AaDirector::UsnMk37 => 22.0,
+            AaDirector::HighAngleTachymetric => 8.5,
+            AaDirector::TriAxialStabilizedSphere => 18.0,
+            AaDirector::OpticalLeadComputing => 9.5,
+            AaDirector::DualPurposeRadarDirector => 22.0,
             AaDirector::Auto => 10.0,
         };
         let cic_deck_tons = match eval.resolved_radar_suite {
             RadarSuite::None => 2.0,
-            RadarSuite::KmFumoDecimetric => 4.0,
-            RadarSuite::IjnType21_22 => 4.5,
-            RadarSuite::RnCentimetricHfdf => 9.0,
-            RadarSuite::UsnCentimetricCic => 18.5,
+            RadarSuite::DecimetricSurfaceFc => 4.0,
+            RadarSuite::MetricSearchMagnetron => 4.5,
+            RadarSuite::CentimetricFcDirectionFinder => 9.0,
+            RadarSuite::DualBandBlindFireCic => 18.5,
             RadarSuite::Auto => 6.0,
         };
         eval.deck_weight_tons = aa_deck_tons + cic_deck_tons;
 
-        // Topweight (Masthead): Main director, optical rangefinders, radar antennas
         let (dir_top_tons, baseline_m) = match eval.resolved_main_director {
             MainDirector::OpenSights => (1.5, 0.0),
             MainDirector::CentralTower => (6.5, 2.7),
-            MainDirector::RnDctOptical => (15.0, 4.6),
-            MainDirector::KmStereoscopic10m => (32.0, 10.5),
-            MainDirector::IjnPagoda15m => (46.0, 15.5),
-            MainDirector::UsnMk38Radar => (24.0, 8.0),
+            MainDirector::WeatherproofDct => (15.0, 4.6),
+            MainDirector::ArmouredStereoscopic10m => (32.0, 10.5),
+            MainDirector::DuplexOpticalTower15m => (46.0, 15.5),
+            MainDirector::GyrostabilizedRadarBlindFire => (24.0, 8.0),
             MainDirector::Auto => (18.0, 6.0),
         };
         let radar_top_tons = match eval.resolved_radar_suite {
             RadarSuite::None => 0.0,
-            RadarSuite::KmFumoDecimetric => 2.8,
-            RadarSuite::IjnType21_22 => 3.2,
-            RadarSuite::RnCentimetricHfdf => 6.5,
-            RadarSuite::UsnCentimetricCic => 9.5,
+            RadarSuite::DecimetricSurfaceFc => 2.8,
+            RadarSuite::MetricSearchMagnetron => 3.2,
+            RadarSuite::CentimetricFcDirectionFinder => 6.5,
+            RadarSuite::DualBandBlindFireCic => 9.5,
             RadarSuite::Auto => 4.0,
         };
         eval.topweight_tons = dir_top_tons + radar_top_tons;
@@ -690,8 +887,6 @@ impl ShipSystemsConfig {
             + eval.deck_weight_tons
             + eval.topweight_tons;
 
-        // Estimated delta GM from topweight leverage
-        // Topweight has ~4x vertical arm compared to keel reference, Deck 2.5x, Hull -0.5x, Vital -1.0x
         let moment = (eval.topweight_tons * 3.8) + (eval.deck_weight_tons * 2.2)
             - (eval.hull_weight_tons * 0.4)
             - (eval.vital_weight_tons * 1.0);
@@ -700,21 +895,21 @@ impl ShipSystemsConfig {
         // 5. Fire Control Accuracy & Salvo Hit Probability Curve
         let (comp_order, comp_disp_reduction) = match eval.resolved_ballistic_computer {
             BallisticComputer::ManualTables => (1, 1.00),
-            BallisticComputer::VickersDreyer => (2, 0.88),
-            BallisticComputer::RnAfct => (4, 0.68),
-            BallisticComputer::KmC38Analog => (4, 0.67),
-            BallisticComputer::IjnType98Hoiban => (4, 0.66),
-            BallisticComputer::UsnFordMk1a => (5, 0.55),
+            BallisticComputer::MechanicalRateClock => (2, 0.88),
+            BallisticComputer::ElectroMechanicalTable => (4, 0.68),
+            BallisticComputer::HighVelocityAnalog => (4, 0.67),
+            BallisticComputer::MultiAxisTriangulator => (4, 0.66),
+            BallisticComputer::GyroCamRangekeeper => (5, 0.55),
             BallisticComputer::Auto => (3, 0.75),
         };
         eval.computer_order = comp_order;
 
         let blind_fire = match eval.resolved_radar_suite {
             RadarSuite::None => 0.0,
-            RadarSuite::KmFumoDecimetric => 0.35,
-            RadarSuite::IjnType21_22 => 0.20,
-            RadarSuite::RnCentimetricHfdf => 0.70,
-            RadarSuite::UsnCentimetricCic => 0.95,
+            RadarSuite::DecimetricSurfaceFc => 0.35,
+            RadarSuite::MetricSearchMagnetron => 0.20,
+            RadarSuite::CentimetricFcDirectionFinder => 0.70,
+            RadarSuite::DualBandBlindFireCic => 0.95,
             RadarSuite::Auto => 0.40,
         };
         eval.radar_blind_fire_capability = blind_fire;
@@ -722,26 +917,21 @@ impl ShipSystemsConfig {
         let dir_stability_factor = match eval.resolved_main_director {
             MainDirector::OpenSights => 1.40,
             MainDirector::CentralTower => 1.20,
-            MainDirector::RnDctOptical => 1.00,
-            MainDirector::KmStereoscopic10m => 0.88,
-            MainDirector::IjnPagoda15m => 0.82,
-            MainDirector::UsnMk38Radar => 0.72,
+            MainDirector::WeatherproofDct => 1.00,
+            MainDirector::ArmouredStereoscopic10m => 0.88,
+            MainDirector::DuplexOpticalTower15m => 0.82,
+            MainDirector::GyrostabilizedRadarBlindFire => 0.72,
             MainDirector::Auto => 1.00,
         };
 
-        // Ship steadiness adjustment factor
         let steadiness_factor = (100.0 / ship.steadiness_adj.max(25.0))
             .sqrt()
             .clamp(0.8, 1.6);
 
-        // Compute salvo hit probability (%) at ranges 5,000 to 35,000 yd
-        // Standard naval target: ~240m (787ft) length, ~32m (105ft) beam
         let mut curve = Vec::new();
         for r_step in (5000..=35000).step_by(2500) {
             let r = r_step as f64;
-            // Optical ranging error grows with range squared, inversely with baseline
             let opt_range_err = (r / 1000.0).powi(2) * 1.8 / baseline_m.max(1.5);
-            // Radar ranging error is roughly constant (~25yd for good centimetric radar)
             let rad_range_err = 25.0 / (blind_fire + 0.1).min(1.0);
             let combined_range_err = if blind_fire > 0.4 {
                 (opt_range_err * 0.4).min(rad_range_err)
@@ -749,21 +939,18 @@ impl ShipSystemsConfig {
                 opt_range_err
             };
 
-            // Dispersion length and width (yards)
             let sigma_range =
                 combined_range_err * comp_disp_reduction * dir_stability_factor * steadiness_factor;
             let sigma_deflection =
                 (r * 0.0035) * comp_disp_reduction * dir_stability_factor * steadiness_factor
                     / (1.0 + blind_fire * 0.2);
 
-            // Ellipse area (yd^2) vs standard battleship target presented area (~7000 yd^2)
             let disp_area =
                 (std::f64::consts::PI * sigma_range.max(15.0) * sigma_deflection.max(8.0))
                     .max(400.0);
             let target_area = 5500.0;
             let base_hit_prob = (target_area / disp_area).clamp(0.008, 0.42);
 
-            // Salvo barrel concentration bonus
             let b_count = main_barrels.clamp(2.0, 12.0);
             let salvo_hit_prob = (1.0 - (1.0 - base_hit_prob).powf(b_count * 0.35)) * 100.0;
             curve.push((r, (salvo_hit_prob * 10.0).round() / 10.0));
@@ -774,90 +961,100 @@ impl ShipSystemsConfig {
     }
 }
 
-/// Helper to evaluate style affinities and generate explanation text.
-fn evaluate_affinities(ship: &ShipModel) -> (f64, f64, f64, f64, String) {
-    let mut usn = 0.25_f64;
-    let mut rn = 0.25_f64;
-    let mut ijn = 0.25_f64;
-    let mut km = 0.25_f64;
+/// Evaluate pure Weberian Ideal-Type affinities strictly from dimensionless physical invariants ($\Pi$-groups).
+/// Zero reference to `ship.country` or `ship.name`.
+pub fn evaluate_affinities(
+    ship: &ShipModel,
+) -> (DimensionlessFeatures, f64, f64, f64, f64, String) {
+    let f = DimensionlessFeatures::from_ship(ship);
 
-    let country = ship.country.to_lowercase();
-    let name = ship.name.to_lowercase();
-    let year = ship.hull.date_hull;
-    let disp = ship.hull.displacement;
-    let main_cal = ship.guns.batteries[0].calibre;
-    let sec_count = ship.guns.batteries[1].barrels + ship.guns.batteries[2].barrels;
-    let torp_count = ship.weapons.torpedo1.number + ship.weapons.torpedo2.number;
+    // Base prior across the 4 pure engineering ideal types
+    let mut s1 = 0.20_f64; // Type I: Automated Radar & All-Electric
+    let mut s2 = 0.22_f64; // Type II: All-Weather Seakeeping & Balanced ASW
+    let mut s3 = 0.20_f64; // Type III: Long-Range Optical & Heavy-Ordnance Strike
+    let mut s4 = 0.20_f64; // Type IV: Stereoscopic Precision & Subdivided Survivability
 
-    // 1. Country & Name heuristics
-    if country.contains("united states")
-        || country.contains("us")
-        || country.contains("usa")
-        || name.starts_with("uss")
-    {
-        usn += 0.45;
-    } else if country.contains("brit")
-        || country.contains("uk")
-        || country.contains("royal")
-        || name.starts_with("hms")
-    {
-        rn += 0.45;
-    } else if country.contains("japan") || country.contains("ijn") {
-        ijn += 0.45;
-    } else if country.contains("german")
-        || country.contains("kriegsmarine")
-        || country.contains("dkm")
-    {
-        km += 0.45;
+    // 1. Dual-Purpose / Automated AA density (Pi_dp) & Endurance scale (Pi_R)
+    // High DP/AA automation and long endurance strongly characterize Ideal Type I
+    s1 += (f.dp_barrel_density * 0.42).min(0.45);
+    if f.endurance_ratio >= 1.05 && f.tech_epoch >= 0.75 {
+        s1 += 0.22;
+    }
+    if f.length_beam_ratio >= 7.8 && f.beam_draught_ratio <= 3.35 && f.tech_epoch >= 0.80 {
+        s1 += 0.15;
     }
 
-    // 2. Technical features
-    // Heavy dual-purpose battery + high modern year favors USN
-    if year >= 1938 && sec_count >= 10 {
-        usn += 0.20;
+    // 2. Reserve buoyancy freeboard ratio (Pi_F/T) & balanced block fullness (Cb)
+    // Characterize Ideal Type II (All-Weather Seakeeping)
+    if f.freeboard_draught_ratio >= 0.68 && (0.51..=0.60).contains(&f.block_coeff) {
+        s2 += 0.26;
     }
-    // High torpedo density favors IJN
-    if torp_count >= 8 {
-        ijn += 0.25;
+    if (0.92..=1.06).contains(&f.barrel_slenderness) && f.torpedo_strike_density < 1.2 {
+        s2 += 0.22;
     }
-    // Extremely heavy caliber + long hull favors IJN / USN
-    if main_cal >= 16.0 {
-        usn += 0.15;
-        ijn += 0.15;
-    }
-    // Triple/double turret German style or high speed with diesel
-    if ship.engine.engine_types[1] || (disp > 30000.0 && main_cal <= 12.0) {
-        km += 0.25;
-    }
-    // Moderate balanced cruiser / carrier favors RN / USN
-    if ship.ship_type.to_lowercase().contains("carrier") {
-        usn += 0.15;
-        rn += 0.15;
+    if f.tech_epoch < 0.65 {
+        s2 += 0.20;
     }
 
-    // Normalize affinities
-    let total = (usn + rn + ijn + km).max(0.01);
-    let u = usn / total;
-    let r = rn / total;
-    let j = ijn / total;
-    let k = km / total;
+    // 3. Heavy ordnance / main caliber scale (Pi_cal) & Torpedo strike density (Pi_torp)
+    // Characterize Ideal Type III (Long-Range Optical & Heavy-Ordnance Strike)
+    if f.torpedo_strike_density >= 1.35 {
+        s3 += (f.torpedo_strike_density * 0.28).min(0.55);
+    }
+    if f.main_caliber_scale >= 1.58 {
+        s3 += 0.45;
+    }
+    if f.ordnance_fraction >= 0.115 && f.endurance_ratio < 0.90 {
+        s3 += 0.18;
+    }
+    if f.froude_number >= 0.38 && f.block_coeff <= 0.46 {
+        s3 += 0.25;
+    }
 
-    let dominant = if u >= r && u >= j && u >= k {
-        format!("USN Radar-Centric ({:.0}%)", u * 100.0)
-    } else if r >= u && r >= j && r >= k {
-        format!("RN All-Weather ({:.0}%)", r * 100.0)
-    } else if j >= u && j >= r && j >= k {
-        format!("IJN Long-Range Optical ({:.0}%)", j * 100.0)
+    // 4. Transverse form stability (Pi_B/T), Bouguer BM ratio & High-Velocity barrels (Pi_cal_len)
+    // Characterize Ideal Type IV (Stereoscopic Precision & Subdivided Survivability)
+    if f.barrel_slenderness >= 1.14 {
+        // L/51.5+ high-velocity flat-trajectory ordnance
+        s4 += 0.35;
+    }
+    if f.beam_draught_ratio >= 3.30 && f.protection_fraction >= 0.28 {
+        s4 += 0.32;
+    }
+    if ship.engine.engine_types[1] || ship.engine.fuel[2] {
+        // Complex reciprocating / diesel propulsion
+        s4 += 0.25;
+    }
+
+    let total = (s1 + s2 + s3 + s4).max(1e-6);
+    let a1 = s1 / total;
+    let a2 = s2 / total;
+    let a3 = s3 / total;
+    let a4 = s4 / total;
+
+    let dominant_label = if a1 >= a2 && a1 >= a3 && a1 >= a4 {
+        format!("Type I Automated/All-Electric ({:.0}%)", a1 * 100.0)
+    } else if a2 >= a1 && a2 >= a3 && a2 >= a4 {
+        format!("Type II All-Weather Seakeeping ({:.0}%)", a2 * 100.0)
+    } else if a3 >= a1 && a3 >= a2 && a3 >= a4 {
+        format!("Type III Optical/Ordnance Strike ({:.0}%)", a3 * 100.0)
     } else {
-        format!("KM Stereoscopic & Diesel ({:.0}%)", k * 100.0)
+        format!("Type IV Stereoscopic/Subdivided ({:.0}%)", a4 * 100.0)
     };
 
     let explanation = format!(
-        "Matched {} from {} hull date ({}), {:.0}t normal displacement, and armament configuration.",
-        dominant, ship.country, year, disp
+        "Extracted {} from dimensionless invariants: Fn={:.2}, L/∇¹/³={:.2}, L/B={:.2}, B/T={:.2}, Cb={:.2}, Π_arm={:.1}%, Π_dp={:.2}, Π_torp={:.2}.",
+        dominant_label,
+        f.froude_number,
+        f.slenderness_ratio,
+        f.length_beam_ratio,
+        f.beam_draught_ratio,
+        f.block_coeff,
+        f.protection_fraction * 100.0,
+        f.dp_barrel_density,
+        f.torpedo_strike_density
     );
 
-    (u, r, j, k, explanation)
+    (f, a1, a2, a3, a4, explanation)
 }
 
 fn resolve_main_director(doctrine: StyleDoctrine, year: i32, is_carrier: bool) -> MainDirector {
@@ -870,16 +1067,16 @@ fn resolve_main_director(doctrine: StyleDoctrine, year: i32, is_carrier: bool) -
         MainDirector::CentralTower
     } else {
         match doctrine {
-            StyleDoctrine::UsnRadarCentric => {
+            StyleDoctrine::AutomationAllElectric => {
                 if year >= 1941 {
-                    MainDirector::UsnMk38Radar
+                    MainDirector::GyrostabilizedRadarBlindFire
                 } else {
-                    MainDirector::RnDctOptical
+                    MainDirector::WeatherproofDct
                 }
             }
-            StyleDoctrine::IjnOpticalLongRange => MainDirector::IjnPagoda15m,
-            StyleDoctrine::KmStereoscopicDiesel => MainDirector::KmStereoscopic10m,
-            _ => MainDirector::RnDctOptical,
+            StyleDoctrine::LongRangeOpticalStrike => MainDirector::DuplexOpticalTower15m,
+            StyleDoctrine::StereoscopicSubdivided => MainDirector::ArmouredStereoscopic10m,
+            _ => MainDirector::WeatherproofDct,
         }
     }
 }
@@ -894,21 +1091,21 @@ fn resolve_aa_director(
         return AaDirector::None;
     }
     match doctrine {
-        StyleDoctrine::UsnRadarCentric => AaDirector::UsnMk37,
-        StyleDoctrine::RnAllWeather => AaDirector::RnHacs,
-        StyleDoctrine::KmStereoscopicDiesel => AaDirector::KmWackeltopf,
-        StyleDoctrine::IjnOpticalLongRange => {
+        StyleDoctrine::AutomationAllElectric => AaDirector::DualPurposeRadarDirector,
+        StyleDoctrine::AllWeatherSeakeeping => AaDirector::HighAngleTachymetric,
+        StyleDoctrine::StereoscopicSubdivided => AaDirector::TriAxialStabilizedSphere,
+        StyleDoctrine::LongRangeOpticalStrike => {
             if is_destroyer || is_carrier {
-                AaDirector::IjnType94
+                AaDirector::OpticalLeadComputing
             } else {
-                AaDirector::IjnType94
+                AaDirector::OpticalLeadComputing
             }
         }
         _ => {
             if year >= 1940 {
-                AaDirector::UsnMk37
+                AaDirector::DualPurposeRadarDirector
             } else {
-                AaDirector::RnHacs
+                AaDirector::HighAngleTachymetric
             }
         }
     }
@@ -918,14 +1115,14 @@ fn resolve_ballistic_computer(doctrine: StyleDoctrine, year: i32) -> BallisticCo
     if year < 1912 {
         BallisticComputer::ManualTables
     } else if year < 1925 {
-        BallisticComputer::VickersDreyer
+        BallisticComputer::MechanicalRateClock
     } else {
         match doctrine {
-            StyleDoctrine::UsnRadarCentric => BallisticComputer::UsnFordMk1a,
-            StyleDoctrine::RnAllWeather => BallisticComputer::RnAfct,
-            StyleDoctrine::KmStereoscopicDiesel => BallisticComputer::KmC38Analog,
-            StyleDoctrine::IjnOpticalLongRange => BallisticComputer::IjnType98Hoiban,
-            _ => BallisticComputer::RnAfct,
+            StyleDoctrine::AutomationAllElectric => BallisticComputer::GyroCamRangekeeper,
+            StyleDoctrine::AllWeatherSeakeeping => BallisticComputer::ElectroMechanicalTable,
+            StyleDoctrine::StereoscopicSubdivided => BallisticComputer::HighVelocityAnalog,
+            StyleDoctrine::LongRangeOpticalStrike => BallisticComputer::MultiAxisTriangulator,
+            _ => BallisticComputer::ElectroMechanicalTable,
         }
     }
 }
@@ -935,17 +1132,17 @@ fn resolve_radar_suite(doctrine: StyleDoctrine, year: i32) -> RadarSuite {
         RadarSuite::None
     } else if year < 1942 {
         match doctrine {
-            StyleDoctrine::KmStereoscopicDiesel => RadarSuite::KmFumoDecimetric,
-            StyleDoctrine::RnAllWeather => RadarSuite::RnCentimetricHfdf,
-            _ => RadarSuite::RnCentimetricHfdf,
+            StyleDoctrine::StereoscopicSubdivided => RadarSuite::DecimetricSurfaceFc,
+            StyleDoctrine::AllWeatherSeakeeping => RadarSuite::CentimetricFcDirectionFinder,
+            _ => RadarSuite::CentimetricFcDirectionFinder,
         }
     } else {
         match doctrine {
-            StyleDoctrine::UsnRadarCentric => RadarSuite::UsnCentimetricCic,
-            StyleDoctrine::RnAllWeather => RadarSuite::RnCentimetricHfdf,
-            StyleDoctrine::IjnOpticalLongRange => RadarSuite::IjnType21_22,
-            StyleDoctrine::KmStereoscopicDiesel => RadarSuite::KmFumoDecimetric,
-            _ => RadarSuite::UsnCentimetricCic,
+            StyleDoctrine::AutomationAllElectric => RadarSuite::DualBandBlindFireCic,
+            StyleDoctrine::AllWeatherSeakeeping => RadarSuite::CentimetricFcDirectionFinder,
+            StyleDoctrine::LongRangeOpticalStrike => RadarSuite::MetricSearchMagnetron,
+            StyleDoctrine::StereoscopicSubdivided => RadarSuite::DecimetricSurfaceFc,
+            _ => RadarSuite::DualBandBlindFireCic,
         }
     }
 }
@@ -958,12 +1155,12 @@ fn resolve_sonar_suite(doctrine: StyleDoctrine, year: i32, is_destroyer: bool) -
         SonarSuite::PassiveHydrophones
     } else {
         match doctrine {
-            StyleDoctrine::RnAllWeather => SonarSuite::RnAsdic,
-            StyleDoctrine::KmStereoscopicDiesel => SonarSuite::KmGhgArray,
-            StyleDoctrine::UsnRadarCentric => SonarSuite::UsnQcSonar,
+            StyleDoctrine::AllWeatherSeakeeping => SonarSuite::ActiveQuartzDome,
+            StyleDoctrine::StereoscopicSubdivided => SonarSuite::MultiElementPassiveArray,
+            StyleDoctrine::AutomationAllElectric => SonarSuite::HighPowerSearchSonar,
             _ => {
                 if is_destroyer {
-                    SonarSuite::RnAsdic
+                    SonarSuite::ActiveQuartzDome
                 } else {
                     SonarSuite::None
                 }
@@ -974,11 +1171,11 @@ fn resolve_sonar_suite(doctrine: StyleDoctrine, year: i32, is_destroyer: bool) -
 
 fn resolve_electrical_plant(doctrine: StyleDoctrine) -> ElectricalPlantStyle {
     match doctrine {
-        StyleDoctrine::UsnRadarCentric => ElectricalPlantStyle::UsnHighMarginAc,
-        StyleDoctrine::KmStereoscopicDiesel => ElectricalPlantStyle::KmHeavyDiesel,
-        StyleDoctrine::RnAllWeather => ElectricalPlantStyle::RnBalanced,
-        StyleDoctrine::IjnOpticalLongRange => ElectricalPlantStyle::CompactSteam,
-        _ => ElectricalPlantStyle::RnBalanced,
+        StyleDoctrine::AutomationAllElectric => ElectricalPlantStyle::HighMarginAcGrid,
+        StyleDoctrine::StereoscopicSubdivided => ElectricalPlantStyle::SubdividedHeavyDiesel,
+        StyleDoctrine::AllWeatherSeakeeping => ElectricalPlantStyle::BalancedTurboDiesel,
+        StyleDoctrine::LongRangeOpticalStrike => ElectricalPlantStyle::CompactSteam,
+        _ => ElectricalPlantStyle::BalancedTurboDiesel,
     }
 }
 
@@ -991,11 +1188,17 @@ mod tests {
     fn adaptive_matcher_infers_plausible_doctrines() {
         let iowa = get_preset("iowa").expect("Iowa preset");
         let eval_iowa = iowa.systems.evaluate(&iowa);
-        assert_eq!(eval_iowa.resolved_doctrine, StyleDoctrine::UsnRadarCentric);
-        assert_eq!(eval_iowa.resolved_main_director, MainDirector::UsnMk38Radar);
+        assert_eq!(
+            eval_iowa.resolved_doctrine,
+            StyleDoctrine::AutomationAllElectric
+        );
+        assert_eq!(
+            eval_iowa.resolved_main_director,
+            MainDirector::GyrostabilizedRadarBlindFire
+        );
         assert_eq!(
             eval_iowa.resolved_ballistic_computer,
-            BallisticComputer::UsnFordMk1a
+            BallisticComputer::GyroCamRangekeeper
         );
         assert!(eval_iowa.total_installed_kw > 3000.0);
         assert!(eval_iowa.electrical_margin_pct > 15.0);
@@ -1004,27 +1207,60 @@ mod tests {
         let eval_yamato = yamato.systems.evaluate(&yamato);
         assert_eq!(
             eval_yamato.resolved_doctrine,
-            StyleDoctrine::IjnOpticalLongRange
+            StyleDoctrine::LongRangeOpticalStrike
         );
         assert_eq!(
             eval_yamato.resolved_main_director,
-            MainDirector::IjnPagoda15m
+            MainDirector::DuplexOpticalTower15m
         );
         assert_eq!(eval_yamato.optical_baseline_m, 15.5);
+
+        let bismarck = get_preset("bismarck").expect("Bismarck preset");
+        let eval_bismarck = bismarck.systems.evaluate(&bismarck);
+        assert_eq!(
+            eval_bismarck.resolved_doctrine,
+            StyleDoctrine::StereoscopicSubdivided
+        );
+        assert_eq!(
+            eval_bismarck.resolved_main_director,
+            MainDirector::ArmouredStereoscopic10m
+        );
+    }
+
+    #[test]
+    fn country_and_name_do_not_affect_style_matching() {
+        let mut ship_a = get_preset("iowa").expect("Iowa preset");
+        let mut ship_b = ship_a.clone();
+        ship_a.country = "Mars Federation".into();
+        ship_a.name = "Project X-99".into();
+        ship_b.country = "".into();
+        ship_b.name = "".into();
+
+        let eval_a = ship_a.systems.evaluate(&ship_a);
+        let eval_b = ship_b.systems.evaluate(&ship_b);
+
+        assert_eq!(eval_a.resolved_doctrine, eval_b.resolved_doctrine);
+        assert!((eval_a.type1_affinity - eval_b.type1_affinity).abs() < 1e-12);
+        assert!((eval_a.type2_affinity - eval_b.type2_affinity).abs() < 1e-12);
+        assert!((eval_a.type3_affinity - eval_b.type3_affinity).abs() < 1e-12);
+        assert!((eval_a.type4_affinity - eval_b.type4_affinity).abs() < 1e-12);
+        assert_eq!(eval_a.match_explanation, eval_b.match_explanation);
     }
 
     #[test]
     fn mix_and_match_overrides_work() {
         let mut ship = get_preset("bismarck").expect("Bismarck preset");
-        // Mix: KM hull with USN Mk 38 radar director and RN ASDIC sonar
-        ship.systems.main_director = MainDirector::UsnMk38Radar;
-        ship.systems.sonar_suite = SonarSuite::RnAsdic;
+        ship.systems.main_director = MainDirector::GyrostabilizedRadarBlindFire;
+        ship.systems.sonar_suite = SonarSuite::ActiveQuartzDome;
         ship.systems.custom_turbo_kw = Some(5000.0);
         ship.systems.custom_diesel_kw = Some(3000.0);
 
         let eval = ship.systems.evaluate(&ship);
-        assert_eq!(eval.resolved_main_director, MainDirector::UsnMk38Radar);
-        assert_eq!(eval.resolved_sonar_suite, SonarSuite::RnAsdic);
+        assert_eq!(
+            eval.resolved_main_director,
+            MainDirector::GyrostabilizedRadarBlindFire
+        );
+        assert_eq!(eval.resolved_sonar_suite, SonarSuite::ActiveQuartzDome);
         assert_eq!(eval.total_installed_kw, 8000.0);
         assert_eq!(eval.turbo_generator_kw, 5000.0);
         assert_eq!(eval.diesel_generator_kw, 3000.0);

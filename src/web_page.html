@@ -1048,8 +1048,8 @@ function renderSystems(r) {
     <div style="background:#0b1928;border:1px solid var(--line);border-radius:6px;padding:12px;margin-bottom:1rem;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <div>
-          <strong style="color:#58a6ff;font-size:1.05rem;">Doctrine: ${esc(s.resolved_doctrine)}</strong>
-          <span style="color:#8b949e;font-size:0.85rem;margin-left:8px;">(USN: ${(s.affinities.usn*100).toFixed(0)}% · RN: ${(s.affinities.rn*100).toFixed(0)}% · IJN: ${(s.affinities.ijn*100).toFixed(0)}% · KM: ${(s.affinities.km*100).toFixed(0)}%)</span>
+          <strong style="color:#58a6ff;font-size:1.05rem;">Style Ideal Type: ${esc(s.resolved_doctrine)}</strong>
+          <span style="color:#8b949e;font-size:0.85rem;margin-left:8px;">(Type I Automated: ${(s.affinities.type1*100).toFixed(0)}% · Type II Seakeeping: ${(s.affinities.type2*100).toFixed(0)}% · Type III Optical/Strike: ${(s.affinities.type3*100).toFixed(0)}% · Type IV Subdivided: ${(s.affinities.type4*100).toFixed(0)}%)</span>
         </div>
         <div>${statusBadge}</div>
       </div>

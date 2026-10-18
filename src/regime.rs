@@ -37,6 +37,169 @@ fn raw_holtrop(case: &HistoricalCase) -> f64 {
         .hp_max
 }
 
+/// Five scale-free, country-agnostic dimensionless hydrodynamic invariants ($\Pi$-groups).
+///
+/// Computed strictly from fundamental physics and hull geometry (`Fn`, `L/∇^{1/3}`,
+/// `L/B`, `B/T`, `C_b`), with zero access to country, flag state, or ship name.
+#[derive(Clone, Copy, Debug)]
+pub struct HydroDimensionlessFeatures {
+    /// Froude number $Fn = V / \sqrt{g L}$.
+    pub froude_number: f64,
+    /// Volumetric slenderness ratio $L / \nabla^{1/3}$.
+    pub slenderness_ratio: f64,
+    /// Length-to-beam ratio $L / B$.
+    pub length_beam_ratio: f64,
+    /// Beam-to-draught ratio $B / T$.
+    pub beam_draught_ratio: f64,
+    /// Block coefficient $C_b = \nabla / (L B T)$.
+    pub block_coeff: f64,
+}
+
+/// Pure Extracted Hydrodynamic Ideal Types (水动力无量纲理想类型) for style-adaptive matching.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HydroIdealType {
+    /// Hydro Type I · Displacement Block Form ($Fn \approx 0.21, C_b \approx 0.60, L/\nabla^{1/3} \approx 5.6$)
+    DisplacementBlock,
+    /// Hydro Type II · Trans-Froude Fast Capital ($Fn \approx 0.30, C_b \approx 0.57, L/\nabla^{1/3} \approx 6.9$)
+    TransFroudeFastCapital,
+    /// Hydro Type III · Slender Wave-Cutting Cruiser ($Fn \approx 0.36, C_b \approx 0.51, L/\nabla^{1/3} \approx 8.0$)
+    SlenderWaveCutting,
+    /// Hydro Type IV · Super-Critical High-Fn Planing/Semi-Planing ($Fn \approx 0.52, C_b \approx 0.48, L/\nabla^{1/3} \approx 8.8$)
+    SuperCriticalHighFn,
+}
+
+impl HydroDimensionlessFeatures {
+    /// Extract dimensionless hydrodynamic invariants from raw geometric/kinematic parameters.
+    pub fn from_geometry(
+        length_ft: f64,
+        beam_ft: f64,
+        draught_ft: f64,
+        displacement_tons: f64,
+        block_coeff: f64,
+        speed_kt: f64,
+    ) -> Self {
+        let l = length_ft.max(1.0);
+        let b = beam_ft.max(1.0);
+        let t = draught_ft.max(0.5);
+        let disp = displacement_tons.max(1.0);
+        let cb = block_coeff.clamp(0.30, 0.90);
+        let v_fps = speed_kt.max(0.0) * 1.6878098571;
+        let g = 32.17405;
+        let froude_number = v_fps / (g * l).sqrt();
+        let vol_ft3 = disp * 35.0;
+        let slenderness_ratio = l / vol_ft3.cbrt();
+        Self {
+            froude_number,
+            slenderness_ratio,
+            length_beam_ratio: l / b,
+            beam_draught_ratio: b / t,
+            block_coeff: cb,
+        }
+    }
+
+    /// Extract dimensionless hydrodynamic invariants from a historical benchmark case.
+    pub fn from_case(case: &HistoricalCase) -> Self {
+        Self::from_geometry(
+            case.length_ft,
+            case.beam_ft,
+            case.draught_ft,
+            case.displacement_tons,
+            case.block_coefficient,
+            case.speed_kt,
+        )
+    }
+
+    /// Extract dimensionless hydrodynamic invariants from a full `ShipModel`.
+    pub fn from_ship(ship: &ShipModel) -> Self {
+        let disp = if ship.hull.displacement > 1.0 {
+            ship.hull.displacement
+        } else {
+            (ship.hull.length * ship.hull.beam_bulges * ship.hull.draught * ship.hull.block / 35.0)
+                .max(1.0)
+        };
+        Self::from_geometry(
+            ship.hull.length,
+            ship.hull.beam_bulges,
+            ship.hull.draught,
+            disp,
+            ship.hull.block,
+            ship.engine.speed_max,
+        )
+    }
+
+    /// Compute normalized soft affinities $(a_1, a_2, a_3, a_4)$ over the 4 `HydroIdealType` centroids.
+    pub fn ideal_type_affinities(&self) -> [f64; 4] {
+        // Centroids (Fn, L/∇^{1/3}, L/B, B/T, C_b)
+        const CENTROIDS: [(f64, f64, f64, f64, f64); 4] = [
+            (0.21, 5.6, 6.5, 3.1, 0.60), // Type I: Displacement Block
+            (0.30, 6.9, 7.6, 3.3, 0.57), // Type II: Trans-Froude Fast Capital
+            (0.36, 8.0, 9.2, 3.2, 0.51), // Type III: Slender Wave-Cutting
+            (0.52, 8.8, 9.8, 3.1, 0.48), // Type IV: Super-Critical High-Fn
+        ];
+        const SCALES: (f64, f64, f64, f64, f64) = (0.07, 1.1, 1.5, 0.5, 0.05);
+
+        let mut weights = [0.0_f64; 4];
+        let mut sum = 0.0;
+        for (idx, c) in CENTROIDS.iter().enumerate() {
+            let d2 = ((self.froude_number - c.0) / SCALES.0).powi(2)
+                + ((self.slenderness_ratio - c.1) / SCALES.1).powi(2)
+                + ((self.length_beam_ratio - c.2) / SCALES.2).powi(2)
+                + ((self.beam_draught_ratio - c.3) / SCALES.3).powi(2)
+                + ((self.block_coeff - c.4) / SCALES.4).powi(2);
+            let w = (-0.5 * d2).exp();
+            weights[idx] = w;
+            sum += w;
+        }
+        if sum > 1e-12 {
+            for w in &mut weights {
+                *w /= sum;
+            }
+        } else {
+            weights = [0.25, 0.25, 0.25, 0.25];
+        }
+        weights
+    }
+
+    /// Dominant hydrodynamic ideal type.
+    pub fn dominant_ideal_type(&self) -> HydroIdealType {
+        let aff = self.ideal_type_affinities();
+        let mut best_idx = 0;
+        for i in 1..4 {
+            if aff[i] > aff[best_idx] {
+                best_idx = i;
+            }
+        }
+        match best_idx {
+            0 => HydroIdealType::DisplacementBlock,
+            1 => HydroIdealType::TransFroudeFastCapital,
+            2 => HydroIdealType::SlenderWaveCutting,
+            _ => HydroIdealType::SuperCriticalHighFn,
+        }
+    }
+
+    /// Dimensionless hydrodynamic similarity kernel $K(\Pi_a, \Pi_b) \in (0, 1]$ combining
+    /// direct $\Pi$-group distance and soft Hydro Ideal-Type affinity cosine similarity.
+    pub fn similarity(&self, other: &Self) -> f64 {
+        let dfn = (self.froude_number - other.froude_number) / 0.055;
+        let dsl = (self.slenderness_ratio - other.slenderness_ratio) / 0.80;
+        let dlb = (self.length_beam_ratio - other.length_beam_ratio) / 1.15;
+        let dbt = (self.beam_draught_ratio - other.beam_draught_ratio) / 0.50;
+        let dcb = (self.block_coeff - other.block_coeff) / 0.045;
+        let dist2 =
+            dfn * dfn + 0.90 * dsl * dsl + 0.70 * dlb * dlb + 0.45 * dbt * dbt + 0.80 * dcb * dcb;
+        let kernel = (-0.5 * dist2).exp();
+
+        let a1 = self.ideal_type_affinities();
+        let a2 = other.ideal_type_affinities();
+        let dot: f64 = a1.iter().zip(a2.iter()).map(|(x, y)| x * y).sum();
+        let n1: f64 = a1.iter().map(|x| x * x).sum::<f64>().sqrt().max(1e-12);
+        let n2: f64 = a2.iter().map(|x| x * x).sum::<f64>().sqrt().max(1e-12);
+        let ideal_sim = (dot / (n1 * n2)).clamp(0.0, 1.0);
+
+        0.08 + 0.92 * (0.65 * kernel + 0.35 * ideal_sim.powi(3))
+    }
+}
+
 /// Factor fraction trimmed from each tail before averaging.
 ///
 /// A 15% trimmed mean rejects the influence of individual outlier cases.  A
@@ -44,33 +207,13 @@ fn raw_holtrop(case: &HistoricalCase) -> f64 {
 /// ~0.13pp improvement over the plain mean; see docs/VALIDATION.md.
 const FACTOR_TRIM: f64 = 0.15;
 
-/// Robust `reference / simulated` factor: 15% trimmed mean with curated cases
-/// weighted 2x relative to the approximate bulk.  Confidence weighting improved
-/// both the full-set and curated-core nested LOOCV (docs/VALIDATION.md).
-fn factor_for(cases: &[&HistoricalCase], power: impl Fn(&HistoricalCase) -> f64) -> f64 {
-    let mut pairs: Vec<(f64, f64)> = cases
-        .iter()
-        .filter_map(|case| {
-            let p = power(case);
-            if case.reference_hp > 0.0 && p > 0.0 {
-                let weight = if case.provenance.is_curated() {
-                    2.0
-                } else {
-                    1.0
-                };
-                Some((case.reference_hp / p, weight))
-            } else {
-                None
-            }
-        })
-        .collect();
+fn weighted_trimmed_mean(mut pairs: Vec<(f64, f64)>) -> f64 {
     if pairs.is_empty() {
         return 1.0;
     }
     pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     let total_weight: f64 = pairs.iter().map(|(_, w)| w).sum();
     let trim = total_weight * FACTOR_TRIM;
-    // Trim by weight from each tail.
     let mut acc = 0.0;
     let mut start = 0;
     while start < pairs.len() && acc < trim {
@@ -94,6 +237,67 @@ fn factor_for(cases: &[&HistoricalCase], power: impl Fn(&HistoricalCase) -> f64)
     } else {
         pairs.iter().map(|(r, _)| r).sum::<f64>() / pairs.len() as f64
     }
+}
+
+/// Robust `reference / simulated` factor: 15% trimmed mean with curated cases
+/// weighted 2x relative to the approximate bulk.  Confidence weighting improved
+/// both the full-set and curated-core nested LOOCV (docs/VALIDATION.md).
+fn factor_for(cases: &[&HistoricalCase], power: impl Fn(&HistoricalCase) -> f64) -> f64 {
+    let pairs: Vec<(f64, f64)> = cases
+        .iter()
+        .filter_map(|case| {
+            let p = power(case);
+            if case.reference_hp > 0.0 && p > 0.0 {
+                let weight = if case.provenance.is_curated() {
+                    2.0
+                } else {
+                    1.0
+                };
+                Some((case.reference_hp / p, weight))
+            } else {
+                None
+            }
+        })
+        .collect();
+    weighted_trimmed_mean(pairs)
+}
+
+/// Dimensionless style-adaptive calibration factor for a target $\Pi_{\text{hydro}}$ state
+/// evaluated strictly over a training pool `cases`.
+///
+/// Blends the global per-class factor with the dimensionless kernel-weighted trimmed mean
+/// so that hulls in distinct Froude / slenderness regimes (e.g. pre-dreadnought vs fast
+/// battleship, or protected cruiser vs fast light cruiser) receive physically matched factors.
+fn adaptive_factor_for_features(
+    target: &HydroDimensionlessFeatures,
+    cases: &[&HistoricalCase],
+    power: impl Fn(&HistoricalCase) -> f64,
+) -> f64 {
+    let base_factor = factor_for(cases, &power);
+    let pairs: Vec<(f64, f64)> = cases
+        .iter()
+        .filter_map(|case| {
+            let p = power(case);
+            if case.reference_hp > 0.0 && p > 0.0 {
+                let provenance_w = if case.provenance.is_curated() {
+                    2.0
+                } else {
+                    1.0
+                };
+                let feat = HydroDimensionlessFeatures::from_case(case);
+                let sim_w = target.similarity(&feat);
+                Some((case.reference_hp / p, provenance_w * sim_w))
+            } else {
+                None
+            }
+        })
+        .collect();
+    if pairs.is_empty() {
+        return base_factor;
+    }
+    let local_factor = weighted_trimmed_mean(pairs);
+    // Shrink local dimensionless factor gently toward class baseline for stability.
+    0.85 * local_factor + 0.15 * base_factor
 }
 
 fn mape(cases: &[&HistoricalCase], factor: f64, power: impl Fn(&HistoricalCase) -> f64) -> f64 {
@@ -146,9 +350,18 @@ pub fn regime_for_ship_type(ship_type: &str) -> Option<RegimeCalibration> {
         .find(|r| needle.contains(r.ship_type) || r.ship_type.contains(needle.trim()))
 }
 
-/// Apply the regime model + factor to a design.
+/// Apply the regime model + dimensionless style-adaptive factor to a design.
 pub fn apply_regime_calibration(ship: &mut ShipModel) -> Option<RegimeCalibration> {
-    let entry = regime_for_ship_type(&ship.ship_type)?;
+    let mut entry = regime_for_ship_type(&ship.ship_type)?;
+    let cases = historical_cases();
+    let subset: Vec<&HistoricalCase> = cases
+        .iter()
+        .filter(|c| c.ship_type == entry.ship_type)
+        .collect();
+    if subset.len() >= 2 && ship.hull.length > 10.0 && ship.engine.speed_max > 1.0 {
+        let feat = HydroDimensionlessFeatures::from_ship(ship);
+        entry.factor = adaptive_factor_for_features(&feat, &subset, raw_holtrop);
+    }
     ship.engine.resistance_model = entry.model;
     ship.engine.power_factor = entry.factor;
     ship.engine.original_power_factor = 1.0;
@@ -307,9 +520,19 @@ pub fn blend_for_ship_type(ship_type: &str) -> Option<BlendCalibration> {
         .find(|r| needle.contains(r.ship_type) || r.ship_type.contains(needle.trim()))
 }
 
-/// Apply the blended regime model (and both factors) to a design.
+/// Apply the blended regime model (and both dimensionless style-adaptive factors) to a design.
 pub fn apply_blend_calibration(ship: &mut ShipModel) -> Option<BlendCalibration> {
-    let entry = blend_for_ship_type(&ship.ship_type)?;
+    let mut entry = blend_for_ship_type(&ship.ship_type)?;
+    let cases = historical_cases();
+    let subset: Vec<&HistoricalCase> = cases
+        .iter()
+        .filter(|c| c.ship_type == entry.ship_type)
+        .collect();
+    if subset.len() >= 2 && ship.hull.length > 10.0 && ship.engine.speed_max > 1.0 {
+        let feat = HydroDimensionlessFeatures::from_ship(ship);
+        entry.holtrop_factor = adaptive_factor_for_features(&feat, &subset, raw_holtrop);
+        entry.original_factor = adaptive_factor_for_features(&feat, &subset, raw_original);
+    }
     ship.engine.resistance_model = ResistanceModel::HoltropMennen;
     ship.engine.power_factor = entry.holtrop_factor;
     ship.engine.original_power_factor = entry.original_factor;
@@ -497,12 +720,17 @@ pub fn compare_regime_vs_original() -> BaselineComparison {
 /// Nested leave-one-out evaluation.
 ///
 /// For every held-out case the factor is fitted on the remaining cases of the
-/// same ship type (falling back to all training cases when fewer than two
-/// same-type cases remain), so the reported error does not use the test case.
+/// same ship type using dimensionless hydrodynamic feature similarity (falling
+/// back to all training cases when fewer than two same-type cases remain), so
+/// the reported error does not use the test case or any national/ship-name label.
 pub fn run_loocv_regime() -> RegimeLoocv {
     let cases = historical_cases();
     let raw_h: Vec<f64> = cases.iter().map(raw_holtrop).collect();
     let raw_o: Vec<f64> = cases.iter().map(raw_original).collect();
+    let feats: Vec<HydroDimensionlessFeatures> = cases
+        .iter()
+        .map(HydroDimensionlessFeatures::from_case)
+        .collect();
 
     let mut errs = Vec::new();
     let mut holt_uncal = Vec::new();
@@ -513,6 +741,7 @@ pub fn run_loocv_regime() -> RegimeLoocv {
 
     for i in 0..cases.len() {
         let test = &cases[i];
+        let target_feat = &feats[i];
         let train: Vec<&HistoricalCase> = cases
             .iter()
             .enumerate()
@@ -526,7 +755,7 @@ pub fn run_loocv_regime() -> RegimeLoocv {
             .collect();
         let pool = if same.len() >= 2 { &same } else { &train };
 
-        let fh = factor_for(pool, raw_holtrop);
+        let fh = adaptive_factor_for_features(target_feat, pool, raw_holtrop);
         let fo = factor_for(pool, raw_original);
         let pred_h = raw_h[i] * fh;
         let pred_o = raw_o[i] * fo;
@@ -692,5 +921,35 @@ mod tests {
         assert!(regime_for_ship_type("Battleship").is_some());
         assert!(regime_for_ship_type("destroyer").is_some());
         assert!(regime_for_ship_type("submarine").is_none());
+    }
+
+    #[test]
+    fn hydro_ideal_types_and_country_invariance() {
+        let mut s1 = crate::presets::get_preset("iowa").expect("iowa");
+        let mut s2 = s1.clone();
+        s1.country = "Republic of Alpha".into();
+        s1.name = "Alpha-1".into();
+        s2.country = "Empire of Beta".into();
+        s2.name = "Beta-9".into();
+
+        let f1 = HydroDimensionlessFeatures::from_ship(&s1);
+        let f2 = HydroDimensionlessFeatures::from_ship(&s2);
+        assert_eq!(f1.dominant_ideal_type(), f2.dominant_ideal_type());
+        assert_eq!(
+            f1.dominant_ideal_type(),
+            HydroIdealType::TransFroudeFastCapital
+        );
+
+        let r1 = apply_regime_calibration(&mut s1).expect("regime s1");
+        let r2 = apply_regime_calibration(&mut s2).expect("regime s2");
+        assert!((r1.factor - r2.factor).abs() < 1e-12);
+        assert!((s1.engine.hp_max - s2.engine.hp_max).abs() < 1e-9);
+
+        let dd = crate::presets::get_preset("fletcher").expect("fletcher");
+        let f_dd = HydroDimensionlessFeatures::from_ship(&dd);
+        assert_eq!(
+            f_dd.dominant_ideal_type(),
+            HydroIdealType::SuperCriticalHighFn
+        );
     }
 }

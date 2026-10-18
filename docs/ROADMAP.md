@@ -547,5 +547,27 @@ still 10.36% / blended 9.81%):
   - Overlaid green Salvo Hit Probability curve with right-hand percentage axis (0%–30%) on the vector Tactical Immunity Zone chart in `Page::Blueprint`.
   - Profile blueprint vector rendering with director tower, optical crossbars, and radar antenna array atop the bridge superstructure.
 
+## Phase 37 — pure extracted style ideal types & dimensionless adaptive estimation rework (completed 2026-10-18)
 
+- **Track A: Zero-Country Pure Extracted Style Ideal Types (`src/systems.rs`)**:
+  - Removed all country/flag-state (`ship.country`) and ship-name (`ship.name`) references from style matching and subsystem resolution to prevent flag-state label leakage in test sets.
+  - Defined 14 scale-free, country-agnostic **Dimensionless Physical Invariants ($\Pi$-groups)** in `DimensionlessFeatures` (`froude_number`, `slenderness_ratio`, `length_beam_ratio`, `beam_draught_ratio`, `block_coeff`, `bouguer_bm_ratio`, `freeboard_draught_ratio`, `protection_fraction`, `ordnance_fraction`, `dp_barrel_density`, `torpedo_strike_density`, `main_caliber_scale`, `barrel_slenderness`, `endurance_ratio`, `tech_epoch`).
+  - Replaced national `StyleDoctrine` variants with 4 **Pure Extracted Weberian Engineering Ideal Types (纯粹提取的风格理想类型)**:
+    - `AutomationAllElectric` (*Type I · Automated Radar & High-Margin All-Electric*)
+    - `AllWeatherSeakeeping` (*Type II · All-Weather Seakeeping & Balanced ASW*)
+    - `LongRangeOpticalStrike` (*Type III · Long-Range Optical & Heavy-Ordnance Strike*)
+    - `StereoscopicSubdivided` (*Type IV · Stereoscopic Precision & Subdivided Survivability*)
+  - Renamed all 6 subsystem equipment enums (`MainDirector`, `AaDirector`, `BallisticComputer`, `RadarSuite`, `SonarSuite`, `ElectricalPlantStyle`) and their UI labels across Web Workbench and Native Desktop GUI to pure functional/technical ideal-type descriptors while preserving full manual mix-and-match and backward `.ssr` compatibility.
+  - Added unit test `country_and_name_do_not_affect_style_matching` proving bit-for-bit invariance under arbitrary mutations of `ship.country` and `ship.name`.
+- **Track B: Hydrodynamic Dimensionless Ideal-Type Speed–Power Estimation (`src/regime.rs`)**:
+  - Added `HydroDimensionlessFeatures` ($\mathbf{\Pi}_{\text{hydro}} = (Fn, L/\nabla^{1/3}, L/B, B/T, C_b)$) and 4 Pure Hydrodynamic Ideal Types (`HydroIdealType`: `DisplacementBlock`, `TransFroudeFastCapital`, `SlenderWaveCutting`, `SuperCriticalHighFn`).
+  - Implemented `adaptive_factor_for_features()` combining dimensionless $\Pi$-space Gaussian kernel similarity and soft Hydro Ideal-Type affinity cosine similarity over a 15% weight-trimmed estimator.
+  - Improved out-of-sample **Nested LOOCV** on all 146 historical cases:
+    - `validate-regime`: **10.36% $\to$ 10.19%** overall case-weighted (`10.38%` $\to$ `10.20%` macro, `7.97%` $\to$ `7.87%` curated core).
+    - `validate-blend`: **9.81% $\to$ 9.70%** overall case-weighted (`9.80%` $\to$ `9.68%` macro, `7.47%` $\to$ `7.45%` curated core).
+  - Added unit test `hydro_ideal_types_and_country_invariance` verifying zero flag-state sensitivity in `apply_regime_calibration`.
+- **Track C: Dimensionless Subsystem Weight & Bouguer Stability ($GM$) Rework (`src/model.rs`)**:
+  - Reworked transverse metacentric height ($GM$) in `ShipModel::calculate_performance()` via scale-free Bouguer hydrostatic flare ($\Pi_{\text{flare}} = C_{wp}/C_b$), wide-beam form factor ($\Pi_{B/T} = B/T$), and high-mounted armoured deck CG leverage ($\Pi_{\text{deck}} = (W_{\text{deck}}/\Delta)(F/T)$), cutting 12-preset **$GM$ MAPE from 13.44% down to 6.60%** (more than 2$\times$ error reduction).
+  - Added dimensionless mount mechanization & multi-barrel complexity scaling in `GunBattery::calculate()` for high-angle DP/AA mounts (`gun_type >= 4`) and modern multi-gun capital turrets, cutting **Armament+Ammo MAPE from 24.96% down to 15.27%** (`20.82%` $\to$ `14.08%` on armoured ships).
+  - Integrated style-adaptive electrical, fire-control, radar, and sonar outfit weight into `engine.load_weight` so residual structural `engine.hull_weight` is no longer inflated by unallocated modern systems, reducing **Hull weight MAPE from 16.84% down to 13.57%** (`11.44%` $\to$ `10.13%` on armoured ships) and tightening regression gates in `tests/accuracy_regression.rs`.
 

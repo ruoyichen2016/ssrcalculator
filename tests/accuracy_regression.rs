@@ -270,18 +270,18 @@ fn preset_weights_and_stability_do_not_regress() {
         report.armour_mape * 100.0
     );
     assert!(
-        report.gm_mape <= 0.16,
-        "metacentric height GM MAPE {:.2}% exceeded 16% baseline",
+        report.gm_mape <= 0.10,
+        "metacentric height GM MAPE {:.2}% exceeded 10% baseline",
         report.gm_mape * 100.0
     );
     assert!(
-        report.hull_armoured_mape <= 0.15,
-        "armoured-ship hull weight MAPE {:.2}% exceeded 15% baseline",
+        report.hull_armoured_mape <= 0.125,
+        "armoured-ship hull weight MAPE {:.2}% exceeded 12.5% baseline",
         report.hull_armoured_mape * 100.0
     );
     assert!(
-        report.armament_armoured_mape <= 0.22,
-        "armoured-ship armament+ammo weight MAPE {:.2}% exceeded 22% baseline",
+        report.armament_armoured_mape <= 0.165,
+        "armoured-ship armament+ammo weight MAPE {:.2}% exceeded 16.5% baseline",
         report.armament_armoured_mape * 100.0
     );
     assert!(
