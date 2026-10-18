@@ -527,4 +527,25 @@ still 10.36% / blended 9.81%):
     - Added carrier flight deck (profile + plan view with island) and torpedo tube mounts to `Page::Blueprint`.
     - Added vector Armor Penetration & Immunity Zone chart (`draw_immunity_chart`) in `Page::Blueprint`.
 
+## Phase 36 — electrical auxiliaries, adaptive doctrine matcher, mix-and-match combat systems & salvo hit probability (completed 2026-10-18)
+
+- **Track A: Systems & Adaptive Style Engine (`src/systems.rs`)**:
+  - Implemented naval doctrine styles (`StyleDoctrine`): USN (Advanced Radar & Dual-Purpose), RN (Balanced All-Weather & Optics), IJN (Long-Range Night Combat & Large Optics), KM (High-Velocity Fire Control & Heavy Auxiliaries).
+  - Developed continuous multi-dimensional **Adaptive Style Matcher** (`evaluate_affinities` / `evaluate`) scoring doctrinal fit across ship era, displacement scale, gun battery caliber/count, torpedo/ASW density, and stability margin.
+  - Provided granular **Manual Mix-and-Match** capability allowing users to freely customize individual subsystem slots across nations, eras, and technologies: Main Battery Director (with optical baseline), Secondary/AA Director, Ballistic Computer, Surface/Air Radar Suite, Sonar Suite, and Electrical Generation Plant Style.
+  - Implemented dynamic **Electrical Load Balance Engine** breaking down power requirements for heavy turret drives, hull/hotel/pumps/steering, fire-control systems, and radar/sensors/CIC, auto-sizing turbo and diesel generator suites with doctrine-specific reserve margins and deficit alerts.
+  - Established 4-tier structural weight breakdown (`vital_weight_tons`, `hull_weight_tons`, `deck_weight_tons`, `topweight_tons`) and stability-aware metacentric height leverage ($\Delta GM$).
+  - Built an empirical-analytical **Salvo Hit Probability Model** integrating optical rangefinder base length, centimetric radar ranging precision, computer solution order, and ship steadiness into range-dependent hit probability curves (5,000–35,000 yd against a standard battleship target).
+  - Maintained 100% legacy benchmark fidelity: default `couple_weights: false` ensures all 12 historical presets retain identical convergence and physical feasibility.
+- **Track B: Web Workbench Integration (`src/web.rs`, `src/web_page.html`)**:
+  - Form controls: added doctrine style dropdown and 6 mix-and-match subsystem selects in the design form.
+  - Diagnostics: added `#systemsWrap` card in Analysis tab rendering doctrine affinity scores, electrical load vs installed capacity progress bar, overload warnings, and 4-tier weight & $\Delta GM$ breakdown.
+  - Tactical Overlay: overlaid green Salvo Hit Probability curve on the Tactical Immunity Zone SVG chart with right-hand percentage axis, hover inspection tooltips, and updated legend.
+  - Blueprint Graphics: added masthead director tower, optical rangefinder cross-arms (dynamically scaled to baseline length), and radar antenna array atop the superstructure in both profile and plan SVG views.
+- **Track C: Native Desktop GUI Full Parity (`gui/src/app.rs`)**:
+  - Added Electrical Plant & Combat Systems section in `Page::Weapons` with doctrine combo, 6 slot combo boxes, dynamic load breakdown, generator capacity margin %, and $\Delta GM$ diagnostic.
+  - Overlaid green Salvo Hit Probability curve with right-hand percentage axis (0%–30%) on the vector Tactical Immunity Zone chart in `Page::Blueprint`.
+  - Profile blueprint vector rendering with director tower, optical crossbars, and radar antenna array atop the bridge superstructure.
+
+
 

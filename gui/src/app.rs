@@ -12,6 +12,10 @@ use springsharp::model::{GunBattery, ResistanceModel, ShipModel, WeaponKind, Wea
 use springsharp::spaces::{
     calculate_internal_spaces, suggest_compartment_placement, CompartmentPlacement,
 };
+use springsharp::systems::{
+    AaDirector, BallisticComputer, ElectricalPlantStyle, MainDirector, RadarSuite, SonarSuite,
+    StyleDoctrine,
+};
 use springsharp::{
     compute_self_immunity_zone, get_preset, get_preset_benchmark, solve_displacement_scale,
     PRESET_LIST,
@@ -958,6 +962,385 @@ impl SpringSharpApp {
             1.0,
             0.0..=50_000.0,
         );
+
+        ui.separator();
+        ui.heading("Electrical Plant & Combat Systems (Adaptive & Mix-and-Match)");
+        let sys_eval = self.ship.systems.evaluate(&self.ship);
+
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(format!(
+                    "● Inferred Doctrine: {}",
+                    sys_eval.resolved_doctrine.display_name()
+                ))
+                .color(egui::Color32::from_rgb(88, 166, 255))
+                .strong(),
+            );
+            ui.label(format!(
+                "(USN: {:.0}% · RN: {:.0}% · IJN: {:.0}% · KM: {:.0}%)",
+                sys_eval.usn_affinity * 100.0,
+                sys_eval.rn_affinity * 100.0,
+                sys_eval.ijn_affinity * 100.0,
+                sys_eval.km_affinity * 100.0
+            ));
+        });
+        ui.label(
+            egui::RichText::new(&sys_eval.match_explanation)
+                .small()
+                .color(egui::Color32::from_rgb(201, 209, 217)),
+        );
+
+        ui.horizontal(|ui| {
+            ui.label(format!(
+                "Peak Load: {:.0} kW vs Installed: {:.0} kW ({:.0} Turbo + {:.0} Diesel)",
+                sys_eval.combat_peak_kw,
+                sys_eval.total_installed_kw,
+                sys_eval.turbo_generator_kw,
+                sys_eval.diesel_generator_kw
+            ));
+            if sys_eval.is_overloaded {
+                ui.colored_label(
+                    egui::Color32::from_rgb(224, 93, 111),
+                    "▲ ELECTRICAL OVERLOAD",
+                );
+            } else {
+                ui.colored_label(
+                    egui::Color32::from_rgb(95, 211, 141),
+                    format!("● Margin: {:+.1}%", sys_eval.electrical_margin_pct),
+                );
+            }
+        });
+        let load_pct =
+            (sys_eval.combat_peak_kw / sys_eval.total_installed_kw.max(1.0)).clamp(0.0, 1.0) as f32;
+        ui.add(egui::ProgressBar::new(load_pct).show_percentage());
+
+        ui.label(format!(
+            "Load: Turrets {:.0} kW · Hull/Pumps {:.0} kW · Fire-Control {:.0} kW · Sensors {:.0} kW",
+            sys_eval.load_turrets_kw,
+            sys_eval.load_hull_hotel_kw,
+            sys_eval.load_fire_control_kw,
+            sys_eval.load_electronics_kw
+        ));
+        ui.label(format!(
+            "Weights: Topweight {:.1} t (ΔGM {:+.2} ft) · Deck {:.1} t · Hull {:.1} t · Vital {:.1} t",
+            sys_eval.topweight_tons,
+            sys_eval.estimated_delta_gm_ft,
+            sys_eval.deck_weight_tons,
+            sys_eval.hull_weight_tons,
+            sys_eval.vital_weight_tons
+        ));
+
+        ui.add_space(4.0);
+        egui::Grid::new("systems_grid")
+            .num_columns(2)
+            .spacing([12.0, 6.0])
+            .show(ui, |ui| {
+                ui.label("Doctrine Style Preset:");
+                egui::ComboBox::from_id_salt("sys_doctrine")
+                    .selected_text(self.ship.systems.doctrine.display_name())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.ship.systems.doctrine,
+                            StyleDoctrine::AdaptiveAuto,
+                            StyleDoctrine::AdaptiveAuto.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.doctrine,
+                            StyleDoctrine::UsnRadarCentric,
+                            StyleDoctrine::UsnRadarCentric.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.doctrine,
+                            StyleDoctrine::RnAllWeather,
+                            StyleDoctrine::RnAllWeather.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.doctrine,
+                            StyleDoctrine::IjnOpticalLongRange,
+                            StyleDoctrine::IjnOpticalLongRange.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.doctrine,
+                            StyleDoctrine::KmStereoscopicDiesel,
+                            StyleDoctrine::KmStereoscopicDiesel.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.doctrine,
+                            StyleDoctrine::Custom,
+                            StyleDoctrine::Custom.display_name(),
+                        );
+                    });
+                ui.end_row();
+
+                ui.label("Main Battery Director:");
+                egui::ComboBox::from_id_salt("sys_main_dir")
+                    .selected_text(if self.ship.systems.main_director == MainDirector::Auto {
+                        format!("Auto ({})", sys_eval.resolved_main_director.display_name())
+                    } else {
+                        self.ship.systems.main_director.display_name().to_string()
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.ship.systems.main_director,
+                            MainDirector::Auto,
+                            "Auto (Adaptive Match)",
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.main_director,
+                            MainDirector::OpenSights,
+                            MainDirector::OpenSights.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.main_director,
+                            MainDirector::CentralTower,
+                            MainDirector::CentralTower.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.main_director,
+                            MainDirector::RnDctOptical,
+                            MainDirector::RnDctOptical.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.main_director,
+                            MainDirector::KmStereoscopic10m,
+                            MainDirector::KmStereoscopic10m.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.main_director,
+                            MainDirector::IjnPagoda15m,
+                            MainDirector::IjnPagoda15m.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.main_director,
+                            MainDirector::UsnMk38Radar,
+                            MainDirector::UsnMk38Radar.display_name(),
+                        );
+                    });
+                ui.end_row();
+
+                ui.label("AA / Secondary Director:");
+                egui::ComboBox::from_id_salt("sys_aa_dir")
+                    .selected_text(if self.ship.systems.aa_director == AaDirector::Auto {
+                        format!("Auto ({})", sys_eval.resolved_aa_director.display_name())
+                    } else {
+                        self.ship.systems.aa_director.display_name().to_string()
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.ship.systems.aa_director,
+                            AaDirector::Auto,
+                            "Auto (Adaptive Match)",
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.aa_director,
+                            AaDirector::None,
+                            AaDirector::None.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.aa_director,
+                            AaDirector::RnHacs,
+                            AaDirector::RnHacs.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.aa_director,
+                            AaDirector::KmWackeltopf,
+                            AaDirector::KmWackeltopf.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.aa_director,
+                            AaDirector::IjnType94,
+                            AaDirector::IjnType94.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.aa_director,
+                            AaDirector::UsnMk37,
+                            AaDirector::UsnMk37.display_name(),
+                        );
+                    });
+                ui.end_row();
+
+                ui.label("Ballistic Computer:");
+                egui::ComboBox::from_id_salt("sys_comp")
+                    .selected_text(
+                        if self.ship.systems.ballistic_computer == BallisticComputer::Auto {
+                            format!(
+                                "Auto ({})",
+                                sys_eval.resolved_ballistic_computer.display_name()
+                            )
+                        } else {
+                            self.ship
+                                .systems
+                                .ballistic_computer
+                                .display_name()
+                                .to_string()
+                        },
+                    )
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.ship.systems.ballistic_computer,
+                            BallisticComputer::Auto,
+                            "Auto (Adaptive Match)",
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.ballistic_computer,
+                            BallisticComputer::ManualTables,
+                            BallisticComputer::ManualTables.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.ballistic_computer,
+                            BallisticComputer::VickersDreyer,
+                            BallisticComputer::VickersDreyer.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.ballistic_computer,
+                            BallisticComputer::RnAfct,
+                            BallisticComputer::RnAfct.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.ballistic_computer,
+                            BallisticComputer::KmC38Analog,
+                            BallisticComputer::KmC38Analog.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.ballistic_computer,
+                            BallisticComputer::IjnType98Hoiban,
+                            BallisticComputer::IjnType98Hoiban.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.ballistic_computer,
+                            BallisticComputer::UsnFordMk1a,
+                            BallisticComputer::UsnFordMk1a.display_name(),
+                        );
+                    });
+                ui.end_row();
+
+                ui.label("Radar & EW Suite:");
+                egui::ComboBox::from_id_salt("sys_radar")
+                    .selected_text(if self.ship.systems.radar_suite == RadarSuite::Auto {
+                        format!("Auto ({})", sys_eval.resolved_radar_suite.display_name())
+                    } else {
+                        self.ship.systems.radar_suite.display_name().to_string()
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.ship.systems.radar_suite,
+                            RadarSuite::Auto,
+                            "Auto (Adaptive Match)",
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.radar_suite,
+                            RadarSuite::None,
+                            RadarSuite::None.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.radar_suite,
+                            RadarSuite::KmFumoDecimetric,
+                            RadarSuite::KmFumoDecimetric.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.radar_suite,
+                            RadarSuite::IjnType21_22,
+                            RadarSuite::IjnType21_22.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.radar_suite,
+                            RadarSuite::RnCentimetricHfdf,
+                            RadarSuite::RnCentimetricHfdf.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.radar_suite,
+                            RadarSuite::UsnCentimetricCic,
+                            RadarSuite::UsnCentimetricCic.display_name(),
+                        );
+                    });
+                ui.end_row();
+
+                ui.label("Sonar Suite:");
+                egui::ComboBox::from_id_salt("sys_sonar")
+                    .selected_text(if self.ship.systems.sonar_suite == SonarSuite::Auto {
+                        format!("Auto ({})", sys_eval.resolved_sonar_suite.display_name())
+                    } else {
+                        self.ship.systems.sonar_suite.display_name().to_string()
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.ship.systems.sonar_suite,
+                            SonarSuite::Auto,
+                            "Auto (Adaptive Match)",
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.sonar_suite,
+                            SonarSuite::None,
+                            SonarSuite::None.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.sonar_suite,
+                            SonarSuite::PassiveHydrophones,
+                            SonarSuite::PassiveHydrophones.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.sonar_suite,
+                            SonarSuite::RnAsdic,
+                            SonarSuite::RnAsdic.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.sonar_suite,
+                            SonarSuite::KmGhgArray,
+                            SonarSuite::KmGhgArray.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.sonar_suite,
+                            SonarSuite::UsnQcSonar,
+                            SonarSuite::UsnQcSonar.display_name(),
+                        );
+                    });
+                ui.end_row();
+
+                ui.label("Electrical Plant Style:");
+                egui::ComboBox::from_id_salt("sys_plant")
+                    .selected_text(
+                        if self.ship.systems.electrical_plant == ElectricalPlantStyle::Auto {
+                            format!(
+                                "Auto ({})",
+                                sys_eval.resolved_electrical_plant.display_name()
+                            )
+                        } else {
+                            self.ship
+                                .systems
+                                .electrical_plant
+                                .display_name()
+                                .to_string()
+                        },
+                    )
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.ship.systems.electrical_plant,
+                            ElectricalPlantStyle::Auto,
+                            "Auto (Adaptive Match)",
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.electrical_plant,
+                            ElectricalPlantStyle::CompactSteam,
+                            ElectricalPlantStyle::CompactSteam.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.electrical_plant,
+                            ElectricalPlantStyle::RnBalanced,
+                            ElectricalPlantStyle::RnBalanced.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.electrical_plant,
+                            ElectricalPlantStyle::KmHeavyDiesel,
+                            ElectricalPlantStyle::KmHeavyDiesel.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.electrical_plant,
+                            ElectricalPlantStyle::UsnHighMarginAc,
+                            ElectricalPlantStyle::UsnHighMarginAc.display_name(),
+                        );
+                    });
+                ui.end_row();
+            });
     }
 
     fn page_spaces(&mut self, ui: &mut egui::Ui) {
@@ -1384,6 +1767,49 @@ impl SpringSharpApp {
             egui::pos2(x_mid + 18.0, y_fd_for),
         );
         painter.rect_filled(funnel_rect, 2.0, egui::Color32::from_rgb(110, 130, 150));
+
+        let sys_eval = self.ship.systems.evaluate(&self.ship);
+        let dir_x = x_mid - 16.0;
+        let dir_top_y = y_fd_for - 24.0;
+        let rf_arm = (sys_eval.optical_baseline_m as f32 * 0.75).clamp(3.0, 12.0);
+        painter.line_segment(
+            [
+                egui::pos2(dir_x, y_fd_for - 16.0),
+                egui::pos2(dir_x, dir_top_y),
+            ],
+            egui::Stroke::new(1.5, egui::Color32::WHITE),
+        );
+        painter.line_segment(
+            [
+                egui::pos2(dir_x - rf_arm, dir_top_y),
+                egui::pos2(dir_x + rf_arm, dir_top_y),
+            ],
+            egui::Stroke::new(2.2, egui::Color32::from_rgb(95, 211, 141)),
+        );
+        painter.circle_filled(
+            egui::pos2(dir_x, dir_top_y),
+            2.0,
+            egui::Color32::from_rgb(95, 211, 141),
+        );
+
+        if sys_eval.radar_blind_fire_capability > 0.0 {
+            let radar_x = x_mid - 10.0;
+            let radar_top_y = y_fd_for - 28.0;
+            painter.line_segment(
+                [
+                    egui::pos2(radar_x, y_fd_for - 16.0),
+                    egui::pos2(radar_x, radar_top_y),
+                ],
+                egui::Stroke::new(1.0, egui::Color32::WHITE),
+            );
+            painter.line_segment(
+                [
+                    egui::pos2(radar_x - 3.5, radar_top_y),
+                    egui::pos2(radar_x + 3.5, radar_top_y),
+                ],
+                egui::Stroke::new(1.8, egui::Color32::from_rgb(88, 166, 255)),
+            );
+        }
 
         // Main belt armour
         if self.ship.armour.belt_main > 0.0 && self.ship.armour.belt_main_length > 0.0 {
@@ -1968,12 +2394,42 @@ impl SpringSharpApp {
             painter.circle_filled(pt, 2.8, egui::Color32::from_rgb(79, 179, 255));
         }
 
+        // Salvo Hit Probability curve (green dashed with right axis ticks)
+        let sys_eval = self.ship.systems.evaluate(&self.ship);
+        let max_prob = 35.0_f32;
+        let y_prob = |p: f32| rect.top() + pad_t + (1.0 - (p / max_prob).clamp(0.0, 1.0)) * ph;
+
+        for i in 0..=3 {
+            let p_val = (i * 10) as f32;
+            let y = y_prob(p_val);
+            painter.text(
+                egui::pos2(rect.left() + pad_l + pw + 6.0, y),
+                egui::Align2::LEFT_CENTER,
+                format!("{:.0}%", p_val),
+                egui::FontId::monospace(8.5),
+                egui::Color32::from_rgb(95, 211, 141),
+            );
+        }
+
+        let hit_pts: Vec<egui::Pos2> = sys_eval
+            .hit_prob_curve
+            .iter()
+            .map(|(r, p)| egui::pos2(x_at(*r as f32), y_prob(*p as f32)))
+            .collect();
+        painter.add(egui::Shape::line(
+            hit_pts.clone(),
+            egui::Stroke::new(2.0, egui::Color32::from_rgb(95, 211, 141)),
+        ));
+        for pt in hit_pts {
+            painter.circle_filled(pt, 2.5, egui::Color32::from_rgb(95, 211, 141));
+        }
+
         // Legend
         painter.text(
             egui::pos2(rect.left() + pad_l + 10.0, rect.top() + 8.0),
             egui::Align2::LEFT_TOP,
-            "■ Belt Penetration (red)   ■ Deck Penetration (cyan)   ■ Safe Immunity Zone (green band)",
-            egui::FontId::monospace(10.0),
+            "■ Belt Pen (red)  ■ Deck Pen (cyan)  ■ Salvo Hit % (green)  ■ Immunity Zone (green band)",
+            egui::FontId::monospace(9.5),
             egui::Color32::from_rgb(219, 231, 243),
         );
     }

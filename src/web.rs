@@ -240,6 +240,15 @@ fn form_html() -> String {
     for i in 0..5 {
         f.push_str(&weapon_section(i));
     }
+    f.push_str("<h2>Electrical & Combat Systems (Adaptive & Mix-and-Match)</h2><div class='grid'>");
+    f.push_str(r#"<label>Doctrine Style<select data-key="systems.doctrine"><option value="adaptive_auto">Adaptive Auto (AI Feature Match)</option><option value="usn_radar_centric">USN Radar-Centric & All-Electric</option><option value="rn_all_weather">RN All-Weather & ASDIC Balanced</option><option value="ijn_optical_long_range">IJN Long-Range Optical & Night</option><option value="km_stereoscopic_diesel">KM Stereoscopic & Heavy Diesel</option><option value="custom">Custom Mix-and-Match</option></select></label>"#);
+    f.push_str(r#"<label>Main Director<select data-key="systems.main_director"><option value="auto">Auto (Adaptive Match)</option><option value="open_sights">Open Sights & Local Hoods (1890–1905)</option><option value="central_tower">Central Tower + 2.7m Rangefinder (1906–1914)</option><option value="rn_dct_optical">RN DCT + 4.6m/9m Coincidence Director (1915–1938)</option><option value="km_stereoscopic_10m">KM 10.5m Stereoscopic Armored Dome (1934–1942)</option><option value="ijn_pagoda_15m">IJN 15m Giant Pagoda Optical Tower (1930–1941)</option><option value="usn_mk38_radar">USN Mk 38 Stabilized Radar Blind-Fire (1941–1945)</option></select></label>"#);
+    f.push_str(r#"<label>AA / Secondary Director<select data-key="systems.aa_director"><option value="auto">Auto (Adaptive Match)</option><option value="none">None / Local Ring Sights</option><option value="rn_hacs">RN HACS High-Angle Control System (1930–1942)</option><option value="km_wackeltopf">KM Wackeltopf Tri-Axial Stabilized Sphere (1935–1943)</option><option value="ijn_type94">IJN Type 94 High-Angle Director (1937–1944)</option><option value="usn_mk37">USN Mk 37 DP Director with Radar (1939–1945)</option></select></label>"#);
+    f.push_str(r#"<label>Ballistic Computer<select data-key="systems.ballistic_computer"><option value="auto">Auto (Adaptive Match)</option><option value="manual_tables">Manual Tables & Slide Rules (1890–1909)</option><option value="vickers_dreyer">Vickers Clock & Dreyer Table (1910–1924)</option><option value="rn_afct">RN Admiralty AFCT Electro-Mechanical Table (1925–1943)</option><option value="km_c38_analog">KM C/38 Analog Plotting Table (1935–1942)</option><option value="ijn_type98_hoiban">IJN Type 98 Hoiban & Sokutekiban (1932–1941)</option><option value="usn_ford_mk1a">USN Ford Mk 1A Gyro-Coupled Computer (1938–1945)</option></select></label>"#);
+    f.push_str(r#"<label>Radar & EW Suite<select data-key="systems.radar_suite"><option value="auto">Auto (Adaptive Match)</option><option value="none">None (Optical & Telegraph Only)</option><option value="km_fumo_decimetric">KM FuMO Decimetric Radar + Metox (1939–1943)</option><option value="ijn_type21_22">IJN Type 21/22 Air/Surface Radar (1942–1944)</option><option value="rn_centimetric_hfdf">RN Type 274/284 Centimetric Radar + HF/DF (1940–1944)</option><option value="usn_centimetric_cic">USN SK/SG Search + Mk 8/13 Radar + Full CIC (1942–1945)</option></select></label>"#);
+    f.push_str(r#"<label>Sonar / ASDIC Suite<select data-key="systems.sonar_suite"><option value="auto">Auto (Adaptive Match)</option><option value="none">None</option><option value="passive_hydrophones">Passive Hydrophone Array (1915–1930)</option><option value="rn_asdic">RN Standard ASDIC Active Quartz Dome (1934–1945)</option><option value="km_ghg_array">KM GHG Passive Listening Array + S-Gerät (1935–1944)</option><option value="usn_qc_sonar">USN QC/QGA High-Power Search Sonar (1939–1945)</option></select></label>"#);
+    f.push_str(r#"<label>Electrical Plant Philosophy<select data-key="systems.electrical_plant"><option value="auto">Auto (Adaptive Match)</option><option value="compact_steam">Compact Steam Dynamos (10–15% Reserve)</option><option value="rn_balanced">RN Balanced Turbo & Diesel Plant (25–30% Reserve)</option><option value="km_heavy_diesel">KM Multi-Room Heavy Diesel Plant (30–35% Reserve)</option><option value="usn_high_margin_ac">USN High-Margin All-Electric AC Plant (40–50% Reserve)</option></select></label>"#);
+    f.push_str("</div>");
     f.push_str("<h2>Miscellaneous weights (tons)</h2>");
     f.push_str(&grid(&[
         ("misc.vital", "Vital spaces"),
@@ -621,6 +630,71 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         "null".to_string()
     };
 
+    let sys_eval = ship.systems.evaluate(ship);
+    let hit_curve_json = sys_eval
+        .hit_prob_curve
+        .iter()
+        .map(|(r, p)| format!("[{},{}]", json_num(*r), json_num(*p)))
+        .collect::<Vec<_>>()
+        .join(",");
+    let systems_json = format!(
+        concat!(
+            "{{",
+            "\"doctrine\":{},\"main_director\":{},\"aa_director\":{},\"ballistic_computer\":{},",
+            "\"radar_suite\":{},\"sonar_suite\":{},\"electrical_plant\":{},",
+            "\"resolved_doctrine\":{},\"resolved_main_director\":{},\"resolved_aa_director\":{},",
+            "\"resolved_ballistic_computer\":{},\"resolved_radar_suite\":{},\"resolved_sonar_suite\":{},",
+            "\"resolved_electrical_plant\":{},",
+            "\"match_explanation\":{},\"affinities\":{{\"usn\":{},\"rn\":{},\"ijn\":{},\"km\":{}}},",
+            "\"load_turrets_kw\":{},\"load_hull_hotel_kw\":{},\"load_fire_control_kw\":{},\"load_electronics_kw\":{},",
+            "\"combat_peak_kw\":{},\"turbo_kw\":{},\"diesel_kw\":{},\"total_installed_kw\":{},",
+            "\"electrical_margin_pct\":{},\"is_overloaded\":{},",
+            "\"vital_tons\":{},\"hull_tons\":{},\"deck_tons\":{},\"topweight_tons\":{},\"total_systems_tons\":{},",
+            "\"delta_gm_ft\":{},\"optical_baseline_m\":{},\"computer_order\":{},\"blind_fire\":{},",
+            "\"hit_curve\":[{}]",
+            "}}"
+        ),
+        json_str(ship.systems.doctrine.as_str()),
+        json_str(ship.systems.main_director.as_str()),
+        json_str(ship.systems.aa_director.as_str()),
+        json_str(ship.systems.ballistic_computer.as_str()),
+        json_str(ship.systems.radar_suite.as_str()),
+        json_str(ship.systems.sonar_suite.as_str()),
+        json_str(ship.systems.electrical_plant.as_str()),
+        json_str(sys_eval.resolved_doctrine.display_name()),
+        json_str(sys_eval.resolved_main_director.display_name()),
+        json_str(sys_eval.resolved_aa_director.display_name()),
+        json_str(sys_eval.resolved_ballistic_computer.display_name()),
+        json_str(sys_eval.resolved_radar_suite.display_name()),
+        json_str(sys_eval.resolved_sonar_suite.display_name()),
+        json_str(sys_eval.resolved_electrical_plant.display_name()),
+        json_str(&sys_eval.match_explanation),
+        json_num(sys_eval.usn_affinity),
+        json_num(sys_eval.rn_affinity),
+        json_num(sys_eval.ijn_affinity),
+        json_num(sys_eval.km_affinity),
+        json_num(sys_eval.load_turrets_kw),
+        json_num(sys_eval.load_hull_hotel_kw),
+        json_num(sys_eval.load_fire_control_kw),
+        json_num(sys_eval.load_electronics_kw),
+        json_num(sys_eval.combat_peak_kw),
+        json_num(sys_eval.turbo_generator_kw),
+        json_num(sys_eval.diesel_generator_kw),
+        json_num(sys_eval.total_installed_kw),
+        json_num(sys_eval.electrical_margin_pct),
+        sys_eval.is_overloaded,
+        json_num(sys_eval.vital_weight_tons),
+        json_num(sys_eval.hull_weight_tons),
+        json_num(sys_eval.deck_weight_tons),
+        json_num(sys_eval.topweight_tons),
+        json_num(sys_eval.total_systems_weight_tons),
+        json_num(sys_eval.estimated_delta_gm_ft),
+        json_num(sys_eval.optical_baseline_m),
+        json_num(sys_eval.computer_order as f64),
+        json_num(sys_eval.radar_blind_fire_capability),
+        hit_curve_json
+    );
+
     let fields: Vec<(&str, String)> = vec![
         ("message", json_str(message)),
         ("name", json_str(&ship.name)),
@@ -714,6 +788,7 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         ("torpedo2_size", json_num(w.torpedo2.size)),
         ("torpedo2_loc", json_num(w.torpedo2.location as f64)),
         ("immunity", immunity_json),
+        ("systems", systems_json),
     ];
     let body = fields
         .iter()

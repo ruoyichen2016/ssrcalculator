@@ -258,6 +258,45 @@ pub fn serialize(ship: &ShipModel) -> String {
     push("cfd_proxy.wave", ship.engine.cfd_proxy_wave.to_string());
     push("cfd_proxy.fn_ref", ship.engine.cfd_proxy_fn_ref.to_string());
 
+    push(
+        "systems.doctrine",
+        ship.systems.doctrine.as_str().to_string(),
+    );
+    push(
+        "systems.main_director",
+        ship.systems.main_director.as_str().to_string(),
+    );
+    push(
+        "systems.aa_director",
+        ship.systems.aa_director.as_str().to_string(),
+    );
+    push(
+        "systems.ballistic_computer",
+        ship.systems.ballistic_computer.as_str().to_string(),
+    );
+    push(
+        "systems.radar_suite",
+        ship.systems.radar_suite.as_str().to_string(),
+    );
+    push(
+        "systems.sonar_suite",
+        ship.systems.sonar_suite.as_str().to_string(),
+    );
+    push(
+        "systems.electrical_plant",
+        ship.systems.electrical_plant.as_str().to_string(),
+    );
+    if let Some(kw) = ship.systems.custom_turbo_kw {
+        push("systems.custom_turbo_kw", kw.to_string());
+    }
+    if let Some(kw) = ship.systems.custom_diesel_kw {
+        push("systems.custom_diesel_kw", kw.to_string());
+    }
+    push(
+        "systems.couple_weights",
+        ship.systems.couple_weights.to_string(),
+    );
+
     lines.join("\n") + "\n"
 }
 
@@ -755,6 +794,48 @@ fn set_value(ship: &mut ShipModel, key: &str, value: &str) -> Result<(), String>
         }
         "cfd_proxy.fn_ref" => {
             ship.engine.cfd_proxy_fn_ref = parse_f64(value)?;
+            true
+        }
+        "systems.doctrine" => {
+            ship.systems.doctrine = crate::systems::StyleDoctrine::from_str_name(value);
+            true
+        }
+        "systems.main_director" => {
+            ship.systems.main_director = crate::systems::MainDirector::from_str_name(value);
+            true
+        }
+        "systems.aa_director" => {
+            ship.systems.aa_director = crate::systems::AaDirector::from_str_name(value);
+            true
+        }
+        "systems.ballistic_computer" => {
+            ship.systems.ballistic_computer =
+                crate::systems::BallisticComputer::from_str_name(value);
+            true
+        }
+        "systems.radar_suite" => {
+            ship.systems.radar_suite = crate::systems::RadarSuite::from_str_name(value);
+            true
+        }
+        "systems.sonar_suite" => {
+            ship.systems.sonar_suite = crate::systems::SonarSuite::from_str_name(value);
+            true
+        }
+        "systems.electrical_plant" => {
+            ship.systems.electrical_plant =
+                crate::systems::ElectricalPlantStyle::from_str_name(value);
+            true
+        }
+        "systems.custom_turbo_kw" => {
+            ship.systems.custom_turbo_kw = Some(parse_f64(value)?);
+            true
+        }
+        "systems.custom_diesel_kw" => {
+            ship.systems.custom_diesel_kw = Some(parse_f64(value)?);
+            true
+        }
+        "systems.couple_weights" => {
+            ship.systems.couple_weights = parse_bool(value)?;
             true
         }
         _ => false,

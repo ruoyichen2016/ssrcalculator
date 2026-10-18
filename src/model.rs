@@ -1486,6 +1486,7 @@ pub struct ShipModel {
     pub space_machinery_volume_per_kw: f64,
     pub space_stores_volume_per_ton: f64,
     pub planing_calibration_factor: f64,
+    pub systems: crate::systems::ShipSystemsConfig,
 
     // performance results
     pub room_hull: f64,
@@ -1563,6 +1564,7 @@ impl Default for ShipModel {
             space_machinery_volume_per_kw: 0.0,
             space_stores_volume_per_ton: 0.0,
             planing_calibration_factor: 1.0,
+            systems: crate::systems::ShipSystemsConfig::default(),
             room_hull: 0.0,
             room_deck: 0.0,
             room_float: 0.0,

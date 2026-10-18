@@ -1,7 +1,23 @@
 # Project change log
 
-## Unreleased (Phases 29–35) — Fire Control Ballistics, Target Displacement Solver, 12 Presets, Dual-End Units & Full Feature Parity
+## Unreleased (Phases 29–36) — Electrical Auxiliaries, Combat Systems & Salvo Hit Probability
 
+- **Electrical auxiliaries, adaptive doctrine matcher & mix-and-match combat systems** (Phase 36 Track A):
+  - Created `src/systems.rs` implementing naval doctrine styles (`StyleDoctrine`), continuous multi-dimensional **Adaptive Style Matcher** scoring doctrinal fit across ship era, displacement scale, armament, torpedo/ASW density, and stability margin.
+  - Full per-slot **manual mix-and-match** for Main Battery Directors (with optical baseline), Secondary/AA Directors, Ballistic Computers, Surface/Air Radar Suites, Sonar Suites, and Electrical Generation Plants.
+  - Dynamic **electrical load balance engine** modeling turret drives, hull/hotel/pumps/steering, fire-control systems, and radar/sensors/CIC, auto-sizing turbo and diesel generator suites with doctrine-specific reserve margins and deficit detection.
+  - 4-tier structural weight breakdown (`vital_weight_tons`, `hull_weight_tons`, `deck_weight_tons`, `topweight_tons`) and stability-aware metacentric height leverage ($\Delta GM$).
+  - Range-dependent empirical-analytical **Salvo Hit Probability Model** integrating optical baseline, centimetric radar precision, computer solution order, and ship steadiness from 5,000 to 35,000 yd.
+  - 100% legacy benchmark fidelity: default `couple_weights: false` ensures all 12 historical presets retain identical convergence and physical feasibility.
+- **Web Workbench combat systems & hit probability visualization** (Phase 36 Track B):
+  - Added form controls for doctrine style and 6 mix-and-match subsystem dropdowns.
+  - Added `#systemsWrap` card in Analysis tab rendering doctrine affinity scores, electrical load vs installed capacity progress bar, overload warnings, and 4-tier weight & $\Delta GM$ breakdown.
+  - Overlaid green Salvo Hit Probability curve on Tactical Immunity Zone SVG chart with right-hand percentage axis, hover inspection tooltips, and updated legend.
+  - Added masthead director tower, optical rangefinder cross-arms (scaled to baseline length), and radar antenna array atop the superstructure in both profile and plan SVG views.
+- **Native Desktop GUI combat systems parity** (Phase 36 Track C):
+  - Added Electrical Plant & Combat Systems section in `Page::Weapons` with doctrine combo, 6 slot combo boxes, dynamic load breakdown, generator capacity margin %, and $\Delta GM$ diagnostic.
+  - Overlaid green Salvo Hit Probability curve with right-hand percentage axis (0%–30%) on vector Tactical Immunity Zone chart in `Page::Blueprint`.
+  - Added director tower, optical crossbars, and radar antenna array to profile blueprint vector rendering.
 - **Fire control exterior ballistics & immunity zone modeling** (Phase 35 Track A):
   - Created `src/ballistics.rs` implementing numerical trajectory integration and De Marre armor penetration equations (calibrated air retardation scale `7500.0 * ballistic_coeff`, De Marre constant `0.390`).
   - Computes striking velocity, fall angle, vertical belt armor penetration (including inclined belt armor obliquity), and plunging deck penetration at 1,000 yd intervals up to 35,000 yd.

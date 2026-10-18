@@ -169,6 +169,9 @@ __FORM__
       <div id="calibOut" class="out"></div>
     </div>
     <div class="tab" data-tab="analysis">
+      <h2>Electrical &amp; Combat Systems Balance</h2>
+      <p class="hint">Adaptive technological doctrine inference, electrical generator balance (turbo + diesel), and 4-tier fire-control &amp; sensor weight distribution.</p>
+      <div id="systemsWrap" style="margin-bottom:1.2rem;"></div>
       <h2>Armor Penetration &amp; Immunity Zone</h2>
       <p class="hint">De Marre Krupp-cemented penetration curves across 5,000–35,000 yards for main battery gunfire against own belt (red) and deck (blue). The green shaded band highlights the combat immunity zone.</p>
       <div id="immunityWrap" style="overflow-x:auto;margin-bottom:1.2rem;"></div>
@@ -522,6 +525,27 @@ function renderBlueprint(r) {
   const bridgeTip = `Bridge & Navigation Superstructure\nDesign: ${esc(r.name || 'Ship')}`;
   const funnelTip = `Boiler Funnels & Uptakes\nDesign: ${esc(r.name || 'Ship')}`;
 
+  // Director tower & optical rangefinder & radar antenna atop bridge
+  let mastDirectorSvg = '';
+  if (r.systems) {
+    const s = r.systems;
+    const dirBaseX = xMid - 15;
+    const dirTopY = yFdFor - 18;
+    const rfArm = Math.min(13, Math.max(3, (s.optical_baseline_m || 4.5) * 0.75));
+    const dirTip = `Main Fire-Control Director: ${esc(s.resolved_main_director)}\nOptical Baseline: ${s.optical_baseline_m}m\nTopweight: ${fmt(s.topweight_tons)} t`;
+    mastDirectorSvg += `<line x1="${dirBaseX.toFixed(1)}" y1="${(yFdFor - 12).toFixed(1)}" x2="${dirBaseX.toFixed(1)}" y2="${dirTopY.toFixed(1)}" stroke="#fff" stroke-width="1.2"/>` +
+      `<line x1="${(dirBaseX - rfArm).toFixed(1)}" y1="${dirTopY.toFixed(1)}" x2="${(dirBaseX + rfArm).toFixed(1)}" y2="${dirTopY.toFixed(1)}" stroke="#5fd38d" stroke-width="1.8" class="bp-interactive" data-tip="${esc(dirTip)}"/>` +
+      `<circle cx="${dirBaseX.toFixed(1)}" cy="${dirTopY.toFixed(1)}" r="1.8" fill="#5fd38d"/>`;
+
+    if (s.blind_fire > 0) {
+      const radarX = xMid - 10;
+      const radarTopY = yFdFor - 22;
+      const rTip = `Radar Suite: ${esc(s.resolved_radar_suite)}\nBlind-Fire Capability: ${(s.blind_fire * 100).toFixed(0)}%`;
+      mastDirectorSvg += `<line x1="${radarX.toFixed(1)}" y1="${(yFdFor - 12).toFixed(1)}" x2="${radarX.toFixed(1)}" y2="${radarTopY.toFixed(1)}" stroke="#fff" stroke-width="0.8"/>` +
+        `<path d="M ${(radarX - 4).toFixed(1)} ${(radarTopY - 2).toFixed(1)} Q ${radarX.toFixed(1)} ${radarTopY.toFixed(1)} ${(radarX + 4).toFixed(1)} ${(radarTopY - 2).toFixed(1)}" fill="none" stroke="#58a6ff" stroke-width="1.4" class="bp-interactive" data-tip="${esc(rTip)}"/>`;
+    }
+  }
+
   function getTurretPositions(mounts, m1, l1, m2, l2) {
     const list = [];
     const addGrp = (count, layout) => {
@@ -669,6 +693,7 @@ function renderBlueprint(r) {
     <path d="${hullProfileD}" fill="rgba(79,179,255,0.07)" stroke="#4fb3ff" stroke-width="1.2" stroke-linejoin="round"/>
     ${carrierProfSvg}
     <path d="${bridgeD}" fill="rgba(138,164,191,0.25)" stroke="#8aa4bf" stroke-width="0.8" class="bp-interactive" data-tip="${esc(bridgeTip)}"/>
+    ${mastDirectorSvg}
     <path d="${funnelD}" fill="rgba(138,164,191,0.3)" stroke="#8aa4bf" stroke-width="0.8" class="bp-interactive" data-tip="${esc(funnelTip)}"/>
     ${beltSvg}
     ${profTurretsSvg}
@@ -965,6 +990,29 @@ function renderImmunity(r) {
     svg += `<circle cx="${x.toFixed(1)}" cy="${yD.toFixed(1)}" r="2.8" fill="#4fb3ff" stroke="#08131e" stroke-width="1.2" class="bp-interactive" data-tip="${esc(dTip)}"/>`;
   });
 
+  // Salvo Hit Probability curve (green dashed with right axis)
+  if (r.systems && r.systems.hit_curve && r.systems.hit_curve.length) {
+    const hPts = r.systems.hit_curve;
+    const maxProb = 35.0; // 0% to 35%
+    const yProb = p => pT + (1.0 - (Math.min(maxProb, Math.max(0, p)) / maxProb)) * ph;
+    // Right axis ticks
+    for (let i = 0; i <= 3; i++) {
+      const pVal = i * 10;
+      const y = yProb(pVal);
+      svg += `<text x="${pL + pw + 6}" y="${(y + 3.5).toFixed(1)}" fill="#5fd38d" font-size="8.5" text-anchor="start">${pVal}%</text>`;
+    }
+    svg += `<text x="${pL + pw + 6}" y="${pT - 8}" fill="#5fd38d" font-size="8" font-weight="600" text-anchor="start">Hit Prob</text>`;
+
+    const hitD = hPts.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${xAt(p[0]).toFixed(1)} ${yProb(p[1]).toFixed(1)}`).join(' ');
+    svg += `<path d="${hitD}" fill="none" stroke="#5fd38d" stroke-width="2.0" stroke-dasharray="4,3"/>`;
+    hPts.forEach(p => {
+      const x = xAt(p[0]);
+      const y = yProb(p[1]);
+      const hTip = `Salvo Hit Probability @ ${fmt(p[0])} yd\nExpected Salvo Hit: ${p[1].toFixed(1)}%\nDirector: ${esc(r.systems.resolved_main_director)}\nComputer Order: ${r.systems.computer_order}`;
+      svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.8" fill="#5fd38d" stroke="#08131e" stroke-width="1.2" class="bp-interactive" data-tip="${esc(hTip)}"/>`;
+    });
+  }
+
   // Legend
   const calLabel = `${iz.calibre}" Main Gun`;
   svg += `<g transform="translate(${pL + 12}, ${pT + 8})">` +
@@ -972,10 +1020,61 @@ function renderImmunity(r) {
     `<text x="22" y="7" fill="#ff6b6b" font-size="8.5">Belt Penetration (${calLabel})</text>` +
     `<line x1="0" y1="16" x2="16" y2="16" stroke="#4fb3ff" stroke-width="2.4"/>` +
     `<text x="22" y="19" fill="#4fb3ff" font-size="8.5">Deck Penetration (${calLabel})</text>` +
+    `<line x1="160" y1="4" x2="176" y2="4" stroke="#5fd38d" stroke-width="2.0" stroke-dasharray="4,3"/>` +
+    `<text x="182" y="7" fill="#5fd38d" font-size="8.5">Salvo Hit Probability (%)</text>` +
     `</g>`;
 
   svg += `</svg>`;
   wrap.innerHTML = svg;
+}
+
+function renderSystems(r) {
+  const wrap = $('#systemsWrap');
+  if (!wrap) return;
+  if (!r || !r.systems) {
+    wrap.innerHTML = '<p class="hint">No systems evaluation data available.</p>';
+    return;
+  }
+  const s = r.systems;
+  const isOver = s.is_overloaded;
+  const statusBadge = isOver ? '<span class="badge bad">ELECTRICAL OVERLOAD</span>' : '<span class="badge good">POWER POSITIVE</span>';
+  const marginSign = s.electrical_margin_pct >= 0 ? '+' : '';
+  const marginCls = isOver ? 'bad' : s.electrical_margin_pct < 15 ? 'warn' : 'good';
+
+  const usedPct = Math.min(100, Math.max(0, (s.combat_peak_kw / Math.max(1, s.total_installed_kw)) * 100));
+  const tKw = s.turbo_kw || 0, dKw = s.diesel_kw || 0;
+
+  wrap.innerHTML = `
+    <div style="background:#0b1928;border:1px solid var(--line);border-radius:6px;padding:12px;margin-bottom:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div>
+          <strong style="color:#58a6ff;font-size:1.05rem;">Doctrine: ${esc(s.resolved_doctrine)}</strong>
+          <span style="color:#8b949e;font-size:0.85rem;margin-left:8px;">(USN: ${(s.affinities.usn*100).toFixed(0)}% · RN: ${(s.affinities.rn*100).toFixed(0)}% · IJN: ${(s.affinities.ijn*100).toFixed(0)}% · KM: ${(s.affinities.km*100).toFixed(0)}%)</span>
+        </div>
+        <div>${statusBadge}</div>
+      </div>
+      <p style="color:#c9d1d9;font-size:0.85rem;margin:0 0 10px 0;">${esc(s.match_explanation)}</p>
+
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px;">
+          <span>Combat Peak Load: <strong>${fmt(s.combat_peak_kw)} kW</strong> (Turrets ${fmt(s.load_turrets_kw)} · Hull/Pumps ${fmt(s.load_hull_hotel_kw)} · Fire-Control ${fmt(s.load_fire_control_kw)} · Sensors ${fmt(s.load_electronics_kw)})</span>
+          <span>Installed: <strong>${fmt(s.total_installed_kw)} kW</strong> (${fmt(tKw)} Turbo + ${fmt(dKw)} Diesel) · <span class="${marginCls}">Margin: ${marginSign}${fmt(s.electrical_margin_pct, 1)}%</span></span>
+        </div>
+        <div style="height:10px;background:#152232;border-radius:4px;overflow:hidden;position:relative;">
+          <div style="height:100%;width:${usedPct}%;background:${isOver ? '#e05d6f' : '#5fd38d'};border-radius:4px;"></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;font-size:0.85rem;border-top:1px solid #162436;padding-top:8px;">
+        <div><span style="color:#8b949e">Main Director:</span> <br><strong>${esc(s.resolved_main_director)}</strong> <span style="color:#8b949e">(${s.optical_baseline_m}m optical)</span></div>
+        <div><span style="color:#8b949e">AA Director:</span> <br><strong>${esc(s.resolved_aa_director)}</strong></div>
+        <div><span style="color:#8b949e">Ballistic Computer:</span> <br><strong>${esc(s.resolved_ballistic_computer)}</strong> <span style="color:#8b949e">(Order ${s.computer_order})</span></div>
+        <div><span style="color:#8b949e">Radar &amp; CIC:</span> <br><strong>${esc(s.resolved_radar_suite)}</strong> <span style="color:#8b949e">(${(s.blind_fire*100).toFixed(0)}% blind fire)</span></div>
+        <div><span style="color:#8b949e">Sonar Suite:</span> <br><strong>${esc(s.resolved_sonar_suite)}</strong></div>
+        <div><span style="color:#8b949e">Topweight &amp; ΔGM:</span> <br><strong>${fmt(s.topweight_tons)} t topweight</strong> <span style="color:${s.delta_gm_ft < -0.3 ? '#ffb547' : '#8b949e'}">(ΔGM: ${fmt(s.delta_gm_ft, 2)} ft)</span></div>
+      </div>
+    </div>
+  `;
 }
 
 // ---- dashboard ----
@@ -996,6 +1095,7 @@ function render(r) {
   renderSpeedPower(r);
   renderComparison(r);
   renderImmunity(r);
+  renderSystems(r);
   const strengthCls = r.strength_comp < 0.5 ? 'bad' : r.strength_comp < 0.995 ? 'warn' : 'good';
   const stabCls = r.metacentre <= 0 ? 'bad' : r.stability < 1 ? 'warn' : '';
 
