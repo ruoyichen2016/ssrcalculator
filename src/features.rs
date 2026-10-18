@@ -295,6 +295,12 @@ fn ship_classification(ship: &ShipModel) -> Vec<String> {
     let p = ship;
     let mut lines = Vec::new();
 
+    let sys_eval = ship.systems.evaluate(ship);
+    lines.push(format!(
+        "Fleet Tactical Role: {}",
+        sys_eval.tactical_affinities.classification_summary
+    ));
+
     if g.batteries[0].mount_type == 2 || g.batteries[1].mount_type == 2 {
         lines.push("Barbette ship".to_string());
     }

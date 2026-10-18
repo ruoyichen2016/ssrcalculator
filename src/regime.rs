@@ -351,8 +351,18 @@ pub fn regime_for_ship_type(ship_type: &str) -> Option<RegimeCalibration> {
 }
 
 /// Apply the regime model + dimensionless style-adaptive factor to a design.
+/// If `ship.ship_type` is unknown or empty, falls back to `HydroDimensionlessFeatures::dominant_ideal_type()`.
 pub fn apply_regime_calibration(ship: &mut ShipModel) -> Option<RegimeCalibration> {
-    let mut entry = regime_for_ship_type(&ship.ship_type)?;
+    let mut entry = regime_for_ship_type(&ship.ship_type).or_else(|| {
+        let feat = HydroDimensionlessFeatures::from_ship(ship);
+        let fallback_type = match feat.dominant_ideal_type() {
+            HydroIdealType::DisplacementBlock => "battleship",
+            HydroIdealType::TransFroudeFastCapital => "battlecruiser",
+            HydroIdealType::SlenderWaveCutting => "cruiser",
+            HydroIdealType::SuperCriticalHighFn => "destroyer",
+        };
+        regime_for_ship_type(fallback_type)
+    })?;
     let cases = historical_cases();
     let subset: Vec<&HistoricalCase> = cases
         .iter()
@@ -521,8 +531,18 @@ pub fn blend_for_ship_type(ship_type: &str) -> Option<BlendCalibration> {
 }
 
 /// Apply the blended regime model (and both dimensionless style-adaptive factors) to a design.
+/// If `ship.ship_type` is unknown or empty, falls back to `HydroDimensionlessFeatures::dominant_ideal_type()`.
 pub fn apply_blend_calibration(ship: &mut ShipModel) -> Option<BlendCalibration> {
-    let mut entry = blend_for_ship_type(&ship.ship_type)?;
+    let mut entry = blend_for_ship_type(&ship.ship_type).or_else(|| {
+        let feat = HydroDimensionlessFeatures::from_ship(ship);
+        let fallback_type = match feat.dominant_ideal_type() {
+            HydroIdealType::DisplacementBlock => "battleship",
+            HydroIdealType::TransFroudeFastCapital => "battlecruiser",
+            HydroIdealType::SlenderWaveCutting => "cruiser",
+            HydroIdealType::SuperCriticalHighFn => "destroyer",
+        };
+        blend_for_ship_type(fallback_type)
+    })?;
     let cases = historical_cases();
     let subset: Vec<&HistoricalCase> = cases
         .iter()
@@ -951,5 +971,28 @@ mod tests {
             f_dd.dominant_ideal_type(),
             HydroIdealType::SuperCriticalHighFn
         );
+    }
+
+    #[test]
+    fn calibration_succeeds_without_ship_type_label() {
+        let mut ship = crate::presets::get_preset("baltimore").expect("baltimore");
+        // Clear all identity and ship_type strings
+        ship.ship_type = "".into();
+        ship.country = "".into();
+        ship.name = "".into();
+
+        let r_cal = apply_regime_calibration(&mut ship);
+        assert!(
+            r_cal.is_some(),
+            "Regime calibration must succeed via hydro ideal type fallback"
+        );
+        assert!(ship.engine.hp_max > 0.0 && ship.engine.hp_max.is_finite());
+
+        let b_cal = apply_blend_calibration(&mut ship);
+        assert!(
+            b_cal.is_some(),
+            "Blend calibration must succeed via hydro ideal type fallback"
+        );
+        assert!(ship.engine.hp_max > 0.0 && ship.engine.hp_max.is_finite());
     }
 }

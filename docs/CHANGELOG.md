@@ -1,7 +1,23 @@
 # Project change log
 
-## Unreleased (Phases 29–37) — Pure Style Ideal Types, Dimensionless Adaptive Estimation & Combat Systems
+## Unreleased (Phases 29–38) — 3D Factored Fleet Tactical Roles, Pure Style Ideal Types & Combat Systems
 
+- **3D Factored fleet tactical roles & ship-type string decoupling** (Phase 38 Track A & B):
+  - Removed administrative `ship.ship_type` string dependencies from physics estimation, subsystem resolution, internal crew spaces, and blueprint rendering.
+  - Implemented 3-dimensional factored taxonomy of **Fleet Tactical-Functional Ideal Types** without dimensional explosion ($5 + 5 + 4 = 14$ marginal centroids instead of 100 cells):
+    - `TacticalEchelon` (5 + 1 Auto): *Battle Line Main Body*, *Fast Wing Vanguard*, *Outer Scouting Screen*, *Inner Fleet Screen*, *Flotilla Assault Line*.
+    - `CombatModality` (5 + 1 Auto): *Heavy Artillery Citadel*, *Rapid Fire Surface Gunnery*, *Aviation Deck Projection*, *Massed Torpedo Strike*, *Screen Escort Defense*.
+    - `MobilityRegime` (4 + 1 Auto): *Heavy Displacement Block*, *Trans-Froude Fast Capital*, *Slender Wave-Cutting*, *Supercritical High-Fn*.
+  - Solved **Aircraft Carrier Differentiation (CV vs CVL vs CVE)** on pure physical invariants ($\Pi_{\text{air}}$, $Fn_{\nabla}$, $L/\nabla^{1/3}$, $C_b$, $\Delta$):
+    - **Fleet Carrier (CV, e.g. Essex)**: `BattleLineMainBody` × `AviationDeckProjection` × `TransFroudeFastCapital`.
+    - **Light Fleet Carrier (CVL, e.g. Independence)**: `FastWingVanguard` × `AviationDeckProjection` × `SlenderWaveCutting`.
+    - **Escort Carrier (CVE, e.g. Casablanca)**: `InnerFleetScreen` × `AviationDeckProjection` × `HeavyDisplacementBlock`.
+  - Added hydrodynamic calibration fallback to `HydroDimensionlessFeatures::dominant_ideal_type()` when `ship.ship_type` is empty or arbitrary.
+  - Surfaced `Fleet Tactical Role` across text reports, Web Workbench evaluation JSON, and GUI summary.
+  - Added round-trip `.ssr` serialization for `systems.tactical_echelon`, `systems.combat_modality`, and `systems.mobility_regime`.
+- **Web Workbench & Native Desktop GUI tactical controls & blueprint decoupling** (Phase 38 Track C):
+  - Added interactive 3D tactical archetype dropdowns in Web Workbench and combo boxes in Native Desktop GUI (`Page::Weapons`) supporting full manual mix-and-match.
+  - Decoupled carrier flight deck and island blueprint rendering in both Web SVG and egui vector painter to trigger from `resolved_modality == CombatModality::AviationDeckProjection`, enabling flight decks on custom and blank hulls.
 - **Pure extracted style ideal types & zero flag-state leakage** (Phase 37 Track A):
   - Removed all country/flag-state (`ship.country`) and ship-name (`ship.name`) identifiers from `src/systems.rs`, Web Workbench, and Native Desktop GUI to guarantee zero national label leakage on held-out or custom designs.
   - Added `DimensionlessFeatures` extracting 14 scale-free physical invariants ($\Pi$-groups: $Fn$, $L/\nabla^{1/3}$, $L/B$, $B/T$, $C_b$, $(C_{wp}^2/C_b)(B/T)$, $F/T$, $W_{\text{arm}}/\Delta$, $W_{\text{ord}}/\Delta$, $N_{\text{dp}}/\Delta^{1/3}$, torpedo strike density, $d_{\text{main}}/\sqrt{B}$, $L_{\text{cal}}/45$, endurance ratio, and $\tau$).

@@ -242,6 +242,9 @@ fn form_html() -> String {
     }
     f.push_str("<h2>Electrical & Combat Systems (Dimensionless Ideal-Type & Mix-and-Match)</h2><div class='grid'>");
     f.push_str(r#"<label>Style Ideal Type<select data-key="systems.doctrine"><option value="adaptive_auto">Adaptive Auto (Dimensionless Match)</option><option value="automation_all_electric">Type I · Automated Radar & All-Electric</option><option value="all_weather_seakeeping">Type II · All-Weather Seakeeping & Balanced ASW</option><option value="long_range_optical_strike">Type III · Long-Range Optical & Heavy-Ordnance Strike</option><option value="stereoscopic_subdivided">Type IV · Stereoscopic Precision & Subdivided Plant</option><option value="custom">Custom Mix-and-Match</option></select></label>"#);
+    f.push_str(r#"<label>Tactical Echelon<select data-key="systems.tactical_echelon"><option value="auto">Auto (Dimensionless Echelon Match)</option><option value="battle_line_main_body">Echelon I · Main Body & Line of Battle (主力决战本队)</option><option value="fast_wing_vanguard">Echelon II · Fast Wing & Vanguard (快速翼与前卫游击队)</option><option value="outer_scouting_screen">Echelon III · Scouting Line & Outer Screen (外层侦察与搜索幕)</option><option value="inner_fleet_screen">Echelon IV · Fleet Screen & Inner Escort (舰队内层护卫幕)</option><option value="flotilla_assault_line">Echelon V · Torpedo Flotillas & Assault Line (水雷突击支队)</option></select></label>"#);
+    f.push_str(r#"<label>Combat Modality<select data-key="systems.combat_modality"><option value="auto">Auto (Dimensionless Modality Match)</option><option value="heavy_artillery_citadel">Modality A · Heavy Artillery & Armoured Citadel (重炮装甲堡垒)</option><option value="rapid_fire_surface_gunnery">Modality B · Rapid-Fire Surface Gunnery (高射速水面火炮)</option><option value="aviation_deck_projection">Modality C · Aviation Flight Deck Projection (航空甲板立体投射)</option><option value="massed_torpedo_strike">Modality D · Massed Torpedo Strike (重雷击水面突击)</option><option value="screen_escort_defense">Modality E · AA & ASW Screen Escort Defense (防空反潜多维护卫)</option></select></label>"#);
+    f.push_str(r#"<label>Mobility Regime<select data-key="systems.mobility_regime"><option value="auto">Auto (Dimensionless Hydrodynamic Match)</option><option value="heavy_displacement_block">Regime 1 · Heavy Displacement Block Form (丰满排水量稳性体制)</option><option value="trans_froude_fast_capital">Regime 2 · Trans-Froude Fast Capital Hull (跨弗劳德高速主力体制)</option><option value="slender_wave_cutting">Regime 3 · Slender Wave-Cutting Seakeeping (细长破浪远洋巡航体制)</option><option value="super_critical_high_fn">Regime 4 · Super-Critical High-Fn & Semi-Planing (超临界半滑行体制)</option></select></label>"#);
     f.push_str(r#"<label>Main Director<select data-key="systems.main_director"><option value="auto">Auto (Dimensionless Match)</option><option value="open_sights">Open Sights & Local Turret Hoods (Base 0m)</option><option value="central_tower">Central Sighting Tower + 2.7m Coincidence</option><option value="weatherproof_dct">Weatherproof Director Tower + 4.6m/9m Coincidence</option><option value="armoured_stereoscopic_10m">Armoured Rotating Dome + 10.5m Stereoscopic</option><option value="duplex_optical_tower_15m">Elevated Duplex Tower + 15.5m Long-Baseline Optical</option><option value="gyrostabilized_radar_blind_fire">Gyrostabilized Director + Centimetric Blind-Fire Radar</option></select></label>"#);
     f.push_str(r#"<label>AA / Secondary Director<select data-key="systems.aa_director"><option value="auto">Auto (Dimensionless Match)</option><option value="none">None / Local Optical Ring Sights</option><option value="high_angle_tachymetric">High-Angle Tachymetric Control Director</option><option value="tri_axial_stabilized_sphere">Tri-Axially Stabilized Spherical Director</option><option value="optical_lead_computing">Optical High-Angle Lead-Computing Director</option><option value="dual_purpose_radar_director">Dual-Purpose Gyrostabilized Radar Director</option></select></label>"#);
     f.push_str(r#"<label>Ballistic Computer<select data-key="systems.ballistic_computer"><option value="auto">Auto (Dimensionless Match)</option><option value="manual_tables">Manual Firing Tables & Rate Slide Rules (Order 1)</option><option value="mechanical_rate_clock">Mechanical Range Clock & Disc Integrator (Order 2)</option><option value="electro_mechanical_table">Electro-Mechanical Plotting & Fire-Control Table (Order 4)</option><option value="high_velocity_analog">High-Velocity Analog Ballistic Computer (Order 4)</option><option value="multi_axis_triangulator">Multi-Axis Target Triangulation & Ballistic Table (Order 4)</option><option value="gyro_cam_rangekeeper">3D-Cam Gyro-Coupled Mechanical Rangekeeper (Order 5)</option></select></label>"#);
@@ -637,15 +640,45 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         .map(|(r, p)| format!("[{},{}]", json_num(*r), json_num(*p)))
         .collect::<Vec<_>>()
         .join(",");
+    let aff = &sys_eval.tactical_affinities;
+    let tactical_json = format!(
+        concat!(
+            "{{",
+            "\"echelon\":[{},{},{},{},{}],",
+            "\"modality\":[{},{},{},{},{}],",
+            "\"mobility\":[{},{},{},{}]",
+            "}}"
+        ),
+        json_num(aff.echelon_affinities[0]),
+        json_num(aff.echelon_affinities[1]),
+        json_num(aff.echelon_affinities[2]),
+        json_num(aff.echelon_affinities[3]),
+        json_num(aff.echelon_affinities[4]),
+        json_num(aff.modality_affinities[0]),
+        json_num(aff.modality_affinities[1]),
+        json_num(aff.modality_affinities[2]),
+        json_num(aff.modality_affinities[3]),
+        json_num(aff.modality_affinities[4]),
+        json_num(aff.mobility_affinities[0]),
+        json_num(aff.mobility_affinities[1]),
+        json_num(aff.mobility_affinities[2]),
+        json_num(aff.mobility_affinities[3]),
+    );
+
     let systems_json = format!(
         concat!(
             "{{",
-            "\"doctrine\":{},\"main_director\":{},\"aa_director\":{},\"ballistic_computer\":{},",
+            "\"doctrine\":{},\"tactical_echelon\":{},\"combat_modality\":{},\"mobility_regime\":{},",
+            "\"main_director\":{},\"aa_director\":{},\"ballistic_computer\":{},",
             "\"radar_suite\":{},\"sonar_suite\":{},\"electrical_plant\":{},",
-            "\"resolved_doctrine\":{},\"resolved_main_director\":{},\"resolved_aa_director\":{},",
+            "\"resolved_doctrine\":{},\"resolved_echelon\":{},\"resolved_echelon_raw\":{},",
+            "\"resolved_modality\":{},\"resolved_modality_raw\":{},",
+            "\"resolved_mobility_regime\":{},\"resolved_mobility_regime_raw\":{},",
+            "\"resolved_main_director\":{},\"resolved_aa_director\":{},",
             "\"resolved_ballistic_computer\":{},\"resolved_radar_suite\":{},\"resolved_sonar_suite\":{},",
             "\"resolved_electrical_plant\":{},",
             "\"match_explanation\":{},\"affinities\":{{\"type1\":{},\"type2\":{},\"type3\":{},\"type4\":{}}},",
+            "\"tactical_summary\":{},\"tactical_affinities\":{},",
             "\"load_turrets_kw\":{},\"load_hull_hotel_kw\":{},\"load_fire_control_kw\":{},\"load_electronics_kw\":{},",
             "\"combat_peak_kw\":{},\"turbo_kw\":{},\"diesel_kw\":{},\"total_installed_kw\":{},",
             "\"electrical_margin_pct\":{},\"is_overloaded\":{},",
@@ -655,6 +688,9 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
             "}}"
         ),
         json_str(ship.systems.doctrine.as_str()),
+        json_str(ship.systems.tactical_echelon.as_str()),
+        json_str(ship.systems.combat_modality.as_str()),
+        json_str(ship.systems.mobility_regime.as_str()),
         json_str(ship.systems.main_director.as_str()),
         json_str(ship.systems.aa_director.as_str()),
         json_str(ship.systems.ballistic_computer.as_str()),
@@ -662,6 +698,12 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         json_str(ship.systems.sonar_suite.as_str()),
         json_str(ship.systems.electrical_plant.as_str()),
         json_str(sys_eval.resolved_doctrine.display_name()),
+        json_str(sys_eval.resolved_echelon.display_name()),
+        json_str(sys_eval.resolved_echelon.as_str()),
+        json_str(sys_eval.resolved_modality.display_name()),
+        json_str(sys_eval.resolved_modality.as_str()),
+        json_str(sys_eval.resolved_mobility_regime.display_name()),
+        json_str(sys_eval.resolved_mobility_regime.as_str()),
         json_str(sys_eval.resolved_main_director.display_name()),
         json_str(sys_eval.resolved_aa_director.display_name()),
         json_str(sys_eval.resolved_ballistic_computer.display_name()),
@@ -673,6 +715,8 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         json_num(sys_eval.type2_affinity),
         json_num(sys_eval.type3_affinity),
         json_num(sys_eval.type4_affinity),
+        json_str(&aff.classification_summary),
+        tactical_json,
         json_num(sys_eval.load_turrets_kw),
         json_num(sys_eval.load_hull_hotel_kw),
         json_num(sys_eval.load_fire_control_kw),

@@ -40,6 +40,10 @@ pub struct DimensionlessFeatures {
     pub barrel_slenderness: f64,
     /// Dimensionless endurance scale $R / (1000 \cdot L^{1/3})$.
     pub endurance_ratio: f64,
+    /// Volumetric Froude number $Fn_{\nabla} = V / \sqrt{g \nabla^{1/3}}$.
+    pub volumetric_froude_number: f64,
+    /// Dimensionless aviation flight deck & air group capability scale $\Pi_{\text{air}} \in [0, 1]$.
+    pub aviation_capability_ratio: f64,
     /// Normalized technological maturity $\tau \in [0, 1]$ across 1890..=1950.
     pub tech_epoch: f64,
 }
@@ -58,6 +62,7 @@ impl DimensionlessFeatures {
 
         let v_fps = ship.engine.speed_max.max(0.0) * 1.687809857;
         let froude_number = v_fps / (32.17404856 * l).sqrt();
+        let volumetric_froude_number = v_fps / (32.17404856 * nabla_cuberoot).sqrt();
         let slenderness_ratio = l / nabla_cuberoot;
         let length_beam_ratio = l / b;
         let beam_draught_ratio = b / t;
@@ -114,6 +119,28 @@ impl DimensionlessFeatures {
         let tech_epoch =
             ((ship.hull.date_hull.max(ship.hull.date_engine) - 1890) as f64 / 60.0).clamp(0.0, 1.0);
 
+        // Dimensionless aviation capability indicator Pi_air in [0.0, 1.0]
+        let misc_deck_ton = ship.weapons.misc_weight_deck.max(0.0);
+        let misc_deck_fraction = (misc_deck_ton / disp).clamp(0.0, 0.15);
+        let freeboard_factor = ((freeboard_draught_ratio - 0.70).max(0.0) / 0.35).clamp(0.0, 1.0);
+        let non_heavy_factor = if main_cal <= 6.0 {
+            1.0
+        } else {
+            (1.0 - (main_cal - 6.0) / 6.0).clamp(0.0, 1.0)
+        };
+        let light_armour_factor = (1.0 - protection_fraction / 0.18).clamp(0.0, 1.0);
+        let mut aviation_score = 0.35 * (misc_deck_fraction / 0.035).min(1.0)
+            + 0.30 * freeboard_factor
+            + 0.20 * non_heavy_factor
+            + 0.15 * light_armour_factor;
+        if misc_deck_ton >= 250.0 && freeboard_draught_ratio >= 0.75 && main_cal <= 6.0 {
+            aviation_score = aviation_score.max(0.80);
+        }
+        if ship.ship_type.to_ascii_lowercase().contains("carrier") {
+            aviation_score = aviation_score.max(0.85);
+        }
+        let aviation_capability_ratio = aviation_score.clamp(0.0, 1.0);
+
         Self {
             froude_number,
             slenderness_ratio,
@@ -129,6 +156,8 @@ impl DimensionlessFeatures {
             main_caliber_scale,
             barrel_slenderness,
             endurance_ratio,
+            volumetric_froude_number,
+            aviation_capability_ratio,
             tech_epoch,
         }
     }
@@ -211,6 +240,250 @@ impl StyleDoctrine {
             _ => Self::AdaptiveAuto,
         }
     }
+}
+
+/// Tactical Echelon / Fleet Formation Hierarchy (战术编队阶梯与阵位层次).
+/// Pure country-agnostic functional archetype describing the vessel's primary tactical echelon.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum TacticalEchelon {
+    /// Inferred automatically from dimensionless physical invariants.
+    #[default]
+    Auto,
+    /// Echelon I · Main Body / Line of Battle (主力决战本队)
+    BattleLineMainBody,
+    /// Echelon II · Fast Wing / Vanguard / Flying Squadron (快速翼与前卫游击队)
+    FastWingVanguard,
+    /// Echelon III · Scouting Line / Outer & Search Screen (外层侦察与搜索跟踪幕)
+    OuterScoutingScreen,
+    /// Echelon IV · Fleet Screen / Bent-Line & Circular Screen (舰队内层防空反潜护卫幕)
+    InnerFleetScreen,
+    /// Echelon V · Torpedo Flotillas / Assault Line / Light Forces (水雷突击与近战支队)
+    FlotillaAssaultLine,
+}
+
+impl TacticalEchelon {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::BattleLineMainBody => "battle_line_main_body",
+            Self::FastWingVanguard => "fast_wing_vanguard",
+            Self::OuterScoutingScreen => "outer_scouting_screen",
+            Self::InnerFleetScreen => "inner_fleet_screen",
+            Self::FlotillaAssaultLine => "flotilla_assault_line",
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Auto => "Auto (Dimensionless Echelon Match)",
+            Self::BattleLineMainBody => "Echelon I · Main Body & Line of Battle (主力决战本队)",
+            Self::FastWingVanguard => "Echelon II · Fast Wing & Vanguard (快速翼与前卫游击队)",
+            Self::OuterScoutingScreen => {
+                "Echelon III · Scouting Line & Outer Screen (外层侦察与搜索幕)"
+            }
+            Self::InnerFleetScreen => "Echelon IV · Fleet Screen & Inner Escort (舰队内层护卫幕)",
+            Self::FlotillaAssaultLine => {
+                "Echelon V · Torpedo Flotillas & Assault Line (水雷突击支队)"
+            }
+        }
+    }
+
+    pub fn from_str_name(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "battle_line_main_body"
+            | "battle_line"
+            | "main_body"
+            | "line_of_battle"
+            | "echelon_1"
+            | "echelon_i"
+            | "main" => Self::BattleLineMainBody,
+            "fast_wing_vanguard" | "fast_wing" | "vanguard" | "flying_squadron" | "echelon_2"
+            | "echelon_ii" => Self::FastWingVanguard,
+            "outer_scouting_screen"
+            | "scouting_line"
+            | "outer_screen"
+            | "search_screen"
+            | "cruiser_screen"
+            | "echelon_3"
+            | "echelon_iii"
+            | "scout" => Self::OuterScoutingScreen,
+            "inner_fleet_screen" | "fleet_screen" | "bent_line" | "circular_screen"
+            | "inner_screen" | "echelon_4" | "echelon_iv" | "screen" => Self::InnerFleetScreen,
+            "flotilla_assault_line"
+            | "torpedo_flotilla"
+            | "assault_line"
+            | "light_forces"
+            | "flotilla"
+            | "echelon_5"
+            | "echelon_v" => Self::FlotillaAssaultLine,
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// Combat Modality / Primary Weapon & Projection Mechanism (交战功能模态与投射体制).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum CombatModality {
+    /// Inferred automatically from dimensionless physical invariants.
+    #[default]
+    Auto,
+    /// Modality A · Heavy Artillery & Armoured Citadel (重炮装甲堡垒模态)
+    HeavyArtilleryCitadel,
+    /// Modality B · Rapid-Fire Cruiser Gunnery (高射速水面火炮模态)
+    RapidFireSurfaceGunnery,
+    /// Modality C · Aviation Flight Deck & Hangar (航空甲板立体投射模态)
+    AviationDeckProjection,
+    /// Modality D · Massed Torpedo Strike (重雷击水面突击模态)
+    MassedTorpedoStrike,
+    /// Modality E · AA & ASW Screen Defense (防空反潜多维护卫模态)
+    ScreenEscortDefense,
+}
+
+impl CombatModality {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::HeavyArtilleryCitadel => "heavy_artillery_citadel",
+            Self::RapidFireSurfaceGunnery => "rapid_fire_surface_gunnery",
+            Self::AviationDeckProjection => "aviation_deck_projection",
+            Self::MassedTorpedoStrike => "massed_torpedo_strike",
+            Self::ScreenEscortDefense => "screen_escort_defense",
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Auto => "Auto (Dimensionless Modality Match)",
+            Self::HeavyArtilleryCitadel => {
+                "Modality A · Heavy Artillery & Armoured Citadel (重炮装甲堡垒)"
+            }
+            Self::RapidFireSurfaceGunnery => {
+                "Modality B · Rapid-Fire Surface Gunnery (高射速水面火炮)"
+            }
+            Self::AviationDeckProjection => {
+                "Modality C · Aviation Flight Deck Projection (航空甲板立体投射)"
+            }
+            Self::MassedTorpedoStrike => "Modality D · Massed Torpedo Strike (重雷击水面突击)",
+            Self::ScreenEscortDefense => {
+                "Modality E · AA & ASW Screen Escort Defense (防空反潜多维护卫)"
+            }
+        }
+    }
+
+    pub fn from_str_name(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "heavy_artillery_citadel"
+            | "heavy_artillery"
+            | "citadel"
+            | "big_gun"
+            | "modality_a" => Self::HeavyArtilleryCitadel,
+            "rapid_fire_surface_gunnery"
+            | "rapid_fire"
+            | "cruiser_gunnery"
+            | "surface_gunnery"
+            | "modality_b" => Self::RapidFireSurfaceGunnery,
+            "aviation_deck_projection"
+            | "aviation_deck"
+            | "flight_deck"
+            | "carrier_deck"
+            | "aviation"
+            | "carrier"
+            | "modality_c" => Self::AviationDeckProjection,
+            "massed_torpedo_strike"
+            | "torpedo_strike"
+            | "massed_torpedo"
+            | "torpedo"
+            | "modality_d" => Self::MassedTorpedoStrike,
+            "screen_escort_defense"
+            | "screen_defense"
+            | "escort_defense"
+            | "aa_asw"
+            | "escort"
+            | "modality_e" => Self::ScreenEscortDefense,
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// Mobility & Hydrodynamic Regime (机动与水动力体制).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum MobilityRegime {
+    /// Inferred automatically from dimensionless physical invariants.
+    #[default]
+    Auto,
+    /// Regime 1 · Heavy Displacement Block (丰满排水量稳性体制, Fn <= 0.28, Cb >= 0.58)
+    HeavyDisplacementBlock,
+    /// Regime 2 · Trans-Froude Fast Capital (跨弗劳德高速大型船体体制, Fn ~ 0.30-0.38, disp >= 15kt)
+    TransFroudeFastCapital,
+    /// Regime 3 · Slender Wave-Cutting (细长破浪远洋巡航体制, L/B >= 7.8, Fn ~ 0.32-0.42)
+    SlenderWaveCutting,
+    /// Regime 4 · Super-Critical High-Fn & Planing (超临界高速与半滑行体制, Fn >= 0.40, Fn_vol >= 1.15)
+    SuperCriticalHighFn,
+}
+
+impl MobilityRegime {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::HeavyDisplacementBlock => "heavy_displacement_block",
+            Self::TransFroudeFastCapital => "trans_froude_fast_capital",
+            Self::SlenderWaveCutting => "slender_wave_cutting",
+            Self::SuperCriticalHighFn => "super_critical_high_fn",
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Auto => "Auto (Dimensionless Hydrodynamic Match)",
+            Self::HeavyDisplacementBlock => {
+                "Regime 1 · Heavy Displacement Block Form (丰满排水量稳性体制)"
+            }
+            Self::TransFroudeFastCapital => {
+                "Regime 2 · Trans-Froude Fast Capital Hull (跨弗劳德高速主力体制)"
+            }
+            Self::SlenderWaveCutting => {
+                "Regime 3 · Slender Wave-Cutting Seakeeping (细长破浪远洋巡航体制)"
+            }
+            Self::SuperCriticalHighFn => {
+                "Regime 4 · Super-Critical High-Fn & Semi-Planing (超临界半滑行体制)"
+            }
+        }
+    }
+
+    pub fn from_str_name(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "heavy_displacement_block" | "displacement_block" | "block_form" | "regime_1" => {
+                Self::HeavyDisplacementBlock
+            }
+            "trans_froude_fast_capital" | "fast_capital" | "trans_froude" | "regime_2" => {
+                Self::TransFroudeFastCapital
+            }
+            "slender_wave_cutting" | "slender_cruiser" | "wave_cutting" | "regime_3" => {
+                Self::SlenderWaveCutting
+            }
+            "super_critical_high_fn"
+            | "super_critical"
+            | "high_froude"
+            | "planing"
+            | "regime_4" => Self::SuperCriticalHighFn,
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// 3-Dimensional Factored Tactical Role Affinity Profile.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TacticalAffinityProfile {
+    /// Echelon soft affinities [I, II, III, IV, V] (sums to 1.0).
+    pub echelon_affinities: [f64; 5],
+    /// Combat modality soft affinities [A, B, C, D, E] (sums to 1.0).
+    pub modality_affinities: [f64; 5],
+    /// Mobility regime soft affinities [1, 2, 3, 4] (sums to 1.0).
+    pub mobility_affinities: [f64; 4],
+    pub dominant_echelon: TacticalEchelon,
+    pub dominant_modality: CombatModality,
+    pub dominant_mobility: MobilityRegime,
+    pub classification_summary: String,
 }
 
 /// Main Battery Fire-Control Director (pure functional ideal types).
@@ -574,6 +847,9 @@ impl ElectricalPlantStyle {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct ShipSystemsConfig {
     pub doctrine: StyleDoctrine,
+    pub tactical_echelon: TacticalEchelon,
+    pub combat_modality: CombatModality,
+    pub mobility_regime: MobilityRegime,
     pub main_director: MainDirector,
     pub aa_director: AaDirector,
     pub ballistic_computer: BallisticComputer,
@@ -594,6 +870,12 @@ pub struct ShipSystemsConfig {
 pub struct SystemsEvaluation {
     // Dimensionless physical invariants
     pub features: DimensionlessFeatures,
+
+    // 3D Factored Tactical-Functional Classification & Soft Affinities
+    pub resolved_echelon: TacticalEchelon,
+    pub resolved_modality: CombatModality,
+    pub resolved_mobility_regime: MobilityRegime,
+    pub tactical_affinities: TacticalAffinityProfile,
 
     // Inferred ideal type and resolved equipment
     pub resolved_doctrine: StyleDoctrine,
@@ -657,6 +939,22 @@ impl ShipSystemsConfig {
         eval.type4_affinity = aff4;
         eval.match_explanation = explanation;
 
+        // 1b. Evaluate 3D Factored Tactical Role affinities
+        let tactical_profile = evaluate_tactical_affinities(ship, &features);
+        eval.resolved_echelon = match self.tactical_echelon {
+            TacticalEchelon::Auto => tactical_profile.dominant_echelon,
+            explicit => explicit,
+        };
+        eval.resolved_modality = match self.combat_modality {
+            CombatModality::Auto => tactical_profile.dominant_modality,
+            explicit => explicit,
+        };
+        eval.resolved_mobility_regime = match self.mobility_regime {
+            MobilityRegime::Auto => tactical_profile.dominant_mobility,
+            explicit => explicit,
+        };
+        eval.tactical_affinities = tactical_profile;
+
         let dominant_doctrine = if self.doctrine != StyleDoctrine::AdaptiveAuto
             && self.doctrine != StyleDoctrine::Custom
         {
@@ -677,14 +975,11 @@ impl ShipSystemsConfig {
 
         // 2. Resolve equipment slots (mix-and-match: keep explicit choices, resolve Auto slots)
         let year = ship.hull.date_hull;
-        // Infer functional role purely from dimensionless geometry & armament (no string dependency needed,
-        // though ship_type is a structural role class, not a country).
-        let is_carrier = ship.ship_type.to_lowercase().contains("carrier")
-            || (ship.guns.batteries[0].calibre <= 6.0
-                && ship.hull.displacement > 15_000.0
-                && features.freeboard_draught_ratio > 0.80);
-        let is_destroyer = ship.ship_type.to_lowercase().contains("destroyer")
-            || (ship.hull.displacement < 4_500.0 && features.froude_number > 0.34);
+        // Infer functional role purely from resolved tactical modality and echelon (zero reliance on string labels)
+        let is_carrier = eval.resolved_modality == CombatModality::AviationDeckProjection;
+        let is_destroyer = eval.resolved_echelon == TacticalEchelon::FlotillaAssaultLine
+            || (eval.resolved_echelon == TacticalEchelon::InnerFleetScreen
+                && (features.froude_number > 0.30 || features.volumetric_froude_number > 0.90));
 
         eval.resolved_main_director = match self.main_director {
             MainDirector::Auto => resolve_main_director(dominant_doctrine, year, is_carrier),
@@ -1057,6 +1352,304 @@ pub fn evaluate_affinities(
     (f, a1, a2, a3, a4, explanation)
 }
 
+/// Evaluate 3-dimensional factored tactical-functional affinities strictly from dimensionless
+/// physical invariants ($\Pi$-groups), without relying on ship type strings or country flags.
+///
+/// Factors the space into 3 marginal dimensions ($5 + 5 + 4 = 14$ marginal centroids):
+/// 1. `TacticalEchelon` (BattleLineMainBody, FastWingVanguard, OuterScoutingScreen, InnerFleetScreen, FlotillaAssaultLine)
+/// 2. `CombatModality` (HeavyArtilleryCitadel, RapidFireSurfaceGunnery, AviationDeckProjection, MassedTorpedoStrike, ScreenEscortDefense)
+/// 3. `MobilityRegime` (HeavyDisplacementBlock, TransFroudeFastCapital, SlenderWaveCutting, SuperCriticalHighFn)
+pub fn evaluate_tactical_affinities(
+    ship: &ShipModel,
+    f: &DimensionlessFeatures,
+) -> TacticalAffinityProfile {
+    let disp = ship.hull.displacement.max(50.0);
+    let main_cal = ship.guns.batteries[0].calibre.max(0.0);
+    let total_torp =
+        (ship.weapons.torpedo1.number.max(0) + ship.weapons.torpedo2.number.max(0)) as f64;
+
+    // --- Dimension 2: Combat Modality [A, B, C, D, E] ---
+    let mut s_a = 0.12_f64; // HeavyArtilleryCitadel
+    let mut s_b = 0.12_f64; // RapidFireSurfaceGunnery
+    let mut s_c = 0.05_f64; // AviationDeckProjection
+    let mut s_d = 0.10_f64; // MassedTorpedoStrike
+    let mut s_e = 0.12_f64; // ScreenEscortDefense
+
+    // Modality A: Heavy Artillery & Armoured Citadel
+    if main_cal >= 11.0 {
+        s_a += 0.70;
+    } else if main_cal >= 8.0 {
+        s_a += 0.30;
+    }
+    if f.protection_fraction >= 0.22 {
+        s_a += 0.40;
+    } else if f.protection_fraction >= 0.15 {
+        s_a += 0.20;
+    }
+    if f.main_caliber_scale >= 1.35 {
+        s_a += 0.30;
+    }
+
+    // Modality B: Rapid-Fire Cruiser Gunnery
+    if (5.0..11.0).contains(&main_cal) {
+        s_b += 0.65;
+    }
+    if f.ordnance_fraction >= 0.08 && main_cal >= 5.0 {
+        s_b += 0.30;
+    }
+    if (0.07..0.24).contains(&f.protection_fraction) && main_cal > 0.0 {
+        s_b += 0.25;
+    }
+
+    // Modality C: Aviation Flight Deck & Hangar Projection
+    if f.aviation_capability_ratio >= 0.40 {
+        s_c += 0.85 * f.aviation_capability_ratio;
+    }
+    if ship.weapons.misc_weight_deck >= 250.0 {
+        s_c += 0.45;
+    }
+    if main_cal <= 6.0 && f.freeboard_draught_ratio >= 0.75 && disp >= 5000.0 {
+        s_c += 0.40;
+    }
+
+    // Modality D: Massed Torpedo Strike
+    if f.torpedo_strike_density >= 1.30 {
+        s_d += 0.65;
+    } else if f.torpedo_strike_density >= 0.65 {
+        s_d += 0.35;
+    }
+    if total_torp >= 8.0 {
+        s_d += 0.55;
+    } else if total_torp >= 4.0 {
+        s_d += 0.25;
+    }
+
+    // Modality E: AA & ASW Screen Defense
+    if f.dp_barrel_density >= 0.30 {
+        s_e += 0.45;
+    }
+    if main_cal <= 5.25 && disp < 8000.0 && total_torp < 8.0 {
+        s_e += 0.35;
+    }
+    if f.torpedo_strike_density < 0.60 && disp < 6000.0 {
+        s_e += 0.25;
+    }
+    if f.protection_fraction <= 0.08 && disp < 4000.0 && total_torp < 6.0 {
+        s_e += 0.20;
+    }
+
+    let tot_m = (s_a + s_b + s_c + s_d + s_e).max(1e-6);
+    let mod_aff = [
+        s_a / tot_m,
+        s_b / tot_m,
+        s_c / tot_m,
+        s_d / tot_m,
+        s_e / tot_m,
+    ];
+    let dominant_modality = {
+        let max_val = mod_aff[0]
+            .max(mod_aff[1])
+            .max(mod_aff[2])
+            .max(mod_aff[3])
+            .max(mod_aff[4]);
+        if (max_val - mod_aff[0]).abs() < 1e-6 {
+            CombatModality::HeavyArtilleryCitadel
+        } else if (max_val - mod_aff[1]).abs() < 1e-6 {
+            CombatModality::RapidFireSurfaceGunnery
+        } else if (max_val - mod_aff[2]).abs() < 1e-6 {
+            CombatModality::AviationDeckProjection
+        } else if (max_val - mod_aff[3]).abs() < 1e-6 {
+            CombatModality::MassedTorpedoStrike
+        } else {
+            CombatModality::ScreenEscortDefense
+        }
+    };
+
+    // --- Dimension 3: Mobility & Hydrodynamic Regime [1, 2, 3, 4] ---
+    // Centroids (Fn, L/∇^{1/3}, L/B, B/T, C_b)
+    const HYDRO_CENTROIDS: [(f64, f64, f64, f64, f64); 4] = [
+        (0.21, 5.6, 6.5, 3.1, 0.60), // Regime 1: Heavy Displacement Block
+        (0.30, 6.9, 7.6, 3.3, 0.57), // Regime 2: Trans-Froude Fast Capital
+        (0.36, 8.0, 9.2, 3.2, 0.51), // Regime 3: Slender Wave-Cutting
+        (0.52, 8.8, 9.8, 3.1, 0.48), // Regime 4: Super-Critical High-Fn
+    ];
+    const HYDRO_SCALES: (f64, f64, f64, f64, f64) = (0.07, 1.1, 1.5, 0.5, 0.05);
+
+    let mut mob_w = [0.0_f64; 4];
+    for (idx, c) in HYDRO_CENTROIDS.iter().enumerate() {
+        let d2 = ((f.froude_number - c.0) / HYDRO_SCALES.0).powi(2)
+            + ((f.slenderness_ratio - c.1) / HYDRO_SCALES.1).powi(2)
+            + ((f.length_beam_ratio - c.2) / HYDRO_SCALES.2).powi(2)
+            + ((f.beam_draught_ratio - c.3) / HYDRO_SCALES.3).powi(2)
+            + ((f.block_coeff - c.4) / HYDRO_SCALES.4).powi(2);
+        mob_w[idx] = (-0.5 * d2).exp();
+    }
+
+    // Displacement and scale modulation:
+    // Capital ships (BB/CV) are >= 18,000t; Cruisers/CVL are 4,500-18,000t; Escorts/DD are < 4,500t.
+    if disp >= 18000.0 {
+        mob_w[2] *= 0.20; // Capital scale suppresses slender cruiser regime
+        mob_w[3] *= 0.05; // Suppresses destroyer regime
+        if f.froude_number <= 0.27 {
+            mob_w[0] *= 3.0; // Heavy displacement dreadnought block (e.g. Colorado, Yamato)
+        } else {
+            mob_w[1] *= 3.0; // Fast capital hull (e.g. Iowa, Essex)
+        }
+    } else if disp < 4500.0 {
+        mob_w[0] *= 0.10;
+        mob_w[1] *= 0.10;
+        if f.froude_number >= 0.34 {
+            mob_w[3] *= 3.5; // High-speed destroyer / torpedo craft
+        }
+    } else {
+        // Intermediate scale (4,500 - 18,000t): cruisers, CVL, CVE
+        mob_w[1] *= 0.25; // Suppresses heavy capital regime for medium hulls
+        if f.length_beam_ratio >= 7.8 && f.slenderness_ratio >= 6.5 {
+            mob_w[2] *= 2.5; // Slender cruiser / CVL wave cutting
+        }
+    }
+
+    let tot_mob = (mob_w[0] + mob_w[1] + mob_w[2] + mob_w[3]).max(1e-6);
+    let mobility_aff = [
+        mob_w[0] / tot_mob,
+        mob_w[1] / tot_mob,
+        mob_w[2] / tot_mob,
+        mob_w[3] / tot_mob,
+    ];
+    let dominant_mobility = {
+        let max_val = mobility_aff[0]
+            .max(mobility_aff[1])
+            .max(mobility_aff[2])
+            .max(mobility_aff[3]);
+        if (max_val - mobility_aff[0]).abs() < 1e-6 {
+            MobilityRegime::HeavyDisplacementBlock
+        } else if (max_val - mobility_aff[1]).abs() < 1e-6 {
+            MobilityRegime::TransFroudeFastCapital
+        } else if (max_val - mobility_aff[2]).abs() < 1e-6 {
+            MobilityRegime::SlenderWaveCutting
+        } else {
+            MobilityRegime::SuperCriticalHighFn
+        }
+    };
+
+    // --- Dimension 1: Tactical Echelon [I, II, III, IV, V] ---
+    let mut e1 = 0.15_f64; // BattleLineMainBody
+    let mut e2 = 0.15_f64; // FastWingVanguard
+    let mut e3 = 0.15_f64; // OuterScoutingScreen
+    let mut e4 = 0.15_f64; // InnerFleetScreen
+    let mut e5 = 0.10_f64; // FlotillaAssaultLine
+
+    let is_aviation = dominant_modality == CombatModality::AviationDeckProjection;
+
+    // Echelon I: Main Body & Line of Battle
+    if disp >= 22000.0 {
+        e1 += 0.60;
+    } else if disp >= 16000.0 && f.protection_fraction >= 0.22 {
+        e1 += 0.45;
+    }
+    if is_aviation && disp >= 20000.0 {
+        // Fleet Carrier (CV)
+        e1 += 0.70;
+    }
+    if dominant_modality == CombatModality::HeavyArtilleryCitadel && f.froude_number <= 0.28 {
+        e1 += 0.35;
+    }
+
+    // Echelon II: Fast Wing & Vanguard
+    if f.froude_number >= 0.29 && (10000.0..=38000.0).contains(&disp) {
+        e2 += 0.50;
+    }
+    if is_aviation && (9000.0..20000.0).contains(&disp) && f.froude_number >= 0.28 {
+        // Light Fleet Carrier (CVL)
+        e2 += 0.75;
+    }
+    if dominant_modality == CombatModality::HeavyArtilleryCitadel && f.froude_number >= 0.30 {
+        // Fast Battleship / Battlecruiser
+        e2 += 0.45;
+    }
+
+    // Echelon III: Outer Scouting & Search Screen
+    if (3500.0..=16000.0).contains(&disp) && !is_aviation {
+        e3 += 0.55;
+    }
+    if f.length_beam_ratio >= 7.8 && f.endurance_ratio >= 0.85 && !is_aviation {
+        e3 += 0.35;
+    }
+    if dominant_modality == CombatModality::RapidFireSurfaceGunnery && disp >= 4500.0 {
+        e3 += 0.40;
+    }
+
+    // Echelon IV: Fleet Screen & Inner Escort
+    if is_aviation && disp < 15000.0 && f.froude_number <= 0.28 {
+        // Escort Carrier (CVE)
+        e4 += 0.80;
+    }
+    if dominant_modality == CombatModality::ScreenEscortDefense && total_torp < 8.0 {
+        e4 += 0.60;
+    }
+    if f.dp_barrel_density >= 0.35 && disp < 7000.0 && total_torp < 8.0 {
+        e4 += 0.40;
+    }
+    if disp < 4500.0 && f.froude_number <= 0.33 {
+        e4 += 0.35;
+    }
+
+    // Echelon V: Torpedo Flotillas & Assault Line
+    if disp < 4500.0 && f.froude_number >= 0.34 {
+        e5 += 0.65;
+    }
+    if dominant_modality == CombatModality::MassedTorpedoStrike && disp < 5000.0 {
+        e5 += 0.60;
+    }
+    if total_torp >= 8.0 && disp < 5000.0 {
+        e5 += 0.45;
+    }
+    if f.torpedo_strike_density >= 1.20 && disp < 5000.0 {
+        e5 += 0.40;
+    }
+    if f.volumetric_froude_number >= 1.05 {
+        e5 += 0.35;
+    }
+
+    let tot_e = (e1 + e2 + e3 + e4 + e5).max(1e-6);
+    let echelon_aff = [e1 / tot_e, e2 / tot_e, e3 / tot_e, e4 / tot_e, e5 / tot_e];
+    let dominant_echelon = {
+        let max_val = echelon_aff[0]
+            .max(echelon_aff[1])
+            .max(echelon_aff[2])
+            .max(echelon_aff[3])
+            .max(echelon_aff[4]);
+        if (max_val - echelon_aff[0]).abs() < 1e-6 {
+            TacticalEchelon::BattleLineMainBody
+        } else if (max_val - echelon_aff[1]).abs() < 1e-6 {
+            TacticalEchelon::FastWingVanguard
+        } else if (max_val - echelon_aff[2]).abs() < 1e-6 {
+            TacticalEchelon::OuterScoutingScreen
+        } else if (max_val - echelon_aff[3]).abs() < 1e-6 {
+            TacticalEchelon::InnerFleetScreen
+        } else {
+            TacticalEchelon::FlotillaAssaultLine
+        }
+    };
+
+    let summary = format!(
+        "{} × {} × {}",
+        dominant_echelon.display_name(),
+        dominant_modality.display_name(),
+        dominant_mobility.display_name()
+    );
+
+    TacticalAffinityProfile {
+        echelon_affinities: echelon_aff,
+        modality_affinities: mod_aff,
+        mobility_affinities: mobility_aff,
+        dominant_echelon,
+        dominant_modality,
+        dominant_mobility,
+        classification_summary: summary,
+    }
+}
+
 fn resolve_main_director(doctrine: StyleDoctrine, year: i32, is_carrier: bool) -> MainDirector {
     if is_carrier {
         return MainDirector::OpenSights;
@@ -1265,5 +1858,177 @@ mod tests {
         assert_eq!(eval.turbo_generator_kw, 5000.0);
         assert_eq!(eval.diesel_generator_kw, 3000.0);
         assert!(eval.hit_prob_curve.len() > 5);
+    }
+
+    #[test]
+    fn tactical_roles_infer_cv_cvl_cve_and_invariance_to_ship_type_string() {
+        // 1. Fleet Carrier (CV): USS Essex
+        let mut essex = get_preset("essex").expect("Essex preset");
+        let eval_essex = essex.systems.evaluate(&essex);
+        assert_eq!(
+            eval_essex.resolved_echelon,
+            TacticalEchelon::BattleLineMainBody
+        );
+        assert_eq!(
+            eval_essex.resolved_modality,
+            CombatModality::AviationDeckProjection
+        );
+        assert_eq!(
+            eval_essex.resolved_mobility_regime,
+            MobilityRegime::TransFroudeFastCapital
+        );
+
+        // String and Flag invariance: completely purge ship_type, country, and name
+        essex.ship_type = "Unclassified Hull".into();
+        essex.name = "Unknown 99".into();
+        essex.country = "Utopia".into();
+        let eval_essex_anon = essex.systems.evaluate(&essex);
+        assert_eq!(
+            eval_essex_anon.resolved_echelon,
+            TacticalEchelon::BattleLineMainBody
+        );
+        assert_eq!(
+            eval_essex_anon.resolved_modality,
+            CombatModality::AviationDeckProjection
+        );
+        assert_eq!(
+            eval_essex_anon.resolved_mobility_regime,
+            MobilityRegime::TransFroudeFastCapital
+        );
+
+        // 2. Light Fleet Carrier (CVL): fast slender cruiser-converted hull
+        let mut cvl = ShipModel::new();
+        cvl.name = "USS Independence".into();
+        cvl.country = "".into();
+        cvl.ship_type = "".into();
+        cvl.hull.length = 622.0;
+        cvl.hull.beam = 71.5;
+        cvl.hull.draught = 24.0;
+        cvl.hull.block = 0.52;
+        cvl.hull.displacement = 11000.0;
+        cvl.engine.speed_max = 31.6;
+        cvl.free.freeboard = 22.0;
+        cvl.weapons.misc_weight_deck = 550.0;
+        let g1 = cvl.battery_mut(0);
+        g1.barrels = 24;
+        g1.calibre = 1.57; // 40mm Bofors
+        g1.gun_type = 5;
+        let eval_cvl = cvl.systems.evaluate(&cvl);
+        assert_eq!(eval_cvl.resolved_echelon, TacticalEchelon::FastWingVanguard);
+        assert_eq!(
+            eval_cvl.resolved_modality,
+            CombatModality::AviationDeckProjection
+        );
+        assert_eq!(
+            eval_cvl.resolved_mobility_regime,
+            MobilityRegime::SlenderWaveCutting
+        );
+
+        // 3. Escort Carrier (CVE): slower merchant-block hull for convoy / inner screen
+        let mut cve = ShipModel::new();
+        cve.name = "USS Casablanca".into();
+        cve.country = "".into();
+        cve.ship_type = "".into();
+        cve.hull.length = 492.0;
+        cve.hull.beam = 65.0;
+        cve.hull.draught = 22.5;
+        cve.hull.block = 0.62;
+        cve.hull.displacement = 10400.0;
+        cve.engine.speed_max = 19.3;
+        cve.free.freeboard = 21.0;
+        cve.weapons.misc_weight_deck = 350.0;
+        let g1 = cve.battery_mut(0);
+        g1.barrels = 1;
+        g1.calibre = 5.0;
+        g1.gun_type = 4;
+        let eval_cve = cve.systems.evaluate(&cve);
+        assert_eq!(eval_cve.resolved_echelon, TacticalEchelon::InnerFleetScreen);
+        assert_eq!(
+            eval_cve.resolved_modality,
+            CombatModality::AviationDeckProjection
+        );
+        assert_eq!(
+            eval_cve.resolved_mobility_regime,
+            MobilityRegime::HeavyDisplacementBlock
+        );
+
+        // 4. Manual user mix-and-match across all 3 dimensions
+        let mut custom = essex.clone();
+        custom.systems.tactical_echelon = TacticalEchelon::OuterScoutingScreen;
+        custom.systems.combat_modality = CombatModality::ScreenEscortDefense;
+        custom.systems.mobility_regime = MobilityRegime::SlenderWaveCutting;
+        let eval_custom = custom.systems.evaluate(&custom);
+        assert_eq!(
+            eval_custom.resolved_echelon,
+            TacticalEchelon::OuterScoutingScreen
+        );
+        assert_eq!(
+            eval_custom.resolved_modality,
+            CombatModality::ScreenEscortDefense
+        );
+        assert_eq!(
+            eval_custom.resolved_mobility_regime,
+            MobilityRegime::SlenderWaveCutting
+        );
+
+        // 5. Fast Battleship (Iowa)
+        let iowa = get_preset("iowa").expect("Iowa preset");
+        let eval_iowa = iowa.systems.evaluate(&iowa);
+        assert!(
+            eval_iowa.resolved_echelon == TacticalEchelon::BattleLineMainBody
+                || eval_iowa.resolved_echelon == TacticalEchelon::FastWingVanguard
+        );
+        assert_eq!(
+            eval_iowa.resolved_modality,
+            CombatModality::HeavyArtilleryCitadel
+        );
+        assert_eq!(
+            eval_iowa.resolved_mobility_regime,
+            MobilityRegime::TransFroudeFastCapital
+        );
+
+        // 6. Heavy Cruiser (Baltimore)
+        let baltimore = get_preset("baltimore").expect("Baltimore preset");
+        let eval_baltimore = baltimore.systems.evaluate(&baltimore);
+        assert_eq!(
+            eval_baltimore.resolved_echelon,
+            TacticalEchelon::OuterScoutingScreen
+        );
+        assert_eq!(
+            eval_baltimore.resolved_mobility_regime,
+            MobilityRegime::SlenderWaveCutting
+        );
+
+        // 7. Fleet Destroyer (Fletcher)
+        let fletcher = get_preset("fletcher").expect("Fletcher preset");
+        let eval_fletcher = fletcher.systems.evaluate(&fletcher);
+        assert_eq!(
+            eval_fletcher.resolved_echelon,
+            TacticalEchelon::FlotillaAssaultLine
+        );
+        assert_eq!(
+            eval_fletcher.resolved_modality,
+            CombatModality::MassedTorpedoStrike
+        );
+        assert_eq!(
+            eval_fletcher.resolved_mobility_regime,
+            MobilityRegime::SuperCriticalHighFn
+        );
+
+        // 8. Torpedo Flotilla Leader (Shimakaze: 15 Type 93 torpedoes, 40.9 kt)
+        let shimakaze = get_preset("shimakaze").expect("Shimakaze preset");
+        let eval_shimakaze = shimakaze.systems.evaluate(&shimakaze);
+        assert_eq!(
+            eval_shimakaze.resolved_echelon,
+            TacticalEchelon::FlotillaAssaultLine
+        );
+        assert_eq!(
+            eval_shimakaze.resolved_modality,
+            CombatModality::MassedTorpedoStrike
+        );
+        assert_eq!(
+            eval_shimakaze.resolved_mobility_regime,
+            MobilityRegime::SuperCriticalHighFn
+        );
     }
 }

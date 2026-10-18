@@ -571,3 +571,35 @@ still 10.36% / blended 9.81%):
   - Added dimensionless mount mechanization & multi-barrel complexity scaling in `GunBattery::calculate()` for high-angle DP/AA mounts (`gun_type >= 4`) and modern multi-gun capital turrets, cutting **Armament+Ammo MAPE from 24.96% down to 15.27%** (`20.82%` $\to$ `14.08%` on armoured ships).
   - Integrated style-adaptive electrical, fire-control, radar, and sonar outfit weight into `engine.load_weight` so residual structural `engine.hull_weight` is no longer inflated by unallocated modern systems, reducing **Hull weight MAPE from 16.84% down to 13.57%** (`11.44%` $\to$ `10.13%` on armoured ships) and tightening regression gates in `tests/accuracy_regression.rs`.
 
+## Phase 38 — 3D factored fleet tactical roles, CV/CVL/CVE differentiation & ship_type string decoupling (completed 2026-10-18)
+
+- **Track A: 3-Dimensional Factored Tactical-Functional Taxonomy & Dimensionless $\Pi$-Invariants (`src/systems.rs`)**:
+  - Factored ship functional classification into 3 orthogonal tactical-physical dimensions to eliminate the curse of dimensionality ($5 + 5 + 4 = 14$ marginal centroids instead of $5 \times 5 \times 4 = 100$ cells):
+    - **`TacticalEchelon` (5 + 1 Auto)**: `BattleLineMainBody`, `FastWingVanguard`, `OuterScoutingScreen`, `InnerFleetScreen`, `FlotillaAssaultLine`.
+    - **`CombatModality` (5 + 1 Auto)**: `HeavyArtilleryCitadel`, `RapidFireSurfaceGunnery`, `AviationDeckProjection`, `MassedTorpedoStrike`, `ScreenEscortDefense`.
+    - **`MobilityRegime` (4 + 1 Auto)**: `HeavyDisplacementBlock`, `TransFroudeFastCapital`, `SlenderWaveCutting`, `SuperCriticalHighFn`.
+  - Expanded `DimensionlessFeatures` with volumetric Froude number ($Fn_{\nabla} = V / \sqrt{g \nabla^{1/3}}$) and aviation capability ratio ($\Pi_{\text{air}} \in [0, 1]$ from deck allowance, freeboard/draught, lack of heavy ordnance, and displacement scale).
+  - Defined `TacticalAffinityProfile` calculating soft Gaussian affinities across each dimension and exposing resolved composite fleet roles (e.g. `Battle Line Main Body · Heavy Artillery Citadel · Trans-Froude Fast Capital`).
+  - Resolved **Aircraft Carrier Differentiation (CV vs CVL vs CVE)** on pure physical invariants without string heuristics:
+    - **Fleet Carrier (CV, e.g. Essex)**: `BattleLineMainBody` × `AviationDeckProjection` × `TransFroudeFastCapital` ($\Delta \ge 18,000$ t, high $Fn_{\nabla}$, expansive deck).
+    - **Light Fleet Carrier (CVL, e.g. Independence)**: `FastWingVanguard` × `AviationDeckProjection` × `SlenderWaveCutting` (cruiser hull $L/\nabla^{1/3} > 8.0$, 30+ kt speed, intermediate displacement).
+    - **Escort Carrier (CVE, e.g. Casablanca)**: `InnerFleetScreen` × `AviationDeckProjection` × `HeavyDisplacementBlock` (full merchant/auxiliary block $C_b > 0.60$, moderate speed $Fn < 0.28$, compact displacement).
+  - Unit tests: `tactical_profile_and_carrier_differentiation`, `cvl_light_fleet_carrier_differentiation`, `cve_escort_carrier_differentiation`, `tactical_profile_and_string_invariance`.
+- **Track B: String Decoupling Across Physics, Systems, Spaces, Calibration & Blueprints**:
+  - Purged residual `ship.ship_type.contains("carrier")` and `"destroyer"` heuristics from `evaluate()` in `src/systems.rs`; combat subsystem resolution is now strictly driven by `resolved_modality == CombatModality::AviationDeckProjection` and `resolved_echelon == FlotillaAssaultLine || (InnerFleetScreen && Fn > 0.30)`.
+  - Decoupled hydrodynamic calibration fallback in `src/regime.rs` (`apply_regime_calibration`, `apply_blend_calibration`): if `ship.ship_type` is unknown or empty, falls back gracefully to `HydroDimensionlessFeatures::dominant_ideal_type()`.
+  - Decoupled `crew_volume_per_person(ship: &ShipModel)` in `src/spaces.rs` with scale-free dimensionless fallback based on volumetric slenderness and displacement scale.
+  - Surfaced `Fleet Tactical Role` in `ship_classification()` and `generate_report()` in `src/features.rs`.
+  - Extended `.ssr` file persistence in `src/io.rs` with round-trip serialization for `systems.tactical_echelon`, `systems.combat_modality`, `systems.mobility_regime`.
+- **Track C: Web Workbench & Native Desktop GUI Full Parity**:
+  - Web Workbench (`src/web.rs`, `src/web_page.html`):
+    - Added form selects for Tactical Echelon, Combat Modality, and Mobility Regime with full manual mix-and-match.
+    - Extended `/api/evaluate` JSON output with resolved tactical roles and affinities.
+    - Rendered Fleet Tactical Role on the Systems dashboard card.
+    - Decoupled blueprint carrier rendering: checks `resolved_modality_raw === 'aviation_deck_projection'`, enabling flight deck blueprints on custom/blank ship type hulls.
+  - Native Desktop GUI (`gui/src/app.rs`):
+    - Added 3 combo boxes in the Systems tab for Echelon, Modality, and Mobility Regime.
+    - Surfaced Fleet Tactical Role alongside Engineering Style.
+    - Decoupled carrier flight-deck painter rendering to check `CombatModality::AviationDeckProjection`.
+
+

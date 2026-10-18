@@ -263,6 +263,18 @@ pub fn serialize(ship: &ShipModel) -> String {
         ship.systems.doctrine.as_str().to_string(),
     );
     push(
+        "systems.tactical_echelon",
+        ship.systems.tactical_echelon.as_str().to_string(),
+    );
+    push(
+        "systems.combat_modality",
+        ship.systems.combat_modality.as_str().to_string(),
+    );
+    push(
+        "systems.mobility_regime",
+        ship.systems.mobility_regime.as_str().to_string(),
+    );
+    push(
         "systems.main_director",
         ship.systems.main_director.as_str().to_string(),
     );
@@ -800,6 +812,18 @@ fn set_value(ship: &mut ShipModel, key: &str, value: &str) -> Result<(), String>
             ship.systems.doctrine = crate::systems::StyleDoctrine::from_str_name(value);
             true
         }
+        "systems.tactical_echelon" => {
+            ship.systems.tactical_echelon = crate::systems::TacticalEchelon::from_str_name(value);
+            true
+        }
+        "systems.combat_modality" => {
+            ship.systems.combat_modality = crate::systems::CombatModality::from_str_name(value);
+            true
+        }
+        "systems.mobility_regime" => {
+            ship.systems.mobility_regime = crate::systems::MobilityRegime::from_str_name(value);
+            true
+        }
         "systems.main_director" => {
             ship.systems.main_director = crate::systems::MainDirector::from_str_name(value);
             true
@@ -1108,6 +1132,9 @@ mod tests {
         ship.engine.screws = 3;
         ship.engine.original_power_factor = 0.9;
         ship.engine.blend_weight = 0.6;
+        ship.systems.tactical_echelon = crate::systems::TacticalEchelon::FastWingVanguard;
+        ship.systems.combat_modality = crate::systems::CombatModality::AviationDeckProjection;
+        ship.systems.mobility_regime = crate::systems::MobilityRegime::SlenderWaveCutting;
 
         let text = serialize(&ship);
         let mut loaded = ShipModel::new();
@@ -1123,6 +1150,18 @@ mod tests {
         assert_eq!(loaded.engine.blend_weight, 0.6);
         assert_eq!(loaded.engine.planing_min_speed_kt, 25.0);
         assert_eq!(loaded.engine.planing_max_displacement_tons, 3000.0);
+        assert_eq!(
+            loaded.systems.tactical_echelon,
+            crate::systems::TacticalEchelon::FastWingVanguard
+        );
+        assert_eq!(
+            loaded.systems.combat_modality,
+            crate::systems::CombatModality::AviationDeckProjection
+        );
+        assert_eq!(
+            loaded.systems.mobility_regime,
+            crate::systems::MobilityRegime::SlenderWaveCutting
+        );
     }
 
     #[test]

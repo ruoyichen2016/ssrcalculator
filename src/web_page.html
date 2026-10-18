@@ -635,7 +635,8 @@ function renderBlueprint(r) {
                       `<circle cx="${tx2.toFixed(1)}" cy="${(yCl + sOffset).toFixed(1)}" r="2.6" fill="#d6b54f" stroke="#fff" stroke-width="0.6" class="bp-interactive" data-tip="${esc(g2Tip)}"/>`;
   }
 
-  const isCarrier = r.ship_type && r.ship_type.toLowerCase().includes('carrier');
+  const isCarrier = (r.systems && r.systems.resolved_modality_raw === 'aviation_deck_projection') ||
+                    (r.ship_type && r.ship_type.toLowerCase().includes('carrier'));
   let carrierProfSvg = '';
   let carrierPlanSvg = '';
   if (isCarrier) {
@@ -1048,8 +1049,13 @@ function renderSystems(r) {
     <div style="background:#0b1928;border:1px solid var(--line);border-radius:6px;padding:12px;margin-bottom:1rem;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <div>
-          <strong style="color:#58a6ff;font-size:1.05rem;">Style Ideal Type: ${esc(s.resolved_doctrine)}</strong>
-          <span style="color:#8b949e;font-size:0.85rem;margin-left:8px;">(Type I Automated: ${(s.affinities.type1*100).toFixed(0)}% · Type II Seakeeping: ${(s.affinities.type2*100).toFixed(0)}% · Type III Optical/Strike: ${(s.affinities.type3*100).toFixed(0)}% · Type IV Subdivided: ${(s.affinities.type4*100).toFixed(0)}%)</span>
+          <div style="color:#58a6ff;font-size:1.05rem;font-weight:bold;margin-bottom:2px;">
+            Fleet Tactical Role: ${esc(s.tactical_summary || s.resolved_echelon + ' · ' + s.resolved_modality)}
+          </div>
+          <div style="color:#8b949e;font-size:0.85rem;">
+            Engineering Style: <strong style="color:#c9d1d9">${esc(s.resolved_doctrine)}</strong>
+            · Type I: ${(s.affinities.type1*100).toFixed(0)}% · Type II: ${(s.affinities.type2*100).toFixed(0)}% · Type III: ${(s.affinities.type3*100).toFixed(0)}% · Type IV: ${(s.affinities.type4*100).toFixed(0)}%
+          </div>
         </div>
         <div>${statusBadge}</div>
       </div>

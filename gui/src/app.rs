@@ -13,8 +13,8 @@ use springsharp::spaces::{
     calculate_internal_spaces, suggest_compartment_placement, CompartmentPlacement,
 };
 use springsharp::systems::{
-    AaDirector, BallisticComputer, ElectricalPlantStyle, MainDirector, RadarSuite, SonarSuite,
-    StyleDoctrine,
+    AaDirector, BallisticComputer, CombatModality, ElectricalPlantStyle, MainDirector,
+    MobilityRegime, RadarSuite, SonarSuite, StyleDoctrine, TacticalEchelon,
 };
 use springsharp::{
     compute_self_immunity_zone, get_preset, get_preset_benchmark, solve_displacement_scale,
@@ -970,10 +970,20 @@ impl SpringSharpApp {
         ui.horizontal(|ui| {
             ui.label(
                 egui::RichText::new(format!(
-                    "● Inferred Style Ideal Type: {}",
-                    sys_eval.resolved_doctrine.display_name()
+                    "● Fleet Tactical Role: {}",
+                    sys_eval.tactical_affinities.classification_summary
                 ))
                 .color(egui::Color32::from_rgb(88, 166, 255))
+                .strong(),
+            );
+        });
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(format!(
+                    "● Inferred Engineering Style: {}",
+                    sys_eval.resolved_doctrine.display_name()
+                ))
+                .color(egui::Color32::from_rgb(155, 123, 234))
                 .strong(),
             );
             ui.label(format!(
@@ -1068,6 +1078,137 @@ impl SpringSharpApp {
                             &mut self.ship.systems.doctrine,
                             StyleDoctrine::Custom,
                             StyleDoctrine::Custom.display_name(),
+                        );
+                    });
+                ui.end_row();
+
+                ui.label("Tactical Echelon:");
+                egui::ComboBox::from_id_salt("sys_tactical_echelon")
+                    .selected_text(
+                        if self.ship.systems.tactical_echelon == TacticalEchelon::Auto {
+                            format!("Auto ({})", sys_eval.resolved_echelon.display_name())
+                        } else {
+                            self.ship
+                                .systems
+                                .tactical_echelon
+                                .display_name()
+                                .to_string()
+                        },
+                    )
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.ship.systems.tactical_echelon,
+                            TacticalEchelon::Auto,
+                            TacticalEchelon::Auto.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.tactical_echelon,
+                            TacticalEchelon::BattleLineMainBody,
+                            TacticalEchelon::BattleLineMainBody.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.tactical_echelon,
+                            TacticalEchelon::FastWingVanguard,
+                            TacticalEchelon::FastWingVanguard.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.tactical_echelon,
+                            TacticalEchelon::OuterScoutingScreen,
+                            TacticalEchelon::OuterScoutingScreen.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.tactical_echelon,
+                            TacticalEchelon::InnerFleetScreen,
+                            TacticalEchelon::InnerFleetScreen.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.tactical_echelon,
+                            TacticalEchelon::FlotillaAssaultLine,
+                            TacticalEchelon::FlotillaAssaultLine.display_name(),
+                        );
+                    });
+                ui.end_row();
+
+                ui.label("Combat Modality:");
+                egui::ComboBox::from_id_salt("sys_combat_modality")
+                    .selected_text(
+                        if self.ship.systems.combat_modality == CombatModality::Auto {
+                            format!("Auto ({})", sys_eval.resolved_modality.display_name())
+                        } else {
+                            self.ship.systems.combat_modality.display_name().to_string()
+                        },
+                    )
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.ship.systems.combat_modality,
+                            CombatModality::Auto,
+                            CombatModality::Auto.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.combat_modality,
+                            CombatModality::HeavyArtilleryCitadel,
+                            CombatModality::HeavyArtilleryCitadel.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.combat_modality,
+                            CombatModality::RapidFireSurfaceGunnery,
+                            CombatModality::RapidFireSurfaceGunnery.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.combat_modality,
+                            CombatModality::AviationDeckProjection,
+                            CombatModality::AviationDeckProjection.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.combat_modality,
+                            CombatModality::MassedTorpedoStrike,
+                            CombatModality::MassedTorpedoStrike.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.combat_modality,
+                            CombatModality::ScreenEscortDefense,
+                            CombatModality::ScreenEscortDefense.display_name(),
+                        );
+                    });
+                ui.end_row();
+
+                ui.label("Mobility Regime:");
+                egui::ComboBox::from_id_salt("sys_mobility_regime")
+                    .selected_text(
+                        if self.ship.systems.mobility_regime == MobilityRegime::Auto {
+                            format!(
+                                "Auto ({})",
+                                sys_eval.resolved_mobility_regime.display_name()
+                            )
+                        } else {
+                            self.ship.systems.mobility_regime.display_name().to_string()
+                        },
+                    )
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.ship.systems.mobility_regime,
+                            MobilityRegime::Auto,
+                            MobilityRegime::Auto.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.mobility_regime,
+                            MobilityRegime::HeavyDisplacementBlock,
+                            MobilityRegime::HeavyDisplacementBlock.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.mobility_regime,
+                            MobilityRegime::TransFroudeFastCapital,
+                            MobilityRegime::TransFroudeFastCapital.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.mobility_regime,
+                            MobilityRegime::SlenderWaveCutting,
+                            MobilityRegime::SlenderWaveCutting.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.ship.systems.mobility_regime,
+                            MobilityRegime::SuperCriticalHighFn,
+                            MobilityRegime::SuperCriticalHighFn.display_name(),
                         );
                     });
                 ui.end_row();
@@ -1738,7 +1879,9 @@ impl SpringSharpApp {
         ));
 
         // Carrier flight deck in profile view
-        let is_carrier = self.ship.ship_type.to_lowercase().contains("carrier");
+        let sys_eval_bp = self.ship.systems.evaluate(&self.ship);
+        let is_carrier = sys_eval_bp.resolved_modality == CombatModality::AviationDeckProjection
+            || self.ship.ship_type.to_lowercase().contains("carrier");
         if is_carrier {
             let fd_y = y_fc_for - 12.0;
             painter.line_segment(

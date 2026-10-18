@@ -99,16 +99,29 @@ fn magazine_m3_per_ton(ship: &ShipModel) -> f64 {
     ((1.3 + 0.02 * calibre) * handling).clamp(1.2, 3.0)
 }
 
-/// Crew volume factor by broad ship category.
-fn crew_volume_per_person(ship_type: &str) -> f64 {
+/// Crew volume factor by broad ship category with dimensionless scale-free fallback.
+fn crew_volume_per_person(ship: &ShipModel) -> f64 {
+    let ship_type = ship.ship_type.to_ascii_lowercase();
     if ship_type.contains("destroyer") {
         8.0
     } else if ship_type.contains("cruiser") {
         10.0
     } else if ship_type.contains("carrier") {
         14.0
-    } else {
+    } else if ship_type.contains("battleship") || ship_type.contains("battlecruiser") {
         12.0
+    } else {
+        // Dimensionless scale-free fallback based on physical invariants
+        let feat = crate::systems::DimensionlessFeatures::from_ship(ship);
+        if feat.aviation_capability_ratio >= 0.50 {
+            14.0
+        } else if ship.hull.displacement < 4500.0 && feat.froude_number > 0.32 {
+            8.0
+        } else if ship.hull.displacement < 16000.0 && feat.slenderness_ratio > 6.5 {
+            10.0
+        } else {
+            12.0
+        }
     }
 }
 
@@ -146,7 +159,7 @@ pub fn calculate_internal_spaces(ship: &ShipModel) -> InternalSpaceReport {
     let crew_per_person = if ship.space_crew_volume_per_person > 0.0 {
         ship.space_crew_volume_per_person
     } else {
-        crew_volume_per_person(&ship.ship_type.to_ascii_lowercase())
+        crew_volume_per_person(ship)
     };
     let mach_per_kw = if ship.space_machinery_volume_per_kw > 0.0 {
         ship.space_machinery_volume_per_kw
