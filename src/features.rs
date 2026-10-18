@@ -638,32 +638,32 @@ pub fn demo_ship() -> ShipModel {
     g1.calibre = 15.0;
     g1.cal_length = 45.0;
     g1.date_gun = 1915;
-    g1.gun_type = 1;
-    g1.mount_type = 5;
+    g1.gun_type = 1; // Breech loading
+    g1.mount_type = 3; // Turret on barbette
     g1.magazine = 150;
     g1.mounts = 4;
-    g1.guns_in_mount_g1 = 1;
-    g1.layout_g1 = 0;
-    g1.mount_super_g1 = 2;
-    g1.mount_sub_g1 = 2;
-    g1.arm_face = 12.0;
-    g1.arm_back = 8.0;
-    g1.arm_bottom = 4.0;
+    g1.guns_in_mount_g1 = 3; // Twin mount (4 x 2 = 8 guns)
+    g1.layout_g1 = 1; // Centreline ends (fore >= aft: 2 fore, 2 aft)
+    g1.mount_super_g1 = 2; // Fore & aft superfiring
+    g1.mount_sub_g1 = 0;
+    g1.arm_face = 13.0;
+    g1.arm_back = 10.0;
+    g1.arm_bottom = 10.0;
 
     let g2 = ship.battery_mut(1);
-    g2.barrels = 12;
+    g2.barrels = 14;
     g2.calibre = 6.0;
-    g2.cal_length = 50.0;
+    g2.cal_length = 45.0;
     g2.date_gun = 1915;
-    g2.gun_type = 1;
-    g2.mount_type = 5;
+    g2.gun_type = 2; // Quick firing
+    g2.mount_type = 6; // Casemate
     g2.magazine = 150;
-    g2.mounts = 12;
-    g2.guns_in_mount_g1 = 0;
-    g2.layout_g1 = 9;
-    g2.mount_super_g1 = 12;
-    g2.arm_face = 2.0;
-    g2.arm_back = 1.0;
+    g2.mounts = 14;
+    g2.guns_in_mount_g1 = 0; // Single
+    g2.layout_g1 = 9; // Sides
+    g2.mount_sub_g1 = 14; // in casemates
+    g2.arm_face = 6.0;
+    g2.arm_back = 2.0;
 
     ship.armour.belt_main = 12.0;
     ship.armour.belt_main_length = 380.0;

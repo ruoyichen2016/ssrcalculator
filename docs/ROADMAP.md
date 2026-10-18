@@ -602,4 +602,54 @@ still 10.36% / blended 9.81%):
     - Surfaced Fleet Tactical Role alongside Engineering Style.
     - Decoupled carrier flight-deck painter rendering to check `CombatModality::AviationDeckProjection`.
 
+## Phase 39 — Authentic Naval-Architecture Blueprint Layout Engine, Early Heavy-Gun Carrier CV-2 & Post-War Automatic Cruiser C-20 (completed 2026-10-18)
 
+- **Track A: Authentic Naval-Architecture Blueprint Layout Solver (`src/web.rs`, `src/web_page.html`, `gui/src/app.rs`, `src/spaces.rs`, `src/presets.rs`)**:
+  - Fixed the major historical layout discrepancy where `layout = 1` ("Centreline - ends (fore >= aft)") and `layout = 2` ("Centreline - ends (aft >= fore)") previously collapsed to a single midships coordinate (`0.40` or `0.60`), clustering all main turrets in the middle of the ship on top of the bridge and funnel.
+  - Implemented `solveGroupMounts` / `solve_group_mounts` across Web SVG and Native Desktop GUI (`egui::Painter`) to split `layout = 1, 2, 10, 11` into genuine bow (`A`/`B`/`C`, $x \in [0.18, 0.30]$) and stern (`X`/`Y`, $x \in [0.71, 0.83]$) groups.
+  - Added **superfiring armored barbettes and vertical elevation tiers** (`mount_super_g1`, `mount_super_g2`) in Profile view so Turret B superfires over Turret A forward, Turret X superfires over Turret Y aft, and C-20 *Tiger*'s forward 3"/70 mount superfires in 'B' position over the forward 6" turret.
+  - Added **multi-barrel turret rendering** (1–4 barrels per turret) in Plan view and **port/starboard wing & waist placement** (`layout >= 9`) for wing turrets (e.g., *HMS Dreadnought*'s wing 12" turrets) and secondary batteries (`g2`).
+  - Corrected preset layout codes: *USS Fletcher* (`layout_g1 = 2`: 2 fore, 3 aft), *IJN Shimakaze* (`layout_g1 = 2`: 1 fore, 2 aft), and *USS Essex* (`layout_g1 = 10`: starboard island fore & aft twin 5"/38 turrets + gallery mounts).
+  - Updated `layout_longitudinal_position` in `src/spaces.rs` to weight fore and aft battery groups by `mounts_for / mounts`.
+- **Track B: Early Heavy-Gun Treaty Carrier Debugging — *USS Lexington* (CV-2, 1928) (`src/systems.rs`, `src/presets.rs`, `src/web_page.html`, `gui/src/app.rs`)**:
+  - Resolved dimensionless recognition of treaty aircraft carriers armed with heavy cruiser guns (`main_cal <= 8.5"`): in `DimensionlessFeatures::from_ship` and `evaluate_tactical_affinities`, low ordnance mass fraction ($\Pi_{\text{ord}} \le 0.065$ vs $>0.10$ on cruisers), high hangar freeboard ($F/T \ge 0.85$), and flight-deck outfit (`misc_weight_deck >= 250 t`) cleanly classify CV-2 *Lexington* as `BattleLineMainBody` × `AviationDeckProjection` × `TransFroudeFastCapital` even when `ship_type` is blank.
+  - Reworked carrier blueprint layout in both Web SVG and Native Desktop GUI:
+    - Profile view: full-length enclosed hangar + flight-deck box, starboard island + massive turbo-electric funnel casing above the flight deck, `g1` heavy/medium turrets (#1/#2 fore of island with #2 superfiring, #3/#4 aft of funnel with #3 superfiring) mounted **at flight-deck level**, and gallery-deck AA sponsons (`g2`) along the flight-deck edge.
+    - Plan view: places `g1` carrier turrets along the **starboard island line** (keeping the port/centreline flight runway and elevators clear) and gallery AA mounts along port/starboard deck edges.
+  - Added built-in preset `cv2_lexington` (*USS Lexington (CV-2, 1928)*, 36,862 t, 8 × 8"/55 Mk 9 in 4 twin starboard turrets + 12 × 5"/25 AA sponsons, 180,000 shp turbo-electric drive) and its historical weight/stability benchmark.
+- **Track C: Post-War Extreme Case — *HMS Tiger* (C20, 1959) (`src/model.rs`, `src/systems.rs`, `src/presets.rs`)**:
+  - Fixed two critical post-1950 bugs in `src/model.rs`: `GunBattery::date_adj_calc` and `ShipModel::prepare_hull_freeboard` (`date_adj_float`) previously returned `0.0` for `date > 1950`, which zeroed out shell weight, gun weight, and flotation, and caused `damage_shell = 0.0 / 0.0 = NaN`! Extended the valid range to `1850..=2050` and guarded `damage_shell` against zero division.
+  - Added post-war automatic medium/cruiser turret scaling (`gun_type == 5`, `calibre >= 2.8"`, `date_gun >= 1945`) in `GunBattery::calculate` (water-cooled barrels, dual feed hoists, and power autoloaders), calibre-scaled DP density in `DimensionlessFeatures::from_ship`, and autoloader electrical load (`load_turrets_kw`) in `ShipSystemsConfig::evaluate`.
+  - Added built-in preset `c20_tiger` (*HMS Tiger (C20, 1959)*, 10,949 t, 4 × 6"/50 QF Mk N5 automatic DP guns in 2 twin Mk 26 turrets + 6 × 3"/70 QF Mk N1 automatic AA guns in 3 twin Mk 6 mounts with 'B' mount superfiring forward) and its historical weight/stability benchmark (14 total built-in presets, 100% convergence, 2.03% displacement MAPE, 1.48% machinery MAPE, 7.71% armour MAPE, 7.41% GM MAPE, 12.87% armoured armament MAPE).
+
+## Phase 40 — Historical Presets Expansion (21 Ships), Decoupled TDS & Subdivision, Citadel Coverage & Midship Cross-Section (completed 2026-10-18)
+
+- **Track A: Historical Presets Expansion to 21 Ships (`src/presets.rs`, `tests/accuracy_regression.rs`)**:
+  - Expanded preset catalog from 14 to **21 canonical historical warships** across 1895–1959:
+    - *USS Olympia* (1895): 5,870 t protected cruiser, 4 × 8"/35, 10 × 5"/40 broadside, sloped turtleback deck armor.
+    - *IJN Mikasa* (1902): 15,140 t pre-dreadnought, 4 × 12"/40, 14 × 6"/40 in casemates, Harvey-Krupp full waterline belt.
+    - *HMS Iron Duke* (1914): 25,000 t dreadnought, 10 × 13.5"/45 in 5 center turrets (A-B-Q-X-Y), 12 × 6" casemates.
+    - *HMS Nelson* (1927): 33,300 t Treaty battleship, 9 × 16"/45 in 3 all-forward turrets, 14° inclined belt, all-or-nothing citadel.
+    - *RN Vittorio Veneto* (1940): 41,167 t Littorio-class battleship, 9 × 381mm/50, 15° inclined belt + decapping plate, iconic **Pugliese cylindrical absorber TDS**.
+    - *MN Richelieu* (1940): 40,900 t fast battleship, 8 × 380mm/45 in 2 forward quad turrets, double armored deck, **Deep Ébonite Mousse water-excluding cellular foam TDS**.
+    - *USS Atlanta* (1941): 6,718 t AA cruiser, 16 × 5"/38 DP in 8 twin turrets (3 fwd superfiring, 3 aft superfiring, 2 waist wing mounts).
+  - Added full weight benchmarks and stability parameters in `PRESET_WEIGHT_BENCHMARKS`. All 21 ships calculate, converge, and satisfy tight regression bounds in `tests/accuracy_regression.rs` (displacement MAPE $\le 4.0\%$, machinery MAPE $\le 2.0\%$, armor MAPE $\le 12.0\%$, GM MAPE $\le 10.0\%$).
+- **Track B: Decoupled Dimensionless Systems Auto-Matching & Orthogonal Selection (`src/systems.rs`, `src/io.rs`, `src/model.rs`, `src/web.rs`)**:
+  - **Transverse Subdivision Topology** (`TransverseSubdivision`): `SingleFileTransverse`, `TwinFileCenterline`, `TripleFileCenterAndWings`, `QuadFileMultiLongitudinal`.
+  - **Torpedo Defense System (TDS) Architecture** (`TdsArchitecture`): `UnarmouredDoubleBottom`, `CoalBunkerWingBulkhead`, `ExternalBlisterBulge`, `MultiLayerLiquidVoid`, `PuglieseCylindricalAbsorber`, `CompoundEboniteDeepTds`.
+  - **Machinery Longitudinal Arrangement** (`MachineryArrangement`): `GroupedBoilerForward`, `GroupedEngineForward`, `SandwichEngineBoilerEngine`, `UnitAlternatingMachinery`, `CompactEchelonSural`, `TurboElectricDistributed`.
+  - Fully decoupled from gun layouts: any ship (e.g. KGV, Nelson, or custom designs) can mix and match or auto-infer Ébonite mousse TDS, Pugliese cylinders, unit alternating machinery, or twin/triple/quad subdivisions.
+  - Physical damage torpedo scaling: Ebonite (+15% resistance), Pugliese (+12%), Liquid/Void (+10%), Blister (+7%), Coal bunker (+5%).
+  - Full round-trip `.ssr` serialization and Web/GUI dropdown controls.
+- **Track C: Casemates vs Revolving Turrets Differentiation (`src/web_page.html`, `gui/src/app.rs`)**:
+  - Casemates and broadside mounts (`mount_type == 6 || mount_type == 0 || mount_sub > 0`) rendered as recessed embrasures with horizontal gun barrels projecting from the hull side/battery deck in profile view, and embrasure notches along the hull perimeter in plan view, without deck boxes or barbette trunks.
+  - Revolving turrets rendered with armored barbettes, superfiring elevation steps, and directional firing barrels.
+- **Track D: Citadel & Belt Coverage Layout Fixes (`src/web_page.html`, `gui/src/app.rs`, `src/features.rs`)**:
+  - Fixed gun and superstructure overlap by dynamically placing bridge and funnel superstructures between forward and aft battery centroids.
+  - Updated `demo_ship()` (`HMS Example`) with 4 twin 15" turrets and 14 single 6" casemates, completely eliminating all superstructure overlap.
+  - Main armor belt logically and visually anchored over the citadel (vital spaces: fore magazine to aft magazine + machinery).
+  - Added upper belt armor, ends belt armor extensions, and distinguished deck armor coverage modes: Mode 0 (flat main deck), Mode 1 & 2 (turtleback sloped deck 穹甲 with lower belt edge connection), Mode 3 (double horizontal deck), and Mode 6 (weather deck armored citadel).
+- **Track E: Midship Cross-Section & Internal Topology Technical Projections (`src/web_page.html`, `gui/src/app.rs`)**:
+  - Added 3rd standard naval-architecture projection (舯横剖面图) below Profile and Plan views in both Web SVG and Native Desktop GUI.
+  - Visualizes hull beam, draught, double bottom floors, inclined belt armor (`belts_incline`), sloped turtleback / flat / double decks, TDS internals (Pugliese collapsible cylinders $\bigcirc$, Ébonite mousse foam cellular packing, multi-layer bulkheads, coal bunkers), and transverse subdivision bulkheads (single, twin centerline, triple, quad).
+  - Interactive systems architecture summary card displaying live subdivision, TDS type, machinery arrangement, and armor statistics.

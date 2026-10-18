@@ -245,18 +245,18 @@ fn regime_table_is_well_formed_and_applicable() {
 #[test]
 fn preset_weights_and_stability_do_not_regress() {
     let report = springsharp::validate_preset_weights();
-    assert_eq!(report.rows.len(), 12);
+    assert_eq!(report.rows.len(), 21);
     assert_eq!(
-        report.physical_hull_count, 12,
-        "all 12 historical presets must produce positive hull weight (0 < hull < disp)"
+        report.physical_hull_count, 21,
+        "all 21 historical presets must produce positive hull weight (0 < hull < disp)"
     );
     assert_eq!(
-        report.positive_magazine_count, 12,
-        "all 12 historical presets must allocate positive magazine volume"
+        report.positive_magazine_count, 21,
+        "all 21 historical presets must allocate positive magazine volume"
     );
     assert_eq!(
-        report.converged_count, 12,
-        "all 12 historical presets must converge in the weight/displacement loop"
+        report.converged_count, 21,
+        "all 21 historical presets must converge in the weight/displacement loop"
     );
 
     assert!(

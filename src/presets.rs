@@ -114,6 +114,78 @@ pub const PRESET_LIST: &[PresetInfo] = &[
         year: 1939,
         displacement_tons: 34_850.0,
     },
+    PresetInfo {
+        id: "cv2_lexington",
+        name: "USS Lexington (CV-2, 1928)",
+        country: "United States",
+        ship_type: "Aircraft carrier",
+        year: 1928,
+        displacement_tons: 36_862.0,
+    },
+    PresetInfo {
+        id: "c20_tiger",
+        name: "HMS Tiger (C20, 1959)",
+        country: "United Kingdom",
+        ship_type: "Light cruiser",
+        year: 1959,
+        displacement_tons: 10_949.0,
+    },
+    PresetInfo {
+        id: "mikasa",
+        name: "IJN Mikasa",
+        country: "Japan",
+        ship_type: "Battleship",
+        year: 1902,
+        displacement_tons: 15_140.0,
+    },
+    PresetInfo {
+        id: "olympia",
+        name: "USS Olympia (C-6, 1895)",
+        country: "United States",
+        ship_type: "Protected cruiser",
+        year: 1895,
+        displacement_tons: 5_870.0,
+    },
+    PresetInfo {
+        id: "iron_duke",
+        name: "HMS Iron Duke (1914)",
+        country: "United Kingdom",
+        ship_type: "Battleship",
+        year: 1914,
+        displacement_tons: 25_000.0,
+    },
+    PresetInfo {
+        id: "nelson",
+        name: "HMS Nelson (1927)",
+        country: "United Kingdom",
+        ship_type: "Battleship",
+        year: 1927,
+        displacement_tons: 34_000.0,
+    },
+    PresetInfo {
+        id: "vittorio_veneto",
+        name: "Vittorio Veneto (1940)",
+        country: "Italy",
+        ship_type: "Battleship",
+        year: 1940,
+        displacement_tons: 41_300.0,
+    },
+    PresetInfo {
+        id: "richelieu",
+        name: "Richelieu (1940)",
+        country: "France",
+        ship_type: "Battleship",
+        year: 1940,
+        displacement_tons: 40_900.0,
+    },
+    PresetInfo {
+        id: "atlanta",
+        name: "USS Atlanta (CL-51, 1941)",
+        country: "United States",
+        ship_type: "Light cruiser",
+        year: 1941,
+        displacement_tons: 6_718.0,
+    },
 ];
 
 /// Get preset ship model by identifier.
@@ -131,6 +203,15 @@ pub fn get_preset(id: &str) -> Option<ShipModel> {
         "essex" => preset_essex(),
         "kgv" => preset_kgv(),
         "scharnhorst" => preset_scharnhorst(),
+        "cv2_lexington" | "lexington" | "cv2" => preset_cv2_lexington(),
+        "c20_tiger" | "tiger" | "c20" => preset_c20_tiger(),
+        "mikasa" => preset_mikasa(),
+        "olympia" => preset_olympia(),
+        "iron_duke" | "ironduke" => preset_iron_duke(),
+        "nelson" => preset_nelson(),
+        "vittorio_veneto" | "veneto" | "littorio" => preset_vittorio_veneto(),
+        "richelieu" => preset_richelieu(),
+        "atlanta" => preset_atlanta(),
         _ => return None,
     };
     ship.calculate();
@@ -737,7 +818,7 @@ fn preset_fletcher() -> ShipModel {
     ship.free.free_qd_for = 9.0;
     ship.free.free_qd_aft = 8.5;
 
-    // 5 x 5"/38 Mark 12 in 5 single enclosed mounts
+    // 5 x 5"/38 Mark 12 in 5 single enclosed mounts (2 fore, 3 aft)
     let g1 = ship.battery_mut(0);
     g1.barrels = 5;
     g1.calibre = 5.0;
@@ -748,8 +829,8 @@ fn preset_fletcher() -> ShipModel {
     g1.magazine = 350;
     g1.mounts = 5;
     g1.guns_in_mount_g1 = 0; // Single
-    g1.layout_g1 = 1;
-    g1.mount_super_g1 = 2; // Superfiring fore & aft
+    g1.layout_g1 = 2; // Centreline ends (aft >= fore: 2 fore, 3 aft)
+    g1.mount_super_g1 = 2; // Superfiring fore (#52) & aft (#53)
     g1.arm_face = 0.75;
 
     // Splinter protection only (destroyer)
@@ -831,8 +912,8 @@ fn preset_shimakaze() -> ShipModel {
     g1.magazine = 200;
     g1.mounts = 3;
     g1.guns_in_mount_g1 = 3; // Twin
-    g1.layout_g1 = 1;
-    g1.mount_super_g1 = 1;
+    g1.layout_g1 = 2; // Centreline ends (aft >= fore: 1 fore, 2 aft)
+    g1.mount_super_g1 = 1; // Aft superfiring (X over Y)
     g1.arm_face = 0.5;
 
     ship.engine.fuel[1] = true;
@@ -1030,7 +1111,7 @@ fn preset_essex() -> ShipModel {
     g1.magazine = 400;
     g1.mounts = 8;
     g1.guns_in_mount_g1 = 3; // Twin (4 mounts = 8 guns)
-    g1.layout_g1 = 9; // Sides
+    g1.layout_g1 = 10; // Sides - ends (2 fore of island, 2 aft of island on starboard)
     g1.mount_super_g1 = 4;
     g1.guns_in_mount_g2 = 0; // Single (4 mounts = 4 guns)
     g1.layout_g2 = 9;
@@ -1328,6 +1409,1014 @@ fn preset_scharnhorst() -> ShipModel {
     ship
 }
 
+fn preset_cv2_lexington() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "USS Lexington (CV-2, 1928)".into();
+    ship.country = "United States".into();
+    ship.ship_type = "Aircraft carrier".into();
+
+    ship.hull.length = 850.0;
+    ship.hull.beam = 105.5;
+    ship.hull.beam_bulges = 105.5;
+    ship.hull.draught = 29.0;
+    ship.hull.block = 0.496;
+    ship.hull.date_hull = 1928;
+    ship.hull.date_engine = 1928;
+
+    ship.free.fc_length = 0.35;
+    ship.free.fd_length = 0.35;
+    ship.free.qd_length = 0.15;
+    ship.free.free_fc_for = 34.0;
+    ship.free.free_fc_aft = 31.0;
+    ship.free.free_fd_for = 30.0;
+    ship.free.free_fd_aft = 29.0;
+    ship.free.free_ad_for = 29.0;
+    ship.free.free_ad_aft = 28.0;
+    ship.free.free_qd_for = 28.0;
+    ship.free.free_qd_aft = 27.0;
+    ship.free.bow = 2; // Bulbous bow
+    ship.free.stern = 0; // Cruiser stern
+
+    // 8 x 8"/55 Mark 9 heavy cruiser guns in 4 twin turrets on starboard island
+    // (#1 & #2 forward of island with #2 superfiring; #3 & #4 aft of huge funnel with #3 superfiring)
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 8;
+    g1.calibre = 8.0;
+    g1.cal_length = 55.0;
+    g1.date_gun = 1928;
+    g1.gun_type = 1; // BL
+    g1.mount_type = 3; // Turret on barbette
+    g1.magazine = 125;
+    g1.mounts = 4;
+    g1.guns_in_mount_g1 = 3; // Twin (4 mounts = 8 guns)
+    g1.layout_g1 = 10; // Sides - ends (starboard island fore & aft)
+    g1.mount_super_g1 = 2; // #2 superfiring fore, #3 superfiring aft
+    g1.arm_face = 2.0;
+    g1.arm_back = 0.75;
+    g1.arm_bottom = 0.75;
+
+    // 12 x 5"/25 Mark 10 heavy AA guns in 12 single gallery-deck sponsons (6 port, 6 starboard)
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 12;
+    g2.calibre = 5.0;
+    g2.cal_length = 25.0;
+    g2.date_gun = 1928;
+    g2.gun_type = 3; // AA
+    g2.mount_type = 5; // Open mount
+    g2.magazine = 250;
+    g2.mounts = 12;
+    g2.guns_in_mount_g1 = 0; // Single
+    g2.layout_g1 = 9; // Sides - distributed gallery sponsons
+    g2.mount_deck_g1 = 12;
+
+    // Converted battlecruiser protection: 7" (5"-7" tapered) belt + 2.0" main deck + 7" bulkheads
+    ship.armour.belt_main = 7.0;
+    ship.armour.belt_main_length = 530.0;
+    ship.armour.belt_main_height = 9.5;
+    ship.armour.belts_incline = 11.0;
+    ship.armour.deck = 2.0;
+    ship.armour.deck_fc = 0.75;
+    ship.armour.deck_qd = 0.75;
+    ship.armour.bulkhead = 7.0;
+    ship.armour.bulkhead_length = 530.0;
+    ship.armour.bulkhead_height = 10.0;
+    ship.armour.bulkhead_beam = 80.0;
+    ship.armour.bulge = 1.5;
+    ship.armour.conning_for = 2.25;
+
+    // 16 Yarrow boilers + 4 GE turbo-alternators driving 8 electric motors (180,000 shp in 6,600t)
+    ship.engine.fuel[1] = true; // Oil
+    ship.engine.engine_types[2] = true; // Steam turbines
+    ship.engine.drive[2] = true; // Electric drive (turbo-electric)
+    ship.engine.speed_max = 33.25;
+    ship.engine.speed_cruise = 14.0;
+    ship.engine.range = 10000.0;
+    ship.engine.screws = 4;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.878;
+    ship.engine.machinery_weight_factor = 1.22;
+
+    // Air group (78-90 aircraft), aviation ordnance, catapult & arresting gear
+    ship.weapons = WeaponAggregate {
+        torpedo1: WeaponMount {
+            kind: WeaponKind::Torpedo,
+            number: 36,
+            loads: 2,
+            size: 21.0,
+            length: 18.0,
+            location: 4,
+            ..Default::default()
+        },
+        misc_weight_deck: 1200.0,
+        ..Default::default()
+    };
+    ship
+}
+
+fn preset_c20_tiger() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "HMS Tiger (C20, 1959)".into();
+    ship.country = "United Kingdom".into();
+    ship.ship_type = "Light cruiser".into();
+
+    ship.hull.length = 538.0;
+    ship.hull.beam = 64.0;
+    ship.hull.beam_bulges = 64.0;
+    ship.hull.draught = 21.0;
+    ship.hull.block = 0.530;
+    ship.hull.date_hull = 1959;
+    ship.hull.date_engine = 1959;
+
+    ship.free.fc_length = 0.45;
+    ship.free.fd_length = 0.25;
+    ship.free.qd_length = 0.15;
+    ship.free.free_fc_for = 26.5;
+    ship.free.free_fc_aft = 21.0;
+    ship.free.free_fd_for = 18.0;
+    ship.free.free_fd_aft = 15.5;
+    ship.free.free_ad_for = 15.0;
+    ship.free.free_ad_aft = 14.5;
+    ship.free.free_qd_for = 14.5;
+    ship.free.free_qd_aft = 14.0;
+    ship.free.stern = 1; // Transom stern
+
+    // 4 x 6"/50 (152 mm) QF Mark N5 fully automatic DP guns (20 rpm/barrel) in 2 twin Mark 26 turrets (1 fore 'A', 1 aft 'Y')
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 4;
+    g1.calibre = 6.0;
+    g1.cal_length = 50.0;
+    g1.date_gun = 1959;
+    g1.gun_type = 5; // Automatic rapid fire
+    g1.mount_type = 3; // Turret on barbette
+    g1.magazine = 400;
+    g1.mounts = 2;
+    g1.guns_in_mount_g1 = 3; // Twin (2 mounts = 4 guns)
+    g1.layout_g1 = 1; // Centreline ends (1 fore, 1 aft)
+    g1.mount_deck_g1 = 2;
+    g1.arm_face = 2.0;
+    g1.arm_back = 1.5;
+    g1.arm_bottom = 2.0;
+
+    // 6 x 3"/70 (76 mm) QF Mark N1 fully automatic AA guns (90-120 rpm/barrel) in 3 twin Mark 6 mounts
+    // (1 superfiring forward in 'B' position over 'A' 6" turret + 2 on port/starboard waist)
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 6;
+    g2.calibre = 3.0;
+    g2.cal_length = 70.0;
+    g2.date_gun = 1959;
+    g2.gun_type = 5; // Automatic rapid fire
+    g2.mount_type = 3; // Enclosed weatherproof mount
+    g2.magazine = 600;
+    g2.mounts = 3;
+    g2.guns_in_mount_g1 = 3; // Twin (1 mount forward superfiring)
+    g2.layout_g1 = 3; // Centreline - fore deck forward
+    g2.mount_super_g1 = 1; // Superfiring in 'B' position
+    g2.guns_in_mount_g2 = 3; // Twin (2 mounts waist port & starboard)
+    g2.layout_g2 = 9; // Sides
+    g2.mount_deck_g2 = 2;
+    g2.arm_face = 0.75;
+    g2.arm_back = 0.5;
+    g2.arm_bottom = 0.5;
+
+    // Minotaur/Tiger hull protection: 3.5" main belt + 2.0" deck + 2.0" bulkheads
+    ship.armour.belt_main = 3.5;
+    ship.armour.belt_main_length = 320.0;
+    ship.armour.belt_main_height = 10.5;
+    ship.armour.deck = 2.0;
+    ship.armour.deck_fc = 1.0;
+    ship.armour.deck_qd = 1.0;
+    ship.armour.bulkhead = 2.0;
+    ship.armour.bulkhead_length = 320.0;
+    ship.armour.bulkhead_height = 11.0;
+    ship.armour.bulkhead_beam = 50.0;
+    ship.armour.conning_for = 1.5;
+
+    // 4 Admiralty 3-drum boilers + 4 Parsons geared steam turbines (72,500 - 80,000 shp in 1,500t)
+    ship.engine.fuel[1] = true; // Oil
+    ship.engine.engine_types[2] = true; // Steam turbines
+    ship.engine.drive[1] = true; // Geared
+    ship.engine.speed_max = 31.5;
+    ship.engine.speed_cruise = 15.0;
+    ship.engine.range = 6500.0;
+    ship.engine.screws = 4;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.919;
+    ship.engine.machinery_weight_factor = 0.56;
+
+    // Extensive MRS.3 radar fire control, Type 965/992Q/277Q radars, and 4,000 kW electrical plant
+    ship.weapons = WeaponAggregate {
+        misc_weight_vital: 950.0,
+        ..Default::default()
+    };
+    ship
+}
+
+fn preset_mikasa() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "IJN Mikasa".into();
+    ship.country = "Japan".into();
+    ship.ship_type = "Battleship".into();
+
+    ship.hull.length = 432.0;
+    ship.hull.beam = 76.0;
+    ship.hull.beam_bulges = 76.0;
+    ship.hull.draught = 27.2;
+    ship.hull.block = 0.60;
+    ship.hull.date_hull = 1902;
+    ship.hull.date_engine = 1902;
+
+    ship.free.fc_length = 0.35;
+    ship.free.fd_length = 0.35;
+    ship.free.qd_length = 0.20;
+    ship.free.free_fc_for = 22.5;
+    ship.free.free_fc_aft = 20.0;
+    ship.free.free_fd_for = 18.0;
+    ship.free.free_fd_aft = 16.5;
+    ship.free.free_ad_for = 16.5;
+    ship.free.free_ad_aft = 15.5;
+    ship.free.free_qd_for = 15.5;
+    ship.free.free_qd_aft = 14.5;
+
+    // 4 x 12"/40 (305 mm) Type 41 / EOC Mk IX in 2 twin barbette turrets (1 fore, 1 aft)
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 4;
+    g1.calibre = 12.0;
+    g1.cal_length = 40.0;
+    g1.date_gun = 1902;
+    g1.gun_type = 1; // Breech loading
+    g1.mount_type = 3; // Turret on barbette
+    g1.magazine = 80;
+    g1.mounts = 2;
+    g1.guns_in_mount_g1 = 3; // Twin mount
+    g1.layout_g1 = 1; // Centreline ends
+    g1.mount_deck_g1 = 2;
+    g1.arm_face = 10.0;
+    g1.arm_back = 8.0;
+    g1.arm_bottom = 8.0;
+
+    // 14 x 6"/40 (152 mm) QF in casemates (10 in main deck armoured citadel, 4 on upper deck)
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 14;
+    g2.calibre = 6.0;
+    g2.cal_length = 40.0;
+    g2.date_gun = 1902;
+    g2.gun_type = 2; // Quick firing
+    g2.mount_type = 6; // Casemate
+    g2.magazine = 200;
+    g2.mounts = 14;
+    g2.guns_in_mount_g1 = 0; // Single
+    g2.layout_g1 = 9; // Broadside sides
+    g2.mount_sub_g1 = 14; // in hull-side casemates
+    g2.arm_face = 6.0;
+    g2.arm_back = 2.0;
+
+    // 20 x 12-pdr (3"/40) QF anti-torpedo boat guns in pedestal mounts
+    let g3 = ship.battery_mut(2);
+    g3.barrels = 20;
+    g3.calibre = 3.0;
+    g3.cal_length = 40.0;
+    g3.date_gun = 1902;
+    g3.gun_type = 2;
+    g3.mount_type = 5; // Open mount
+    g3.magazine = 300;
+    g3.mounts = 20;
+    g3.guns_in_mount_g1 = 0;
+    g3.layout_g1 = 9;
+    g3.mount_super_g1 = 20;
+
+    // Krupp cemented armour scheme with upper belt and turtleback deck
+    ship.armour.belt_main = 9.0;
+    ship.armour.belt_main_length = 250.0;
+    ship.armour.belt_main_height = 8.5;
+    ship.armour.belt_upper = 6.0;
+    ship.armour.belt_upper_length = 250.0;
+    ship.armour.belt_upper_height = 7.5;
+    ship.armour.belt_ends = 4.0;
+    ship.armour.belt_ends_length = 180.0;
+    ship.armour.belt_ends_height = 7.0;
+    ship.armour.deck = 2.0;
+    ship.armour.deck_fc = 1.0;
+    ship.armour.deck_qd = 1.0;
+    ship.armour.deck_coverage = 1; // Turtleback internal slopes
+    ship.armour.bulkhead = 6.0;
+    ship.armour.bulkhead_length = 250.0;
+    ship.armour.bulkhead_height = 12.0;
+    ship.armour.bulkhead_beam = 60.0;
+    ship.armour.conning_for = 14.0;
+
+    // 2 VTE steam engines + 25 Belleville water-tube boilers (15,000 ihp)
+    ship.engine.fuel[0] = true; // Coal
+    ship.engine.engine_types[0] = true; // VTE reciprocating
+    ship.engine.drive[0] = true; // Direct
+    ship.engine.speed_max = 18.0;
+    ship.engine.speed_cruise = 10.0;
+    ship.engine.range = 4500.0;
+    ship.engine.pct_coal = 100.0;
+    ship.engine.screws = 2;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.81;
+    ship.engine.machinery_weight_factor = 1.10;
+
+    ship.weapons = WeaponAggregate {
+        torpedo1: WeaponMount {
+            kind: WeaponKind::Torpedo,
+            number: 4,
+            loads: 3,
+            size: 18.0,
+            length: 17.0,
+            location: 1, // Submerged
+            ..Default::default()
+        },
+        misc_weight_hull: 250.0,
+        ..Default::default()
+    };
+    ship
+}
+
+fn preset_olympia() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "USS Olympia (C-6, 1895)".into();
+    ship.country = "United States".into();
+    ship.ship_type = "Protected cruiser".into();
+
+    ship.hull.length = 344.0;
+    ship.hull.beam = 53.0;
+    ship.hull.beam_bulges = 53.0;
+    ship.hull.draught = 21.5;
+    ship.hull.block = 0.53;
+    ship.hull.date_hull = 1895;
+    ship.hull.date_engine = 1895;
+
+    ship.free.fc_length = 0.35;
+    ship.free.fd_length = 0.35;
+    ship.free.qd_length = 0.20;
+    ship.free.free_fc_for = 18.5;
+    ship.free.free_fc_aft = 17.0;
+    ship.free.free_fd_for = 16.0;
+    ship.free.free_fd_aft = 15.0;
+    ship.free.free_ad_for = 15.0;
+    ship.free.free_ad_aft = 14.0;
+    ship.free.free_qd_for = 14.0;
+    ship.free.free_qd_aft = 13.5;
+
+    // 4 x 8"/35 Mk 3 guns in 2 twin hooded turrets (1 fore, 1 aft)
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 4;
+    g1.calibre = 8.0;
+    g1.cal_length = 35.0;
+    g1.date_gun = 1895;
+    g1.gun_type = 1;
+    g1.mount_type = 3;
+    g1.magazine = 100;
+    g1.mounts = 2;
+    g1.guns_in_mount_g1 = 3; // Twin
+    g1.layout_g1 = 1;
+    g1.mount_deck_g1 = 2;
+    g1.arm_face = 3.5;
+    g1.arm_back = 2.0;
+    g1.arm_bottom = 2.0;
+
+    // 10 x 5"/40 Mk 2 QF in casemate sponsons on upper deck
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 10;
+    g2.calibre = 5.0;
+    g2.cal_length = 40.0;
+    g2.date_gun = 1895;
+    g2.gun_type = 2;
+    g2.mount_type = 6; // Casemate
+    g2.magazine = 200;
+    g2.mounts = 10;
+    g2.guns_in_mount_g1 = 0; // Single
+    g2.layout_g1 = 9;
+    g2.mount_sub_g1 = 10;
+    g2.arm_face = 4.0;
+    g2.arm_back = 2.0;
+
+    // 14 x 6-pdr (57 mm) QF guns
+    let g3 = ship.battery_mut(2);
+    g3.barrels = 14;
+    g3.calibre = 2.24;
+    g3.cal_length = 45.0;
+    g3.date_gun = 1895;
+    g3.gun_type = 2;
+    g3.mount_type = 5;
+    g3.magazine = 300;
+    g3.mounts = 14;
+    g3.layout_g1 = 9;
+
+    // Protected cruiser armour: curved turtleback deck extending below waterline, no vertical belt
+    ship.armour.belt_main = 0.0;
+    ship.armour.belt_main_length = 0.0;
+    ship.armour.belt_main_height = 0.0;
+    ship.armour.deck = 3.0;
+    ship.armour.deck_fc = 1.0;
+    ship.armour.deck_qd = 1.0;
+    ship.armour.deck_coverage = 1; // Turtleback slopes (4.75" Harvey steel slopes + 2.0" flat deck)
+    ship.armour.conning_for = 5.0;
+
+    // 2 VTE steam engines + 6 Scotch boilers (13,500 ihp design, 17,313 ihp forced draft trial)
+    ship.engine.fuel[0] = true;
+    ship.engine.engine_types[0] = true;
+    ship.engine.drive[0] = true;
+    ship.engine.speed_max = 21.7;
+    ship.engine.speed_cruise = 10.0;
+    ship.engine.range = 6000.0;
+    ship.engine.pct_coal = 100.0;
+    ship.engine.screws = 2;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.52;
+    ship.engine.machinery_weight_factor = 0.56;
+
+    ship.weapons = WeaponAggregate {
+        torpedo1: WeaponMount {
+            kind: WeaponKind::Torpedo,
+            number: 6,
+            loads: 2,
+            size: 18.0,
+            length: 17.0,
+            location: 4,
+            ..Default::default()
+        },
+        misc_weight_hull: 180.0,
+        ..Default::default()
+    };
+    ship
+}
+
+fn preset_iron_duke() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "HMS Iron Duke (1914)".into();
+    ship.country = "United Kingdom".into();
+    ship.ship_type = "Battleship".into();
+
+    ship.hull.length = 622.75;
+    ship.hull.beam = 90.0;
+    ship.hull.beam_bulges = 90.0;
+    ship.hull.draught = 29.0;
+    ship.hull.block = 0.61;
+    ship.hull.date_hull = 1914;
+    ship.hull.date_engine = 1914;
+
+    ship.free.fc_length = 0.35;
+    ship.free.fd_length = 0.35;
+    ship.free.qd_length = 0.18;
+    ship.free.free_fc_for = 25.0;
+    ship.free.free_fc_aft = 22.0;
+    ship.free.free_fd_for = 18.0;
+    ship.free.free_fd_aft = 16.0;
+    ship.free.free_ad_for = 16.0;
+    ship.free.free_ad_aft = 15.0;
+    ship.free.free_qd_for = 15.0;
+    ship.free.free_qd_aft = 14.0;
+
+    // 10 x 13.5"/45 Mk V in 5 twin turrets ('A', 'B', 'Q' amidships, 'X', 'Y')
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 10;
+    g1.calibre = 13.5;
+    g1.cal_length = 45.0;
+    g1.date_gun = 1914;
+    g1.gun_type = 1;
+    g1.mount_type = 3;
+    g1.magazine = 100;
+    g1.mounts = 5;
+    g1.guns_in_mount_g1 = 3; // Twin
+    g1.layout_g1 = 1; // 4 in ends (2 fore, 2 aft)
+    g1.mount_super_g1 = 2; // 1 fore superfiring 'B', 1 aft superfiring 'X'
+    g1.guns_in_mount_g2 = 3; // Twin
+    g1.layout_g2 = 0; // 1 centerline amidships 'Q'
+    g1.arm_face = 11.0;
+    g1.arm_back = 8.0;
+    g1.arm_bottom = 8.0;
+
+    // 12 x 6"/45 Mk VII QF in upper deck casemates
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 12;
+    g2.calibre = 6.0;
+    g2.cal_length = 45.0;
+    g2.date_gun = 1914;
+    g2.gun_type = 2;
+    g2.mount_type = 6; // Casemate
+    g2.magazine = 150;
+    g2.mounts = 12;
+    g2.guns_in_mount_g1 = 0; // Single
+    g2.layout_g1 = 9; // Sides
+    g2.mount_sub_g1 = 12;
+    g2.arm_face = 6.0;
+    g2.arm_back = 2.0;
+
+    // 4 x 3" (12-pdr) AA guns
+    let g3 = ship.battery_mut(2);
+    g3.barrels = 4;
+    g3.calibre = 3.0;
+    g3.cal_length = 45.0;
+    g3.date_gun = 1914;
+    g3.gun_type = 4;
+    g3.mount_type = 5;
+    g3.magazine = 200;
+    g3.mounts = 4;
+    g3.layout_g1 = 9;
+
+    // Armour scheme: 12" main belt, 8" upper belt, 4" ends belt, turtleback deck
+    ship.armour.belt_main = 12.0;
+    ship.armour.belt_main_length = 380.0;
+    ship.armour.belt_main_height = 13.5;
+    ship.armour.belt_upper = 8.0;
+    ship.armour.belt_upper_length = 340.0;
+    ship.armour.belt_upper_height = 8.0;
+    ship.armour.belt_ends = 4.0;
+    ship.armour.belt_ends_length = 240.0;
+    ship.armour.belt_ends_height = 8.0;
+    ship.armour.deck = 2.5;
+    ship.armour.deck_fc = 1.0;
+    ship.armour.deck_qd = 1.0;
+    ship.armour.deck_coverage = 1;
+    ship.armour.bulkhead = 8.0;
+    ship.armour.bulkhead_length = 340.0;
+    ship.armour.bulkhead_height = 14.0;
+    ship.armour.bulkhead_beam = 65.0;
+    ship.armour.conning_for = 11.0;
+
+    // Direct-drive Parsons steam turbines + 18 Babcock & Wilcox coal/oil boilers (29,000 shp)
+    ship.engine.fuel[0] = true;
+    ship.engine.fuel[1] = true;
+    ship.engine.engine_types[2] = true;
+    ship.engine.drive[0] = true;
+    ship.engine.speed_max = 21.25;
+    ship.engine.speed_cruise = 10.0;
+    ship.engine.range = 7780.0;
+    ship.engine.pct_coal = 75.0;
+    ship.engine.screws = 4;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.82;
+    ship.engine.machinery_weight_factor = 1.15;
+
+    ship.weapons = WeaponAggregate {
+        torpedo1: WeaponMount {
+            kind: WeaponKind::Torpedo,
+            number: 4,
+            loads: 3,
+            size: 21.0,
+            length: 18.0,
+            location: 1, // Submerged
+            ..Default::default()
+        },
+        misc_weight_vital: 200.0,
+        ..Default::default()
+    };
+    ship
+}
+
+fn preset_nelson() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "HMS Nelson (1927)".into();
+    ship.country = "United Kingdom".into();
+    ship.ship_type = "Battleship".into();
+
+    ship.hull.length = 710.0;
+    ship.hull.beam = 106.0;
+    ship.hull.beam_bulges = 106.0;
+    ship.hull.draught = 30.0;
+    ship.hull.block = 0.585;
+    ship.hull.date_hull = 1927;
+    ship.hull.date_engine = 1927;
+
+    ship.free.fc_length = 0.35;
+    ship.free.fd_length = 0.35;
+    ship.free.qd_length = 0.18;
+    ship.free.free_fc_for = 27.5;
+    ship.free.free_fc_aft = 23.0;
+    ship.free.free_fd_for = 20.0;
+    ship.free.free_fd_aft = 18.0;
+    ship.free.free_ad_for = 18.0;
+    ship.free.free_ad_aft = 16.5;
+    ship.free.free_qd_for = 16.5;
+    ship.free.free_qd_aft = 15.0;
+
+    // 9 x 16"/45 Mk I in 3 triple turrets all forward ('A', 'B' superfiring, 'C')
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 9;
+    g1.calibre = 16.0;
+    g1.cal_length = 45.0;
+    g1.date_gun = 1927;
+    g1.gun_type = 1;
+    g1.mount_type = 3;
+    g1.magazine = 100;
+    g1.mounts = 3;
+    g1.guns_in_mount_g1 = 6; // Triple
+    g1.layout_g1 = 3; // All forward
+    g1.mount_super_g1 = 1; // 'B' superfiring over 'A' & 'C'
+    g1.arm_face = 16.0;
+    g1.arm_back = 9.0;
+    g1.arm_bottom = 9.0;
+
+    // 12 x 6"/50 Mk XXII BL in 6 twin turrets all aft
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 12;
+    g2.calibre = 6.0;
+    g2.cal_length = 50.0;
+    g2.date_gun = 1927;
+    g2.gun_type = 1;
+    g2.mount_type = 3;
+    g2.magazine = 150;
+    g2.mounts = 6;
+    g2.guns_in_mount_g1 = 3; // Twin
+    g2.layout_g1 = 4; // All aft
+    g2.mount_super_g1 = 2;
+    g2.arm_face = 1.5;
+    g2.arm_back = 1.0;
+    g2.arm_bottom = 1.0;
+
+    // 6 x 4.7"/40 QF Mk VIII HA AA guns
+    let g3 = ship.battery_mut(2);
+    g3.barrels = 6;
+    g3.calibre = 4.7;
+    g3.cal_length = 40.0;
+    g3.date_gun = 1927;
+    g3.gun_type = 4;
+    g3.mount_type = 5;
+    g3.magazine = 200;
+    g3.mounts = 6;
+    g3.layout_g1 = 9;
+
+    // All-or-nothing box citadel: 14" inclined internal belt, 6" deck
+    ship.armour.belt_main = 14.0;
+    ship.armour.belts_incline = 18.0;
+    ship.armour.belt_main_length = 384.0;
+    ship.armour.belt_main_height = 13.0;
+    ship.armour.deck = 6.0;
+    ship.armour.deck_fc = 1.0;
+    ship.armour.deck_qd = 1.0;
+    ship.armour.deck_coverage = 0; // Box citadel flat deck
+    ship.armour.bulkhead = 12.0;
+    ship.armour.bulkhead_length = 384.0;
+    ship.armour.bulkhead_height = 14.0;
+    ship.armour.bulkhead_beam = 82.0;
+    ship.armour.conning_for = 14.0;
+
+    // 8 Admiralty 3-drum boilers + 2 Brown-Curtis geared turbines (45,000 shp) arranged in Grouped Engine Forward (E-B)
+    ship.engine.fuel[1] = true;
+    ship.engine.engine_types[2] = true;
+    ship.engine.drive[1] = true;
+    ship.engine.speed_max = 23.0;
+    ship.engine.speed_cruise = 16.0;
+    ship.engine.range = 7000.0;
+    ship.engine.screws = 2;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.90;
+    ship.engine.machinery_weight_factor = 1.05;
+
+    ship.weapons = WeaponAggregate {
+        torpedo1: WeaponMount {
+            kind: WeaponKind::Torpedo,
+            number: 2,
+            loads: 5,
+            size: 24.5,
+            length: 22.0,
+            location: 1, // Submerged
+            ..Default::default()
+        },
+        misc_weight_vital: 300.0,
+        ..Default::default()
+    };
+    ship
+}
+
+fn preset_vittorio_veneto() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "Vittorio Veneto (1940)".into();
+    ship.country = "Italy".into();
+    ship.ship_type = "Battleship".into();
+
+    ship.hull.length = 780.0;
+    ship.hull.beam = 108.0;
+    ship.hull.beam_bulges = 108.0;
+    ship.hull.draught = 31.0;
+    ship.hull.block = 0.55;
+    ship.hull.date_hull = 1940;
+    ship.hull.date_engine = 1940;
+
+    ship.free.fc_length = 0.40;
+    ship.free.fd_length = 0.30;
+    ship.free.qd_length = 0.18;
+    ship.free.free_fc_for = 28.0;
+    ship.free.free_fc_aft = 23.0;
+    ship.free.free_fd_for = 20.0;
+    ship.free.free_fd_aft = 18.0;
+    ship.free.free_ad_for = 18.0;
+    ship.free.free_ad_aft = 16.5;
+    ship.free.free_qd_for = 16.5;
+    ship.free.free_qd_aft = 15.0;
+
+    // 9 x 381 mm (15.0")/50 Model 1934 in 3 triple turrets (2 fore superfiring, 1 aft)
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 9;
+    g1.calibre = 15.0;
+    g1.cal_length = 50.0;
+    g1.date_gun = 1940;
+    g1.gun_type = 1;
+    g1.mount_type = 3;
+    g1.magazine = 74;
+    g1.mounts = 3;
+    g1.guns_in_mount_g1 = 6; // Triple
+    g1.layout_g1 = 1; // 2 fore, 1 aft
+    g1.mount_super_g1 = 1;
+    g1.arm_face = 13.8;
+    g1.arm_back = 11.0;
+    g1.arm_bottom = 11.0;
+
+    // 12 x 152 mm (6.0")/55 Model 1934 in 4 triple turrets (wing midship corners)
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 12;
+    g2.calibre = 6.0;
+    g2.cal_length = 55.0;
+    g2.date_gun = 1940;
+    g2.gun_type = 1;
+    g2.mount_type = 3;
+    g2.magazine = 210;
+    g2.mounts = 4;
+    g2.guns_in_mount_g1 = 6; // Triple
+    g2.layout_g1 = 9;
+    g2.arm_face = 5.3;
+    g2.arm_back = 3.1;
+    g2.arm_bottom = 3.1;
+
+    // 12 x 90 mm (3.5")/50 Model 1939 single stabilized AA turrets
+    let g3 = ship.battery_mut(2);
+    g3.barrels = 12;
+    g3.calibre = 3.5;
+    g3.cal_length = 50.0;
+    g3.date_gun = 1940;
+    g3.gun_type = 4;
+    g3.mount_type = 3;
+    g3.magazine = 300;
+    g3.mounts = 12;
+    g3.guns_in_mount_g1 = 0;
+    g3.layout_g1 = 9;
+
+    // Composite spaced belt + layered deck + Pugliese cylindrical absorber TDS
+    ship.armour.belt_main = 11.0;
+    ship.armour.belts_incline = 11.0;
+    ship.armour.belt_main_length = 450.0;
+    ship.armour.belt_main_height = 12.5;
+    ship.armour.belt_upper = 2.75;
+    ship.armour.belt_upper_length = 450.0;
+    ship.armour.belt_upper_height = 8.0;
+    ship.armour.deck = 4.5;
+    ship.armour.deck_fc = 1.75;
+    ship.armour.deck_qd = 1.5;
+    ship.armour.deck_coverage = 3; // Double horizontal deck
+    ship.armour.bulkhead = 8.25;
+    ship.armour.bulkhead_length = 450.0;
+    ship.armour.bulkhead_height = 13.0;
+    ship.armour.bulkhead_beam = 82.0;
+    ship.armour.bulge = 1.5;
+    ship.armour.bulge_length = 450.0;
+    ship.armour.bulge_height = 15.0;
+    ship.armour.conning_for = 10.2;
+
+    // 8 Yarrow boilers + 4 Belluzzo geared steam turbines (130,000 shp) arranged in Sandwich E-B-E
+    ship.engine.fuel[1] = true;
+    ship.engine.engine_types[2] = true;
+    ship.engine.drive[1] = true;
+    ship.engine.speed_max = 30.0;
+    ship.engine.speed_cruise = 14.0;
+    ship.engine.range = 4700.0;
+    ship.engine.screws = 4;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.88;
+    ship.engine.machinery_weight_factor = 0.95;
+
+    ship.weapons = WeaponAggregate {
+        misc_weight_vital: 400.0,
+        misc_weight_deck: 120.0,
+        ..Default::default()
+    };
+    ship
+}
+
+fn preset_richelieu() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "Richelieu (1940)".into();
+    ship.country = "France".into();
+    ship.ship_type = "Battleship".into();
+
+    ship.hull.length = 813.0;
+    ship.hull.beam = 108.5;
+    ship.hull.beam_bulges = 108.5;
+    ship.hull.draught = 31.5;
+    ship.hull.block = 0.54;
+    ship.hull.date_hull = 1940;
+    ship.hull.date_engine = 1940;
+
+    ship.free.fc_length = 0.45;
+    ship.free.fd_length = 0.25;
+    ship.free.qd_length = 0.18;
+    ship.free.free_fc_for = 29.5;
+    ship.free.free_fc_aft = 23.5;
+    ship.free.free_fd_for = 20.0;
+    ship.free.free_fd_aft = 18.5;
+    ship.free.free_ad_for = 18.5;
+    ship.free.free_ad_aft = 17.0;
+    ship.free.free_qd_for = 17.0;
+    ship.free.free_qd_aft = 16.0;
+
+    // 8 x 380 mm (15.0")/45 Model 1935 in 2 quadruple turrets all forward ('1' & '2' superfiring)
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 8;
+    g1.calibre = 15.0;
+    g1.cal_length = 45.0;
+    g1.date_gun = 1940;
+    g1.gun_type = 1;
+    g1.mount_type = 3;
+    g1.magazine = 104;
+    g1.mounts = 2;
+    g1.guns_in_mount_g1 = 5; // Quadruple
+    g1.layout_g1 = 3; // All forward
+    g1.mount_super_g1 = 1;
+    g1.arm_face = 16.9;
+    g1.arm_back = 10.6;
+    g1.arm_bottom = 10.6;
+
+    // 9 x 152 mm (6.0")/55 Model 1930 in 3 triple turrets all aft in pyramid
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 9;
+    g2.calibre = 6.0;
+    g2.cal_length = 55.0;
+    g2.date_gun = 1940;
+    g2.gun_type = 1;
+    g2.mount_type = 3;
+    g2.magazine = 200;
+    g2.mounts = 3;
+    g2.guns_in_mount_g1 = 6; // Triple
+    g2.layout_g1 = 4; // All aft
+    g2.mount_super_g1 = 1;
+    g2.arm_face = 5.1;
+    g2.arm_back = 3.0;
+    g2.arm_bottom = 3.0;
+
+    // 12 x 100 mm (3.9")/45 Model 1930 twin DP turrets
+    let g3 = ship.battery_mut(2);
+    g3.barrels = 12;
+    g3.calibre = 3.9;
+    g3.cal_length = 45.0;
+    g3.date_gun = 1940;
+    g3.gun_type = 4;
+    g3.mount_type = 3;
+    g3.magazine = 300;
+    g3.mounts = 6;
+    g3.guns_in_mount_g1 = 3; // Twin
+    g3.layout_g1 = 9;
+
+    // Heavy internal inclined belt (327 mm / 12.9") + double armored deck
+    ship.armour.belt_main = 12.9;
+    ship.armour.belts_incline = 15.4;
+    ship.armour.belt_main_length = 430.0;
+    ship.armour.belt_main_height = 13.0;
+    ship.armour.deck = 6.7;
+    ship.armour.deck_fc = 1.5;
+    ship.armour.deck_qd = 1.5;
+    ship.armour.deck_coverage = 3; // Double horizontal deck
+    ship.armour.bulkhead = 9.2;
+    ship.armour.bulkhead_length = 430.0;
+    ship.armour.bulkhead_height = 14.0;
+    ship.armour.bulkhead_beam = 75.0;
+    ship.armour.conning_for = 13.4;
+
+    // 6 Sural forced-circulation high-pressure boilers + 4 Parsons geared turbines (150,000 shp) in compact echelon
+    ship.engine.fuel[1] = true;
+    ship.engine.engine_types[2] = true;
+    ship.engine.drive[1] = true;
+    ship.engine.speed_max = 32.0;
+    ship.engine.speed_cruise = 15.0;
+    ship.engine.range = 7670.0;
+    ship.engine.screws = 4;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.88;
+    ship.engine.machinery_weight_factor = 0.88;
+
+    // Ébonite Mousse void filling in deep lateral TDS (7.0 m depth)
+    ship.weapons = WeaponAggregate {
+        void_weight: 120.0,
+        misc_weight_vital: 450.0,
+        misc_weight_deck: 150.0,
+        ..Default::default()
+    };
+    ship
+}
+
+fn preset_atlanta() -> ShipModel {
+    let mut ship = ShipModel::new();
+    ship.name = "USS Atlanta (CL-51, 1941)".into();
+    ship.country = "United States".into();
+    ship.ship_type = "Light cruiser".into();
+
+    ship.hull.length = 541.0;
+    ship.hull.beam = 53.2;
+    ship.hull.beam_bulges = 53.2;
+    ship.hull.draught = 20.5;
+    ship.hull.block = 0.52;
+    ship.hull.date_hull = 1941;
+    ship.hull.date_engine = 1941;
+
+    ship.free.fc_length = 0.40;
+    ship.free.fd_length = 0.30;
+    ship.free.qd_length = 0.18;
+    ship.free.free_fc_for = 25.0;
+    ship.free.free_fc_aft = 20.0;
+    ship.free.free_fd_for = 17.5;
+    ship.free.free_fd_aft = 15.5;
+    ship.free.free_ad_for = 15.5;
+    ship.free.free_ad_aft = 14.5;
+    ship.free.free_qd_for = 14.5;
+    ship.free.free_qd_aft = 14.0;
+
+    // 16 x 5"/38 Mk 12 DP guns in 8 twin Mk 29 mounts
+    // 6 centerline (3 fore superfiring, 3 aft superfiring) + 2 waist/wing (port & starboard)
+    let g1 = ship.battery_mut(0);
+    g1.barrels = 16;
+    g1.calibre = 5.0;
+    g1.cal_length = 38.0;
+    g1.date_gun = 1941;
+    g1.gun_type = 4; // Dual purpose
+    g1.mount_type = 3; // Enclosed mount
+    g1.magazine = 450;
+    g1.mounts = 8;
+    g1.guns_in_mount_g1 = 3; // Twin
+    g1.layout_g1 = 1; // Centreline ends (6 mounts)
+    g1.mount_super_g1 = 2; // Super-superfiring
+    g1.guns_in_mount_g2 = 3; // Twin
+    g1.layout_g2 = 9; // Sides (2 mounts)
+    g1.arm_face = 1.25;
+    g1.arm_back = 0.75;
+    g1.arm_bottom = 0.75;
+
+    // 12 x 1.1" (28 mm)/75 quad AA mounts (3 mounts = 12 barrels)
+    let g2 = ship.battery_mut(1);
+    g2.barrels = 12;
+    g2.calibre = 1.1;
+    g2.cal_length = 75.0;
+    g2.date_gun = 1941;
+    g2.gun_type = 4;
+    g2.mount_type = 5;
+    g2.magazine = 800;
+    g2.mounts = 3;
+    g2.guns_in_mount_g1 = 5; // Quad
+    g2.layout_g1 = 9;
+
+    // 8 x 20 mm Oerlikon single AA guns
+    let g3 = ship.battery_mut(2);
+    g3.barrels = 8;
+    g3.calibre = 0.79;
+    g3.cal_length = 70.0;
+    g3.date_gun = 1941;
+    g3.gun_type = 4;
+    g3.mount_type = 5;
+    g3.magazine = 1000;
+    g3.mounts = 8;
+    g3.layout_g1 = 9;
+
+    // Protection: 3.75" main belt over machinery, 1.25" deck, 3.75" bulkheads
+    ship.armour.belt_main = 3.75;
+    ship.armour.belt_main_length = 250.0;
+    ship.armour.belt_main_height = 9.0;
+    ship.armour.deck = 1.25;
+    ship.armour.deck_fc = 0.75;
+    ship.armour.deck_qd = 0.75;
+    ship.armour.deck_coverage = 0;
+    ship.armour.bulkhead = 3.75;
+    ship.armour.bulkhead_length = 250.0;
+    ship.armour.bulkhead_height = 9.0;
+    ship.armour.bulkhead_beam = 42.0;
+    ship.armour.conning_for = 2.5;
+
+    // 4 Babcock & Wilcox boilers + 2 Westinghouse geared steam turbines (75,000 shp) arranged in Unit Alternating System (B-E-B-E)
+    ship.engine.fuel[1] = true;
+    ship.engine.engine_types[2] = true;
+    ship.engine.drive[1] = true;
+    ship.engine.speed_max = 32.5;
+    ship.engine.speed_cruise = 15.0;
+    ship.engine.range = 8500.0;
+    ship.engine.screws = 2;
+    ship.engine.resistance_model = ResistanceModel::HoltropMennen;
+    ship.engine.power_factor = 0.91;
+    ship.engine.machinery_weight_factor = 0.58;
+
+    ship.weapons = WeaponAggregate {
+        torpedo1: WeaponMount {
+            kind: WeaponKind::Torpedo,
+            number: 8,
+            loads: 1,
+            size: 21.0,
+            length: 18.0,
+            location: 4, // Deck
+            ..Default::default()
+        },
+        misc_weight_vital: 220.0,
+        ..Default::default()
+    };
+    ship
+}
+
 /// Published historical subsystem weight & stability reference for a preset ship.
 ///
 /// Accounting convention (matching SpringSharp's output groups):
@@ -1523,6 +2612,132 @@ pub const PRESET_WEIGHT_BENCHMARKS: &[PresetWeightBenchmark] = &[
         ref_bunker_t: 1_500.0,
         ref_gm_ft: 7.2,
         source: "Garzke & Dulin (1985) Battleships: Axis and Neutral; Gröner (1990)",
+    },
+    PresetWeightBenchmark {
+        id: "cv2_lexington",
+        name: "USS Lexington (CV-2, 1928)",
+        ship_type: "Aircraft carrier",
+        year: 1928,
+        ref_displacement_t: 37_000.0,
+        ref_hull_t: 21_500.0,
+        ref_armour_t: 4_500.0,
+        ref_machinery_t: 6_600.0,
+        ref_armament_t: 1_250.0,
+        ref_bunker_t: 2_200.0,
+        ref_gm_ft: 8.2,
+        source: "Friedman (1983) U.S. Aircraft Carriers; Stern (1993) The Lexington Class Carriers",
+    },
+    PresetWeightBenchmark {
+        id: "c20_tiger",
+        name: "HMS Tiger (C20, 1959)",
+        ship_type: "Light cruiser",
+        year: 1959,
+        ref_displacement_t: 10_950.0,
+        ref_hull_t: 5_450.0,
+        ref_armour_t: 1_650.0,
+        ref_machinery_t: 1_500.0,
+        ref_armament_t: 1_350.0,
+        ref_bunker_t: 850.0,
+        ref_gm_ft: 4.3,
+        source: "Raven & Roberts (1980) British Cruisers of World War Two; Friedman (2010) British Cruisers",
+    },
+    PresetWeightBenchmark {
+        id: "mikasa",
+        name: "IJN Mikasa",
+        ship_type: "Battleship",
+        year: 1902,
+        ref_displacement_t: 15_200.0,
+        ref_hull_t: 6_700.0,
+        ref_armour_t: 4_050.0,
+        ref_machinery_t: 2_700.0,
+        ref_armament_t: 1_280.0,
+        ref_bunker_t: 510.0,
+        ref_gm_ft: 5.6,
+        source: "Jentschura, Jung & Mickel (1977) Warships of the Imperial Japanese Navy; Campbell",
+    },
+    PresetWeightBenchmark {
+        id: "olympia",
+        name: "USS Olympia (C-6, 1895)",
+        ship_type: "Protected cruiser",
+        year: 1895,
+        ref_displacement_t: 5_900.0,
+        ref_hull_t: 2_850.0,
+        ref_armour_t: 770.0,
+        ref_machinery_t: 1_450.0,
+        ref_armament_t: 460.0,
+        ref_bunker_t: 260.0,
+        ref_gm_ft: 3.5,
+        source: "Friedman (1984) U.S. Cruisers: An Illustrated Design History",
+    },
+    PresetWeightBenchmark {
+        id: "iron_duke",
+        name: "HMS Iron Duke (1914)",
+        ship_type: "Battleship",
+        year: 1914,
+        ref_displacement_t: 28_250.0,
+        ref_hull_t: 13_500.0,
+        ref_armour_t: 9_350.0,
+        ref_machinery_t: 1_450.0,
+        ref_armament_t: 3_650.0,
+        ref_bunker_t: 900.0,
+        ref_gm_ft: 5.5,
+        source: "Burt (1986) British Battleships of World War One; Raven & Roberts",
+    },
+    PresetWeightBenchmark {
+        id: "nelson",
+        name: "HMS Nelson (1927)",
+        ship_type: "Battleship",
+        year: 1927,
+        ref_displacement_t: 37_500.0,
+        ref_hull_t: 16_800.0,
+        ref_armour_t: 12_850.0,
+        ref_machinery_t: 1_680.0,
+        ref_armament_t: 5_350.0,
+        ref_bunker_t: 1_650.0,
+        ref_gm_ft: 7.1,
+        source: "Raven & Roberts (1976) British Battleships of World War Two; Brown (2000)",
+    },
+    PresetWeightBenchmark {
+        id: "vittorio_veneto",
+        name: "Vittorio Veneto (1940)",
+        ship_type: "Battleship",
+        year: 1940,
+        ref_displacement_t: 41_300.0,
+        ref_hull_t: 19_800.0,
+        ref_armour_t: 12_200.0,
+        ref_machinery_t: 3_500.0,
+        ref_armament_t: 5_250.0,
+        ref_bunker_t: 850.0,
+        ref_gm_ft: 7.8,
+        source: "Bagnasco & de Toro (2011) The Littorio Class; Garzke & Dulin (1985)",
+    },
+    PresetWeightBenchmark {
+        id: "richelieu",
+        name: "Richelieu (1940)",
+        ship_type: "Battleship",
+        year: 1940,
+        ref_displacement_t: 42_500.0,
+        ref_hull_t: 20_000.0,
+        ref_armour_t: 12_600.0,
+        ref_machinery_t: 4_250.0,
+        ref_armament_t: 4_350.0,
+        ref_bunker_t: 1_400.0,
+        ref_gm_ft: 8.5,
+        source: "Dumas (2001) Le cuirassé Richelieu 1935-1968; Jordan & Dumas (2009)",
+    },
+    PresetWeightBenchmark {
+        id: "atlanta",
+        name: "USS Atlanta (CL-51, 1941)",
+        ship_type: "Light cruiser",
+        year: 1941,
+        ref_displacement_t: 8_750.0,
+        ref_hull_t: 4_550.0,
+        ref_armour_t: 1_180.0,
+        ref_machinery_t: 1_500.0,
+        ref_armament_t: 770.0,
+        ref_bunker_t: 590.0,
+        ref_gm_ft: 2.6,
+        source: "Friedman (1984) U.S. Cruisers: An Illustrated Design History",
     },
 ];
 

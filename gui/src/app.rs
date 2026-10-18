@@ -14,7 +14,8 @@ use springsharp::spaces::{
 };
 use springsharp::systems::{
     AaDirector, BallisticComputer, CombatModality, ElectricalPlantStyle, MainDirector,
-    MobilityRegime, RadarSuite, SonarSuite, StyleDoctrine, TacticalEchelon,
+    MobilityRegime, RadarSuite, SonarSuite, StyleDoctrine, TacticalEchelon, TdsArchitecture,
+    TransverseSubdivision,
 };
 use springsharp::{
     compute_self_immunity_zone, get_preset, get_preset_benchmark, solve_displacement_scale,
@@ -1798,7 +1799,7 @@ impl SpringSharpApp {
         ui.separator();
 
         let available_width = ui.available_width().max(600.0);
-        let height = 360.0;
+        let height = 500.0;
         let (response, painter) =
             ui.allocate_painter(egui::vec2(available_width, height), egui::Sense::hover());
         let rect = response.rect;
@@ -1829,7 +1830,7 @@ impl SpringSharpApp {
         let x_at = |p: f32| x0 + p * draw_w;
 
         // Profile view baseline
-        let y_wl = rect.top() + 75.0_f32;
+        let y_wl = rect.top() + 70.0_f32;
         let y_keel = y_wl + 20.0_f32;
         let fb_scale = 1.0_f32;
 
@@ -1878,48 +1879,132 @@ impl SpringSharpApp {
             egui::Stroke::new(1.5, egui::Color32::from_rgb(79, 179, 255)),
         ));
 
-        // Carrier flight deck in profile view
         let sys_eval_bp = self.ship.systems.evaluate(&self.ship);
         let is_carrier = sys_eval_bp.resolved_modality == CombatModality::AviationDeckProjection
-            || self.ship.ship_type.to_lowercase().contains("carrier");
-        if is_carrier {
-            let fd_y = y_fc_for - 12.0;
+            || self.ship.ship_type.to_lowercase().contains("carrier")
+            || (self.ship.weapons.misc_weight_deck >= 250.0
+                && self.ship.guns.batteries[0].calibre <= 8.5);
+        let fd_y = y_fc_for - 12.0;
+
+        // Battery mount solver
+        let g1 = &self.ship.guns.batteries[0];
+        let g1_mounts =
+            solve_battery_mounts(g1, fc as f64, fd as f64, qd as f64, is_carrier, false);
+        let g2 = &self.ship.guns.batteries[1];
+        let g2_mounts = solve_battery_mounts(g2, fc as f64, fd as f64, qd as f64, is_carrier, true);
+
+        // Citadel calculation (vital spaces: fore magazine to aft magazine + machinery)
+        let mut cit_fore_x = 0.35_f64;
+        let mut cit_aft_x = 0.65_f64;
+        if !g1_mounts.is_empty() {
+            let mut min_x = 1.0_f64;
+            let mut max_x = 0.0_f64;
+            for m in &g1_mounts {
+                if m.x < min_x {
+                    min_x = m.x;
+                }
+                if m.x > max_x {
+                    max_x = m.x;
+                }
+            }
+            cit_fore_x = min_x;
+            cit_aft_x = max_x;
+        }
+        let cit_x0 = (cit_fore_x - 0.04).clamp(0.09, 0.38) as f32;
+        let cit_x1 = (cit_aft_x + 0.04).clamp(0.62, 0.91) as f32;
+        let cit_center = (cit_x0 + cit_x1) * 0.5;
+        let cit_px0 = x_at(cit_x0);
+        let cit_px1 = x_at(cit_x1);
+
+        // Citadel enclosure box
+        let cit_rect = egui::Rect::from_min_max(
+            egui::pos2(cit_px0, y_wl - 16.0),
+            egui::pos2(cit_px1, y_keel),
+        );
+        painter.rect_filled(
+            cit_rect,
+            0.0,
+            egui::Color32::from_rgba_unmultiplied(155, 123, 234, 16),
+        );
+        painter.rect_stroke(
+            cit_rect,
+            0.0,
+            egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgba_unmultiplied(155, 123, 234, 85),
+            ),
+            egui::StrokeKind::Outside,
+        );
+
+        // Superstructure bridge & funnels (dynamically placed between battery groups)
+        let (dir_x, base_deck_y) = if is_carrier {
+            let hangar_pts = vec![
+                egui::pos2(x0 + 6.0, fd_y),
+                egui::pos2(x1 - 6.0, fd_y),
+                egui::pos2(x1 - 15.0, y_qd_aft),
+                egui::pos2(x0 + 15.0, y_fc_for),
+            ];
+            painter.add(egui::Shape::convex_polygon(
+                hangar_pts,
+                egui::Color32::from_rgba_unmultiplied(95, 211, 141, 32),
+                egui::Stroke::new(1.2, egui::Color32::from_rgb(95, 211, 141)),
+            ));
             painter.line_segment(
                 [egui::pos2(x0 + 4.0, fd_y), egui::pos2(x1 - 4.0, fd_y)],
                 egui::Stroke::new(2.5, egui::Color32::from_rgb(95, 211, 141)),
             );
-            painter.line_segment(
-                [egui::pos2(x0 + 15.0, fd_y), egui::pos2(x0 + 15.0, y_fc_for)],
-                egui::Stroke::new(1.0, egui::Color32::from_rgb(95, 211, 141)),
+            let isl_x0 = x0 + draw_w * 0.40;
+            let isl_w = draw_w * 0.16;
+            let isl_bridge = egui::Rect::from_min_max(
+                egui::pos2(isl_x0, fd_y - 12.0),
+                egui::pos2(isl_x0 + isl_w * 0.45, fd_y),
             );
-            painter.line_segment(
-                [egui::pos2(x1 - 15.0, fd_y), egui::pos2(x1 - 15.0, y_qd_aft)],
-                egui::Stroke::new(1.0, egui::Color32::from_rgb(95, 211, 141)),
+            painter.rect_filled(isl_bridge, 1.5, egui::Color32::from_rgb(224, 134, 79));
+            let isl_funnel = egui::Rect::from_min_max(
+                egui::pos2(isl_x0 + isl_w * 0.50, fd_y - 16.0),
+                egui::pos2(isl_x0 + isl_w * 0.98, fd_y),
             );
-        }
+            painter.rect_filled(isl_funnel, 1.5, egui::Color32::from_rgb(138, 164, 191));
+            (x0 + draw_w * 0.43, fd_y - 12.0)
+        } else {
+            let mut fore_max_x = 0.0_f32;
+            let mut aft_min_x = 1.0_f32;
+            for m in &g1_mounts {
+                let px = m.x as f32;
+                if m.fwd && px < 0.5 && px > fore_max_x {
+                    fore_max_x = px;
+                }
+                if !m.fwd && px > 0.5 && px < aft_min_x {
+                    aft_min_x = px;
+                }
+            }
+            let b_front = (x0 + draw_w * 0.35).max(x_at(fore_max_x) + 16.0);
+            let b_rear = b_front + 20.0;
+            let f_front = b_rear + 12.0;
+            let mut f_rear = (x0 + draw_w * 0.65).min(x_at(aft_min_x) - 16.0);
+            if f_rear < f_front + 14.0 {
+                f_rear = f_front + 14.0;
+            }
 
-        // Superstructure bridge & funnel
-        let x_mid = x0 + draw_w * 0.48;
-        let bridge_rect = egui::Rect::from_min_max(
-            egui::pos2(x_mid - 24.0, y_fd_for - 16.0),
-            egui::pos2(x_mid - 8.0, y_fd_for),
-        );
-        painter.rect_filled(bridge_rect, 2.0, egui::Color32::from_rgb(138, 164, 191));
-        let funnel_rect = egui::Rect::from_min_max(
-            egui::pos2(x_mid + 6.0, y_fd_for - 20.0),
-            egui::pos2(x_mid + 18.0, y_fd_for),
-        );
-        painter.rect_filled(funnel_rect, 2.0, egui::Color32::from_rgb(110, 130, 150));
+            let bridge_rect = egui::Rect::from_min_max(
+                egui::pos2(b_front, y_fd_for - 16.0),
+                egui::pos2(b_rear, y_fd_for),
+            );
+            painter.rect_filled(bridge_rect, 2.0, egui::Color32::from_rgb(138, 164, 191));
+            let funnel_rect = egui::Rect::from_min_max(
+                egui::pos2(f_front, y_fd_for - 20.0),
+                egui::pos2(f_rear, y_fd_for),
+            );
+            painter.rect_filled(funnel_rect, 2.0, egui::Color32::from_rgb(110, 130, 150));
+            ((b_front + b_rear) * 0.5, y_fd_for - 16.0)
+        };
 
-        let sys_eval = self.ship.systems.evaluate(&self.ship);
-        let dir_x = x_mid - 16.0;
-        let dir_top_y = y_fd_for - 24.0;
+        // Fire-control director & radar
+        let sys_eval = sys_eval_bp;
+        let dir_top_y = base_deck_y - 8.0;
         let rf_arm = (sys_eval.optical_baseline_m as f32 * 0.75).clamp(3.0, 12.0);
         painter.line_segment(
-            [
-                egui::pos2(dir_x, y_fd_for - 16.0),
-                egui::pos2(dir_x, dir_top_y),
-            ],
+            [egui::pos2(dir_x, base_deck_y), egui::pos2(dir_x, dir_top_y)],
             egui::Stroke::new(1.5, egui::Color32::WHITE),
         );
         painter.line_segment(
@@ -1936,11 +2021,11 @@ impl SpringSharpApp {
         );
 
         if sys_eval.radar_blind_fire_capability > 0.0 {
-            let radar_x = x_mid - 10.0;
-            let radar_top_y = y_fd_for - 28.0;
+            let radar_x = dir_x + 7.0;
+            let radar_top_y = base_deck_y - 12.0;
             painter.line_segment(
                 [
-                    egui::pos2(radar_x, y_fd_for - 16.0),
+                    egui::pos2(radar_x, base_deck_y),
                     egui::pos2(radar_x, radar_top_y),
                 ],
                 egui::Stroke::new(1.0, egui::Color32::WHITE),
@@ -1954,11 +2039,11 @@ impl SpringSharpApp {
             );
         }
 
-        // Main belt armour
+        // Main belt armour anchored over citadel center
         if self.ship.armour.belt_main > 0.0 && self.ship.armour.belt_main_length > 0.0 {
             let bw =
                 (((self.ship.armour.belt_main_length as f32) / l) * draw_w).clamp(10.0, draw_w);
-            let bx = x0 + (draw_w - bw) / 2.0;
+            let bx = (x_at(cit_center) - bw * 0.5).clamp(x0 + 4.0, x1 - bw - 4.0);
             let bh = ((self.ship.armour.belt_main_height as f32) * fb_scale).clamp(6.0, 18.0);
             let by = y_wl - bh * 0.6;
             let belt_rect =
@@ -1966,20 +2051,106 @@ impl SpringSharpApp {
             painter.rect_filled(
                 belt_rect,
                 1.0,
-                egui::Color32::from_rgba_unmultiplied(155, 123, 234, 110),
+                egui::Color32::from_rgba_unmultiplied(155, 123, 234, 125),
             );
+            painter.rect_stroke(
+                belt_rect,
+                1.0,
+                egui::Stroke::new(1.0, egui::Color32::from_rgb(155, 123, 234)),
+                egui::StrokeKind::Outside,
+            );
+
+            // Upper belt
+            if self.ship.armour.belt_upper > 0.0 && self.ship.armour.belt_upper_length > 0.0 {
+                let ub_w = (((self.ship.armour.belt_upper_length as f32) / l) * draw_w)
+                    .clamp(10.0, draw_w);
+                let ub_x = (x_at(cit_center) - ub_w * 0.5).clamp(x0 + 4.0, x1 - ub_w - 4.0);
+                let ub_h =
+                    ((self.ship.armour.belt_upper_height as f32) * fb_scale).clamp(4.0, 12.0);
+                let ub_y = by - ub_h;
+                let ub_rect =
+                    egui::Rect::from_min_max(egui::pos2(ub_x, ub_y), egui::pos2(ub_x + ub_w, by));
+                painter.rect_filled(
+                    ub_rect,
+                    0.5,
+                    egui::Color32::from_rgba_unmultiplied(192, 132, 252, 95),
+                );
+            }
+
+            // Ends belt
+            if self.ship.armour.belt_ends > 0.0 && self.ship.armour.belt_ends_length > 0.0 {
+                let eb_w = (((self.ship.armour.belt_ends_length as f32) / l) * draw_w * 0.5)
+                    .clamp(6.0, 60.0);
+                let eb_h = bh * 0.75;
+                let eb_y = y_wl - eb_h * 0.5;
+                let ef_x0 = (bx - eb_w).max(x0 + 2.0);
+                let ef_rect =
+                    egui::Rect::from_min_max(egui::pos2(ef_x0, eb_y), egui::pos2(bx, eb_y + eb_h));
+                painter.rect_filled(
+                    ef_rect,
+                    0.5,
+                    egui::Color32::from_rgba_unmultiplied(147, 129, 255, 60),
+                );
+                let ea_x1 = (bx + bw + eb_w).min(x1 - 2.0);
+                let ea_rect = egui::Rect::from_min_max(
+                    egui::pos2(bx + bw, eb_y),
+                    egui::pos2(ea_x1, eb_y + eb_h),
+                );
+                painter.rect_filled(
+                    ea_rect,
+                    0.5,
+                    egui::Color32::from_rgba_unmultiplied(147, 129, 255, 60),
+                );
+            }
         }
 
-        // Turret positions
-        let g1 = &self.ship.guns.batteries[0];
-        let positions = get_turret_positions(g1, fc as f64, fd as f64, qd as f64);
-        let g1_cal = g1.calibre as f32;
-        let t_rad = (g1_cal * 0.3).clamp(3.5, 7.5);
+        // Deck armour coverage (Flat, Turtleback sloped, Double deck, Weather deck)
+        let d_cov = self.ship.armour.deck_coverage;
+        if self.ship.armour.deck > 0.0 {
+            let d_y = y_wl - 2.0;
+            if d_cov == 0 || d_cov == 4 || d_cov == 5 || d_cov == 6 {
+                let line_y = if d_cov == 6 { y_wl - 12.0 } else { d_y };
+                let (xs, xe) = if d_cov == 4 {
+                    (x_at(0.38), x_at(0.62))
+                } else {
+                    (cit_px0, cit_px1)
+                };
+                painter.line_segment(
+                    [egui::pos2(xs, line_y), egui::pos2(xe, line_y)],
+                    egui::Stroke::new(1.8, egui::Color32::from_rgb(56, 239, 125)),
+                );
+            } else if d_cov == 1 || d_cov == 2 {
+                painter.line_segment(
+                    [
+                        egui::pos2(cit_px0, d_y - 2.0),
+                        egui::pos2(cit_px1, d_y - 2.0),
+                    ],
+                    egui::Stroke::new(1.5, egui::Color32::from_rgb(56, 239, 125)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(cit_px0, d_y + 5.0),
+                        egui::pos2(cit_px1, d_y + 5.0),
+                    ],
+                    egui::Stroke::new(1.2, egui::Color32::from_rgb(230, 162, 60)),
+                );
+            } else if d_cov == 3 {
+                painter.line_segment(
+                    [
+                        egui::pos2(cit_px0, d_y - 7.0),
+                        egui::pos2(cit_px1, d_y - 7.0),
+                    ],
+                    egui::Stroke::new(1.2, egui::Color32::from_rgb(56, 239, 125)),
+                );
+                painter.line_segment(
+                    [egui::pos2(cit_px0, d_y), egui::pos2(cit_px1, d_y)],
+                    egui::Stroke::new(1.8, egui::Color32::from_rgb(56, 239, 125)),
+                );
+            }
+        }
 
-        for &p_f64 in &positions {
-            let p = p_f64 as f32;
-            let tx = x_at(p);
-            let ty = if p <= fc {
+        let deck_y_at = |p: f32| -> f32 {
+            if p <= fc {
                 y_fc_for + (y_fc_aft - y_fc_for) * if fc > 0.0 { p / fc } else { 0.0 }
             } else if p <= fc + fd {
                 y_fd_for + (y_fd_aft - y_fd_for) * if fd > 0.0 { (p - fc) / fd } else { 0.0 }
@@ -1988,32 +2159,152 @@ impl SpringSharpApp {
             } else {
                 y_qd_for
                     + (y_qd_aft - y_qd_for) * if qd > 0.0 { (p - (1.0 - qd)) / qd } else { 0.0 }
-            };
-            let fwd = p < 0.5;
-            let t_rect = egui::Rect::from_min_max(
-                egui::pos2(tx - t_rad, ty - t_rad * 1.3),
-                egui::pos2(tx + t_rad, ty),
-            );
-            painter.rect_filled(t_rect, 1.0, egui::Color32::from_rgb(224, 93, 111));
-            let barrel_x2 = if fwd {
-                tx - t_rad - 8.0
+            }
+        };
+
+        // Main Battery #1 (turrets vs casemates)
+        let g1_cal = g1.calibre as f32;
+        let t_rad = (g1_cal * 0.32).clamp(3.5, 7.2);
+        for m in &g1_mounts {
+            let p = m.x as f32;
+            let tx = x_at(p);
+            let base_deck = if is_carrier {
+                if m.side == -1 {
+                    fd_y
+                } else {
+                    fd_y + 4.5
+                }
             } else {
-                tx + t_rad + 8.0
+                deck_y_at(p)
             };
-            painter.line_segment(
-                [
-                    egui::pos2(if fwd { tx - t_rad } else { tx + t_rad }, ty - t_rad * 0.6),
-                    egui::pos2(barrel_x2, ty - t_rad * 0.6),
-                ],
-                egui::Stroke::new(1.5, egui::Color32::WHITE),
-            );
+            let b_len = (g1_cal * 0.65).clamp(6.0, 12.0);
+
+            if m.is_casemate {
+                let case_y = base_deck + 4.5;
+                let c_rect = egui::Rect::from_min_max(
+                    egui::pos2(tx - 3.5, case_y - 2.5),
+                    egui::pos2(tx + 3.5, case_y + 2.5),
+                );
+                painter.rect_filled(c_rect, 0.5, egui::Color32::from_rgb(20, 34, 48));
+                painter.rect_stroke(
+                    c_rect,
+                    0.5,
+                    egui::Stroke::new(0.8, egui::Color32::from_rgb(125, 140, 153)),
+                    egui::StrokeKind::Outside,
+                );
+                painter.circle_filled(
+                    egui::pos2(tx, case_y),
+                    1.6,
+                    egui::Color32::from_rgb(160, 179, 198),
+                );
+                let bx2 = if m.fwd { tx - b_len } else { tx + b_len };
+                painter.line_segment(
+                    [egui::pos2(tx, case_y), egui::pos2(bx2, case_y)],
+                    egui::Stroke::new(1.3, egui::Color32::WHITE),
+                );
+            } else {
+                let super_step = (m.tier as f32) * (t_rad * 1.35 + 2.0);
+                let ty = base_deck - super_step;
+                let th = t_rad * 1.25;
+                if m.tier > 0 {
+                    let barb_rect = egui::Rect::from_min_max(
+                        egui::pos2(tx - t_rad * 0.72, ty),
+                        egui::pos2(tx + t_rad * 0.72, base_deck),
+                    );
+                    painter.rect_filled(barb_rect, 0.5, egui::Color32::from_rgb(160, 82, 98));
+                }
+                let t_rect = egui::Rect::from_min_max(
+                    egui::pos2(tx - t_rad, ty - th),
+                    egui::pos2(tx + t_rad, ty),
+                );
+                painter.rect_filled(t_rect, 1.0, egui::Color32::from_rgb(224, 93, 111));
+                let barrel_x2 = if m.fwd {
+                    tx - t_rad - b_len
+                } else {
+                    tx + t_rad + b_len
+                };
+                painter.line_segment(
+                    [
+                        egui::pos2(if m.fwd { tx - t_rad } else { tx + t_rad }, ty - th * 0.6),
+                        egui::pos2(barrel_x2, ty - th * 0.68),
+                    ],
+                    egui::Stroke::new(1.5, egui::Color32::WHITE),
+                );
+            }
+        }
+
+        // Secondary Battery #2 (turrets vs casemates)
+        if !g2_mounts.is_empty() && g2.calibre >= 2.5 {
+            let g2_cal = g2.calibre as f32;
+            let r2 = (g2_cal * 0.45).clamp(2.5, 4.5);
+            for m in &g2_mounts {
+                if m.side == 1 {
+                    continue;
+                }
+                let p = m.x as f32;
+                let tx = x_at(p);
+                let base_deck = if is_carrier { fd_y + 4.0 } else { deck_y_at(p) };
+                let b_len = (g2_cal * 0.9).clamp(4.5, 8.5);
+
+                if m.is_casemate {
+                    let case_y = base_deck + 4.5;
+                    let c_rect = egui::Rect::from_min_max(
+                        egui::pos2(tx - 3.0, case_y - 2.2),
+                        egui::pos2(tx + 3.0, case_y + 2.2),
+                    );
+                    painter.rect_filled(c_rect, 0.5, egui::Color32::from_rgb(20, 34, 48));
+                    painter.rect_stroke(
+                        c_rect,
+                        0.5,
+                        egui::Stroke::new(0.8, egui::Color32::from_rgb(125, 140, 153)),
+                        egui::StrokeKind::Outside,
+                    );
+                    painter.circle_filled(
+                        egui::pos2(tx, case_y),
+                        1.4,
+                        egui::Color32::from_rgb(160, 179, 198),
+                    );
+                    let bx2 = if m.fwd { tx - b_len } else { tx + b_len };
+                    painter.line_segment(
+                        [egui::pos2(tx, case_y), egui::pos2(bx2, case_y)],
+                        egui::Stroke::new(1.1, egui::Color32::WHITE),
+                    );
+                } else {
+                    let super_step = (m.tier as f32) * (r2 * 1.6 + 2.5);
+                    let ty = base_deck - super_step;
+                    let th = r2 * 1.2;
+                    if m.tier > 0 {
+                        let barb_rect = egui::Rect::from_min_max(
+                            egui::pos2(tx - r2 * 0.7, ty),
+                            egui::pos2(tx + r2 * 0.7, base_deck),
+                        );
+                        painter.rect_filled(barb_rect, 0.5, egui::Color32::from_rgb(180, 150, 70));
+                    }
+                    let t_rect = egui::Rect::from_min_max(
+                        egui::pos2(tx - r2, ty - th),
+                        egui::pos2(tx + r2, ty),
+                    );
+                    painter.rect_filled(t_rect, 1.0, egui::Color32::from_rgb(214, 181, 79));
+                    let barrel_x2 = if m.fwd {
+                        tx - r2 - b_len
+                    } else {
+                        tx + r2 + b_len
+                    };
+                    painter.line_segment(
+                        [
+                            egui::pos2(if m.fwd { tx - r2 } else { tx + r2 }, ty - th * 0.6),
+                            egui::pos2(barrel_x2, ty - th * 0.75),
+                        ],
+                        egui::Stroke::new(1.2, egui::Color32::WHITE),
+                    );
+                }
+            }
         }
 
         // Plan View
-        let y_cl = rect.top() + 245.0;
+        let y_cl = rect.top() + 225.0;
         let hb = ((b / l) * draw_w * 0.75).clamp(8.0, 32.0);
 
-        // Centerline
         painter.line_segment(
             [egui::pos2(x0 - 15.0, y_cl), egui::pos2(x1 + 15.0, y_cl)],
             egui::Stroke::new(
@@ -2022,7 +2313,6 @@ impl SpringSharpApp {
             ),
         );
 
-        // Plan hull points (smooth approximation)
         let mut plan_pts = Vec::new();
         let steps = 40;
         for i in 0..=steps {
@@ -2058,8 +2348,8 @@ impl SpringSharpApp {
         // Carrier flight deck in plan view
         if is_carrier {
             let f_rect = egui::Rect::from_min_max(
-                egui::pos2(x0 + 4.0, y_cl - hb * 1.15),
-                egui::pos2(x1 - 4.0, y_cl + hb * 1.15),
+                egui::pos2(x0 + 4.0, y_cl - hb * 0.95),
+                egui::pos2(x1 - 4.0, y_cl + hb * 0.95),
             );
             painter.rect_filled(
                 f_rect,
@@ -2073,15 +2363,20 @@ impl SpringSharpApp {
                 egui::StrokeKind::Outside,
             );
             painter.line_segment(
-                [egui::pos2(x0 + 12.0, y_cl), egui::pos2(x1 - 12.0, y_cl)],
+                [
+                    egui::pos2(x0 + 12.0, y_cl + hb * 0.15),
+                    egui::pos2(x1 - 12.0, y_cl + hb * 0.15),
+                ],
                 egui::Stroke::new(
                     1.0,
                     egui::Color32::from_rgba_unmultiplied(255, 255, 255, 70),
                 ),
             );
+            let isl_x0 = x0 + draw_w * 0.40;
+            let isl_w = draw_w * 0.16;
             let island_rect = egui::Rect::from_min_max(
-                egui::pos2(x0 + draw_w * 0.45, y_cl - hb * 1.15 - 2.0),
-                egui::pos2(x0 + draw_w * 0.45 + 24.0, y_cl - hb * 1.15 + 7.0),
+                egui::pos2(isl_x0, y_cl - hb * 0.95 + 1.0),
+                egui::pos2(isl_x0 + isl_w, y_cl - hb * 0.95 + 8.5),
             );
             painter.rect_filled(island_rect, 2.0, egui::Color32::from_rgb(224, 134, 79));
             painter.rect_stroke(
@@ -2092,85 +2387,564 @@ impl SpringSharpApp {
             );
         }
 
-        // Torpedo tube mounts in plan view
+        // Torpedo tubes in plan view
         let torp_count = self.ship.weapons.torpedo1.number + self.ship.weapons.torpedo2.number;
-        if torp_count > 0 {
-            let t_positions = [x0 + draw_w * 0.58, x0 + draw_w * 0.68];
+        if torp_count > 0 && !is_carrier {
+            let t_positions = [x0 + draw_w * 0.54, x0 + draw_w * 0.63];
             for tx in t_positions {
                 let center = egui::pos2(tx, y_cl);
-                painter.circle_filled(center, 4.5, egui::Color32::from_rgb(56, 239, 125));
+                painter.circle_filled(center, 4.0, egui::Color32::from_rgb(56, 239, 125));
                 painter.circle_stroke(
                     center,
-                    4.5,
+                    4.0,
                     egui::Stroke::new(1.0, egui::Color32::from_rgb(17, 153, 142)),
                 );
                 painter.line_segment(
                     [
-                        egui::pos2(tx - 4.0, y_cl - 3.0),
-                        egui::pos2(tx + 4.0, y_cl - 3.0),
+                        egui::pos2(tx - 3.5, y_cl - 2.5),
+                        egui::pos2(tx + 3.5, y_cl - 2.5),
                     ],
                     egui::Stroke::new(1.2, egui::Color32::WHITE),
                 );
                 painter.line_segment(
-                    [egui::pos2(tx - 4.0, y_cl), egui::pos2(tx + 4.0, y_cl)],
+                    [egui::pos2(tx - 3.5, y_cl), egui::pos2(tx + 3.5, y_cl)],
                     egui::Stroke::new(1.2, egui::Color32::WHITE),
                 );
                 painter.line_segment(
                     [
-                        egui::pos2(tx - 4.0, y_cl + 3.0),
-                        egui::pos2(tx + 4.0, y_cl + 3.0),
+                        egui::pos2(tx - 3.5, y_cl + 2.5),
+                        egui::pos2(tx + 3.5, y_cl + 2.5),
                     ],
                     egui::Stroke::new(1.2, egui::Color32::WHITE),
                 );
             }
         }
 
-        // Plan turrets & arcs
-        for &p_f64 in &positions {
-            let p = p_f64 as f32;
+        // Plan turrets & casemates
+        for m in &g1_mounts {
+            let p = m.x as f32;
             let tx = x_at(p);
-            let fwd = p < 0.5;
-            let center = egui::pos2(tx, y_cl);
-            painter.circle_filled(center, t_rad, egui::Color32::from_rgb(224, 93, 111));
-            painter.circle_stroke(center, t_rad, egui::Stroke::new(1.0, egui::Color32::WHITE));
-            let barrel_x2 = if fwd {
-                tx - t_rad - 9.0
-            } else {
-                tx + t_rad + 9.0
-            };
-            painter.line_segment(
-                [center, egui::pos2(barrel_x2, y_cl)],
-                egui::Stroke::new(1.5, egui::Color32::WHITE),
-            );
-
-            if self.show_arcs {
-                let arc_r = (hb * 1.5).clamp(18.0, 40.0);
-                let arc_pts = if fwd {
-                    vec![
-                        center,
-                        egui::pos2(tx + arc_r * 0.819_f32, y_cl - arc_r * 0.573_f32),
-                        egui::pos2(tx - arc_r * 0.707_f32, y_cl - arc_r * 0.707_f32),
-                        egui::pos2(tx - arc_r, y_cl),
-                        egui::pos2(tx - arc_r * 0.707_f32, y_cl + arc_r * 0.707_f32),
-                        egui::pos2(tx + arc_r * 0.819_f32, y_cl + arc_r * 0.573_f32),
-                    ]
+            let b_len = (g1_cal * 0.65).clamp(6.0, 11.0);
+            if m.is_casemate {
+                let ty = y_cl + (if m.side == -1 { -hb * 0.94 } else { hb * 0.94 });
+                let c_rect = egui::Rect::from_min_max(
+                    egui::pos2(tx - 3.0, ty - 2.2),
+                    egui::pos2(tx + 3.0, ty + 2.2),
+                );
+                painter.rect_filled(c_rect, 0.5, egui::Color32::from_rgb(20, 34, 48));
+                painter.rect_stroke(
+                    c_rect,
+                    0.5,
+                    egui::Stroke::new(0.8, egui::Color32::from_rgb(125, 140, 153)),
+                    egui::StrokeKind::Outside,
+                );
+                let dy = if m.side == -1 {
+                    -b_len * 0.9
                 } else {
-                    vec![
-                        center,
-                        egui::pos2(tx - arc_r * 0.819_f32, y_cl - arc_r * 0.573_f32),
-                        egui::pos2(tx + arc_r * 0.707_f32, y_cl - arc_r * 0.707_f32),
-                        egui::pos2(tx + arc_r, y_cl),
-                        egui::pos2(tx + arc_r * 0.707_f32, y_cl + arc_r * 0.707_f32),
-                        egui::pos2(tx - arc_r * 0.819_f32, y_cl + arc_r * 0.573_f32),
-                    ]
+                    b_len * 0.9
                 };
-                painter.add(egui::Shape::convex_polygon(
-                    arc_pts,
-                    egui::Color32::from_rgba_unmultiplied(224, 93, 111, 28),
-                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(224, 93, 111, 90)),
-                ));
+                let dx = if m.fwd { -b_len * 0.4 } else { b_len * 0.4 };
+                painter.line_segment(
+                    [egui::pos2(tx, ty), egui::pos2(tx + dx, ty + dy)],
+                    egui::Stroke::new(1.2, egui::Color32::WHITE),
+                );
+            } else {
+                let ty = if is_carrier {
+                    if m.side == -1 {
+                        y_cl - hb * 0.78
+                    } else {
+                        y_cl + hb * 0.82 * (m.side.max(1) as f32)
+                    }
+                } else if m.side != 0 {
+                    y_cl + (m.side as f32) * hb * 0.58
+                } else {
+                    y_cl
+                };
+                let center = egui::pos2(tx, ty);
+                painter.circle_filled(center, t_rad, egui::Color32::from_rgb(224, 93, 111));
+                painter.circle_stroke(center, t_rad, egui::Stroke::new(1.0, egui::Color32::WHITE));
+                let n_bar = m.bpm.clamp(1, 4);
+                let spread = ((n_bar - 1) as f32 * 1.8).min(t_rad * 1.15);
+                for k in 0..n_bar {
+                    let dy = if n_bar == 1 {
+                        0.0
+                    } else {
+                        -spread * 0.5 + (k as f32) * (spread / (n_bar - 1) as f32)
+                    };
+                    let x_start = if m.fwd { tx - t_rad } else { tx + t_rad };
+                    let x_end = if m.fwd {
+                        tx - t_rad - b_len
+                    } else {
+                        tx + t_rad + b_len
+                    };
+                    painter.line_segment(
+                        [egui::pos2(x_start, ty + dy), egui::pos2(x_end, ty + dy)],
+                        egui::Stroke::new(1.3, egui::Color32::WHITE),
+                    );
+                }
+
+                if self.show_arcs {
+                    let arc_r = (hb * 1.5).clamp(18.0, 40.0);
+                    let arc_pts = if m.fwd {
+                        vec![
+                            center,
+                            egui::pos2(tx + arc_r * 0.819_f32, ty - arc_r * 0.573_f32),
+                            egui::pos2(tx - arc_r * 0.707_f32, ty - arc_r * 0.707_f32),
+                            egui::pos2(tx - arc_r, ty),
+                            egui::pos2(tx - arc_r * 0.707_f32, ty + arc_r * 0.707_f32),
+                            egui::pos2(tx + arc_r * 0.819_f32, ty + arc_r * 0.573_f32),
+                        ]
+                    } else {
+                        vec![
+                            center,
+                            egui::pos2(tx - arc_r * 0.819_f32, ty - arc_r * 0.573_f32),
+                            egui::pos2(tx + arc_r * 0.707_f32, ty - arc_r * 0.707_f32),
+                            egui::pos2(tx + arc_r, ty),
+                            egui::pos2(tx + arc_r * 0.707_f32, ty + arc_r * 0.707_f32),
+                            egui::pos2(tx - arc_r * 0.819_f32, ty + arc_r * 0.573_f32),
+                        ]
+                    };
+                    painter.add(egui::Shape::convex_polygon(
+                        arc_pts,
+                        egui::Color32::from_rgba_unmultiplied(224, 93, 111, 28),
+                        egui::Stroke::new(
+                            1.0,
+                            egui::Color32::from_rgba_unmultiplied(224, 93, 111, 90),
+                        ),
+                    ));
+                }
             }
         }
+
+        if !g2_mounts.is_empty() {
+            let g2_cal = g2.calibre as f32;
+            let r2 = (g2_cal * 0.45).clamp(2.5, 4.2);
+            let b_len2 = (g2_cal * 0.85).clamp(4.0, 7.5);
+            for m in &g2_mounts {
+                let p = m.x as f32;
+                let tx2 = x_at(p);
+                if m.is_casemate {
+                    let ty2 = y_cl + (if m.side == -1 { -hb * 0.94 } else { hb * 0.94 });
+                    let c_rect = egui::Rect::from_min_max(
+                        egui::pos2(tx2 - 2.5, ty2 - 2.0),
+                        egui::pos2(tx2 + 2.5, ty2 + 2.0),
+                    );
+                    painter.rect_filled(c_rect, 0.5, egui::Color32::from_rgb(20, 34, 48));
+                    painter.rect_stroke(
+                        c_rect,
+                        0.5,
+                        egui::Stroke::new(0.8, egui::Color32::from_rgb(125, 140, 153)),
+                        egui::StrokeKind::Outside,
+                    );
+                    let dy = if m.side == -1 {
+                        -b_len2 * 0.9
+                    } else {
+                        b_len2 * 0.9
+                    };
+                    let dx = if m.fwd { -b_len2 * 0.4 } else { b_len2 * 0.4 };
+                    painter.line_segment(
+                        [egui::pos2(tx2, ty2), egui::pos2(tx2 + dx, ty2 + dy)],
+                        egui::Stroke::new(1.1, egui::Color32::WHITE),
+                    );
+                } else {
+                    let ty2 = if is_carrier {
+                        y_cl + (if m.side == 0 { -1.0 } else { m.side as f32 }) * hb * 0.96
+                    } else if m.side != 0 {
+                        y_cl + (m.side as f32) * (hb * 0.62).max(4.0)
+                    } else {
+                        y_cl
+                    };
+                    let center2 = egui::pos2(tx2, ty2);
+                    painter.circle_filled(center2, r2, egui::Color32::from_rgb(214, 181, 79));
+                    painter.circle_stroke(
+                        center2,
+                        r2,
+                        egui::Stroke::new(0.8, egui::Color32::WHITE),
+                    );
+                    let x_start = if m.fwd { tx2 - r2 } else { tx2 + r2 };
+                    let x_end = if m.fwd {
+                        tx2 - r2 - b_len2
+                    } else {
+                        tx2 + r2 + b_len2
+                    };
+                    painter.line_segment(
+                        [egui::pos2(x_start, ty2), egui::pos2(x_end, ty2)],
+                        egui::Stroke::new(1.1, egui::Color32::WHITE),
+                    );
+                }
+            }
+        }
+
+        // Midship Cross-Section & Internal Topology (y = 310 to 490)
+        let sep_y = rect.top() + 305.0;
+        painter.line_segment(
+            [egui::pos2(x0 - 15.0, sep_y), egui::pos2(x1 + 15.0, sep_y)],
+            egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgba_unmultiplied(255, 255, 255, 45),
+            ),
+        );
+
+        let xc = x0 + 105.0;
+        let wb = (b / 80.0 * 50.0).clamp(34.0, 60.0);
+        let mid_wl = rect.top() + 415.0;
+        let mid_keel = rect.top() + 468.0;
+        let mid_deck = rect.top() + 365.0;
+
+        let mid_pts = vec![
+            egui::pos2(xc - wb, mid_deck),
+            egui::pos2(xc - wb, mid_wl + 15.0),
+            egui::pos2(xc - 15.0, mid_keel),
+            egui::pos2(xc + 15.0, mid_keel),
+            egui::pos2(xc + wb, mid_wl + 15.0),
+            egui::pos2(xc + wb, mid_deck),
+        ];
+        painter.add(egui::Shape::convex_polygon(
+            mid_pts,
+            egui::Color32::from_rgba_unmultiplied(79, 179, 255, 22),
+            egui::Stroke::new(1.5, egui::Color32::from_rgb(79, 179, 255)),
+        ));
+
+        // Waterline & Double bottom
+        painter.line_segment(
+            [
+                egui::pos2(xc - wb - 10.0, mid_wl),
+                egui::pos2(xc + wb + 10.0, mid_wl),
+            ],
+            egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgba_unmultiplied(79, 179, 255, 160),
+            ),
+        );
+        painter.line_segment(
+            [
+                egui::pos2(xc - wb + 12.0, mid_keel - 10.0),
+                egui::pos2(xc + wb - 12.0, mid_keel - 10.0),
+            ],
+            egui::Stroke::new(1.0, egui::Color32::from_rgb(79, 179, 255)),
+        );
+
+        // Belt armor on cross-section (with inclination)
+        let incline_deg = self.ship.armour.belts_incline as f32;
+        let belt_dx = if incline_deg > 0.0 {
+            (incline_deg * 0.45).min(9.0)
+        } else {
+            0.0
+        };
+        painter.line_segment(
+            [
+                egui::pos2(xc - wb, mid_deck + 15.0),
+                egui::pos2(xc - wb + belt_dx, mid_wl + 18.0),
+            ],
+            egui::Stroke::new(3.5, egui::Color32::from_rgb(155, 123, 234)),
+        );
+        painter.line_segment(
+            [
+                egui::pos2(xc + wb, mid_deck + 15.0),
+                egui::pos2(xc + wb - belt_dx, mid_wl + 18.0),
+            ],
+            egui::Stroke::new(3.5, egui::Color32::from_rgb(155, 123, 234)),
+        );
+
+        // Deck / Turtleback sloped armor on cross-section
+        if d_cov == 1 || d_cov == 2 {
+            painter.line_segment(
+                [
+                    egui::pos2(xc - wb + 16.0, mid_wl - 10.0),
+                    egui::pos2(xc + wb - 16.0, mid_wl - 10.0),
+                ],
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(56, 239, 125)),
+            );
+            painter.line_segment(
+                [
+                    egui::pos2(xc - wb + 16.0, mid_wl - 10.0),
+                    egui::pos2(xc - wb + belt_dx, mid_wl + 18.0),
+                ],
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(230, 162, 60)),
+            );
+            painter.line_segment(
+                [
+                    egui::pos2(xc + wb - 16.0, mid_wl - 10.0),
+                    egui::pos2(xc + wb - belt_dx, mid_wl + 18.0),
+                ],
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(230, 162, 60)),
+            );
+        } else if d_cov == 3 {
+            painter.line_segment(
+                [egui::pos2(xc - wb, mid_deck), egui::pos2(xc + wb, mid_deck)],
+                egui::Stroke::new(1.4, egui::Color32::from_rgb(56, 239, 125)),
+            );
+            painter.line_segment(
+                [
+                    egui::pos2(xc - wb, mid_wl - 10.0),
+                    egui::pos2(xc + wb, mid_wl - 10.0),
+                ],
+                egui::Stroke::new(2.2, egui::Color32::from_rgb(56, 239, 125)),
+            );
+        } else {
+            let deck_line_y = if d_cov == 6 { mid_deck } else { mid_wl - 10.0 };
+            painter.line_segment(
+                [
+                    egui::pos2(xc - wb, deck_line_y),
+                    egui::pos2(xc + wb, deck_line_y),
+                ],
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(56, 239, 125)),
+            );
+        }
+
+        // TDS internal geometry
+        let tds_arch = sys_eval.resolved_tds_architecture;
+        match tds_arch {
+            TdsArchitecture::PuglieseCylindricalAbsorber => {
+                painter.circle_stroke(
+                    egui::pos2(xc - wb + 13.0, mid_wl + 14.0),
+                    6.5,
+                    egui::Stroke::new(1.5, egui::Color32::from_rgb(224, 93, 111)),
+                );
+                painter.circle_stroke(
+                    egui::pos2(xc + wb - 13.0, mid_wl + 14.0),
+                    6.5,
+                    egui::Stroke::new(1.5, egui::Color32::from_rgb(224, 93, 111)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb + 21.0, mid_deck + 10.0),
+                        egui::pos2(xc - wb + 21.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.5, egui::Color32::from_rgb(155, 123, 234)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc + wb - 21.0, mid_deck + 10.0),
+                        egui::pos2(xc + wb - 21.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.5, egui::Color32::from_rgb(155, 123, 234)),
+                );
+            }
+            TdsArchitecture::CompoundEboniteDeepTds => {
+                let r_p = egui::Rect::from_min_max(
+                    egui::pos2(xc - wb + 2.0, mid_deck + 15.0),
+                    egui::pos2(xc - wb + 18.0, mid_keel - 10.0),
+                );
+                let r_s = egui::Rect::from_min_max(
+                    egui::pos2(xc + wb - 18.0, mid_deck + 15.0),
+                    egui::pos2(xc + wb - 2.0, mid_keel - 10.0),
+                );
+                painter.rect_filled(
+                    r_p,
+                    1.0,
+                    egui::Color32::from_rgba_unmultiplied(224, 134, 79, 90),
+                );
+                painter.rect_filled(
+                    r_s,
+                    1.0,
+                    egui::Color32::from_rgba_unmultiplied(224, 134, 79, 90),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb + 19.0, mid_deck + 10.0),
+                        egui::pos2(xc - wb + 19.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.8, egui::Color32::from_rgb(155, 123, 234)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc + wb - 19.0, mid_deck + 10.0),
+                        egui::pos2(xc + wb - 19.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.8, egui::Color32::from_rgb(155, 123, 234)),
+                );
+            }
+            TdsArchitecture::MultiLayerLiquidVoid => {
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb + 8.0, mid_deck + 15.0),
+                        egui::pos2(xc - wb + 8.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.0, egui::Color32::from_rgb(79, 179, 255)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb + 16.0, mid_deck + 12.0),
+                        egui::pos2(xc - wb + 16.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.5, egui::Color32::from_rgb(155, 123, 234)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc + wb - 8.0, mid_deck + 15.0),
+                        egui::pos2(xc + wb - 8.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.0, egui::Color32::from_rgb(79, 179, 255)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc + wb - 16.0, mid_deck + 12.0),
+                        egui::pos2(xc + wb - 16.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.5, egui::Color32::from_rgb(155, 123, 234)),
+                );
+            }
+            TdsArchitecture::ExternalBlisterBulge => {
+                let b_pts_p = vec![
+                    egui::pos2(xc - wb, mid_wl - 10.0),
+                    egui::pos2(xc - wb - 10.0, mid_wl + 15.0),
+                    egui::pos2(xc - wb, mid_keel - 12.0),
+                ];
+                let b_pts_s = vec![
+                    egui::pos2(xc + wb, mid_wl - 10.0),
+                    egui::pos2(xc + wb + 10.0, mid_wl + 15.0),
+                    egui::pos2(xc + wb, mid_keel - 12.0),
+                ];
+                painter.add(egui::Shape::line(
+                    b_pts_p,
+                    egui::Stroke::new(1.2, egui::Color32::from_rgb(79, 179, 255)),
+                ));
+                painter.add(egui::Shape::line(
+                    b_pts_s,
+                    egui::Stroke::new(1.2, egui::Color32::from_rgb(79, 179, 255)),
+                ));
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb + 12.0, mid_deck + 12.0),
+                        egui::pos2(xc - wb + 12.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.2, egui::Color32::from_rgb(155, 123, 234)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc + wb - 12.0, mid_deck + 12.0),
+                        egui::pos2(xc + wb - 12.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.2, egui::Color32::from_rgb(155, 123, 234)),
+                );
+            }
+            TdsArchitecture::CoalBunkerWingBulkhead => {
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb + 14.0, mid_deck + 12.0),
+                        egui::pos2(xc - wb + 14.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.2, egui::Color32::from_rgb(138, 164, 191)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc + wb - 14.0, mid_deck + 12.0),
+                        egui::pos2(xc + wb - 14.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.2, egui::Color32::from_rgb(138, 164, 191)),
+                );
+            }
+            TdsArchitecture::UnarmouredDoubleBottom | TdsArchitecture::Auto => {}
+        }
+
+        // Transverse subdivision lines
+        let sub_arch = sys_eval.resolved_transverse_subdivision;
+        match sub_arch {
+            TransverseSubdivision::TwinFileCenterline => {
+                painter.line_segment(
+                    [egui::pos2(xc, mid_deck), egui::pos2(xc, mid_keel)],
+                    egui::Stroke::new(1.5, egui::Color32::from_rgb(95, 211, 141)),
+                );
+            }
+            TransverseSubdivision::TripleFileCenterAndWings => {
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - 18.0, mid_deck),
+                        egui::pos2(xc - 18.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.2, egui::Color32::from_rgb(95, 211, 141)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc + 18.0, mid_deck),
+                        egui::pos2(xc + 18.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.2, egui::Color32::from_rgb(95, 211, 141)),
+                );
+            }
+            TransverseSubdivision::QuadFileMultiLongitudinal => {
+                painter.line_segment(
+                    [egui::pos2(xc, mid_deck), egui::pos2(xc, mid_keel)],
+                    egui::Stroke::new(1.5, egui::Color32::from_rgb(95, 211, 141)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - 18.0, mid_deck),
+                        egui::pos2(xc - 18.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.0, egui::Color32::from_rgb(95, 211, 141)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc + 18.0, mid_deck),
+                        egui::pos2(xc + 18.0, mid_keel - 10.0),
+                    ],
+                    egui::Stroke::new(1.0, egui::Color32::from_rgb(95, 211, 141)),
+                );
+            }
+            TransverseSubdivision::SingleFileTransverse | TransverseSubdivision::Auto => {}
+        }
+
+        // Architecture Summary Card
+        let card_rect = egui::Rect::from_min_max(
+            egui::pos2(xc + wb + 30.0, mid_deck - 5.0),
+            egui::pos2(x1 + 10.0, mid_keel + 5.0),
+        );
+        painter.rect_filled(
+            card_rect,
+            3.0,
+            egui::Color32::from_rgba_unmultiplied(14, 28, 44, 210),
+        );
+        painter.rect_stroke(
+            card_rect,
+            3.0,
+            egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgba_unmultiplied(255, 255, 255, 35),
+            ),
+            egui::StrokeKind::Outside,
+        );
+
+        let sub_str = format!("Subdivision: {}", sub_arch.display_name());
+        let tds_str = format!("TDS System: {}", tds_arch.display_name());
+        let mach_str = format!(
+            "Machinery: {}",
+            sys_eval.resolved_machinery_arrangement.display_name()
+        );
+        let arm_str = format!(
+            "Armour: {:.1}\" Belt ({}° Incline) · Deck Mode {}",
+            self.ship.armour.belt_main, self.ship.armour.belts_incline, d_cov
+        );
+
+        painter.text(
+            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 12.0),
+            egui::Align2::LEFT_TOP,
+            sub_str,
+            egui::FontId::monospace(10.5),
+            egui::Color32::from_rgb(95, 211, 141),
+        );
+        painter.text(
+            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 32.0),
+            egui::Align2::LEFT_TOP,
+            tds_str,
+            egui::FontId::monospace(10.5),
+            egui::Color32::from_rgb(224, 134, 79),
+        );
+        painter.text(
+            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 52.0),
+            egui::Align2::LEFT_TOP,
+            mach_str,
+            egui::FontId::monospace(10.5),
+            egui::Color32::from_rgb(155, 123, 234),
+        );
+        painter.text(
+            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 72.0),
+            egui::Align2::LEFT_TOP,
+            arm_str,
+            egui::FontId::monospace(10.5),
+            egui::Color32::from_rgb(56, 239, 125),
+        );
 
         // Section labels
         painter.text(
@@ -2181,9 +2955,16 @@ impl SpringSharpApp {
             egui::Color32::from_rgb(138, 164, 191),
         );
         painter.text(
-            egui::pos2(rect.left() + 10.0, rect.top() + 155.0),
+            egui::pos2(rect.left() + 10.0, rect.top() + 145.0),
             egui::Align2::LEFT_TOP,
             "PLAN VIEW",
+            egui::FontId::monospace(10.0),
+            egui::Color32::from_rgb(138, 164, 191),
+        );
+        painter.text(
+            egui::pos2(rect.left() + 10.0, sep_y + 10.0),
+            egui::Align2::LEFT_TOP,
+            "MIDSHIP CROSS-SECTION & TDS ARCHITECTURE",
             egui::FontId::monospace(10.0),
             egui::Color32::from_rgb(138, 164, 191),
         );
@@ -2672,37 +3453,226 @@ fn get_layout_pos(layout: i32, fc: f64, fd: f64, qd: f64) -> f64 {
     }
 }
 
-fn get_turret_positions(b: &GunBattery, fc: f64, fd: f64, qd: f64) -> Vec<f64> {
-    let mut list = Vec::new();
-    let mut add_grp = |count: i32, layout: i32| {
-        let center = get_layout_pos(layout, fc, fd, qd);
-        if count == 1 {
-            list.push(center);
-        } else if count == 2 {
-            list.push(center - 0.04);
-            list.push(center + 0.04);
-        } else if count == 3 {
-            list.push(center - 0.05);
-            list.push(center);
-            list.push(center + 0.05);
-        } else if count >= 4 {
-            let step = 0.035;
-            let start = center - (count - 1) as f64 * step / 2.0;
+#[derive(Clone, Copy, Debug)]
+struct BlueprintMount {
+    x: f64,
+    tier: i32,
+    side: i32,
+    fwd: bool,
+    bpm: i32,
+    is_casemate: bool,
+    #[allow(dead_code)]
+    mount_type: i32,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn solve_group_mounts(
+    count: i32,
+    layout: i32,
+    super_cnt: i32,
+    bpm: i32,
+    fc: f64,
+    fd: f64,
+    qd: f64,
+    is_carrier: bool,
+    is_sec: bool,
+    mount_type: i32,
+    is_sub: bool,
+) -> Vec<BlueprintMount> {
+    let mut out = Vec::new();
+    if count <= 0 {
+        return out;
+    }
+    let is_side = layout >= 9;
+    let base_code = if is_side { layout - 9 } else { layout };
+    let step = if is_sec { 0.045 } else { 0.062 };
+    let bpm_clamped = bpm.max(1);
+    let is_casemate = mount_type == 6 || mount_type == 0 || is_sub;
+    let mut push_mount = |x: f64, tier: i32, side: i32, fwd: bool| {
+        out.push(BlueprintMount {
+            x: x.clamp(0.08, 0.92),
+            tier,
+            side,
+            fwd,
+            bpm: bpm_clamped,
+            is_casemate,
+            mount_type,
+        });
+    };
+
+    if base_code == 1 || base_code == 2 {
+        let n_fore = if base_code == 1 {
+            (count + 1) / 2
+        } else {
+            count / 2
+        };
+        let n_aft = count - n_fore;
+        let fore_start = if is_carrier {
+            0.23
+        } else {
+            (fc * 0.52).clamp(0.14, 0.24)
+        };
+        let aft_end = if is_carrier {
+            0.77
+        } else {
+            (1.0 - qd * 0.48).clamp(0.75, 0.86)
+        };
+        let mut s_rem = super_cnt.max(0);
+        let f_super = if n_fore >= 2 && s_rem >= 1 { 1 } else { 0 };
+        if f_super > 0 {
+            s_rem -= 1;
+        }
+        let a_super = if n_aft >= 2 && s_rem >= 1 { 1 } else { 0 };
+
+        for i in 0..n_fore {
+            let tier = if i == 1 && f_super > 0 {
+                1
+            } else if i == 2 && n_fore >= 3 && super_cnt >= 3 {
+                2
+            } else {
+                0
+            };
+            let side = if is_carrier {
+                -1
+            } else if is_side {
+                if i % 2 == 0 {
+                    -1
+                } else {
+                    1
+                }
+            } else {
+                0
+            };
+            push_mount(fore_start + (i as f64) * step, tier, side, true);
+        }
+        for j in 0..n_aft {
+            let tier = if j == 1 && a_super > 0 { 1 } else { 0 };
+            let side = if is_carrier {
+                -1
+            } else if is_side {
+                if j % 2 == 0 {
+                    -1
+                } else {
+                    1
+                }
+            } else {
+                0
+            };
+            push_mount(aft_end - (j as f64) * step, tier, side, false);
+        }
+    } else if base_code == 0 {
+        if is_side {
+            let pairs = (count + 1) / 2;
+            let span = ((pairs - 1) as f64 * 0.07).clamp(0.12, 0.38);
+            let start = 0.50 - span * 0.5;
             for i in 0..count {
-                list.push(start + i as f64 * step);
+                let pair_idx = i / 2;
+                let x = if pairs <= 1 {
+                    0.50
+                } else {
+                    start + (pair_idx as f64) * (span / ((pairs - 1).max(1) as f64))
+                };
+                let side = if i % 2 == 0 { -1 } else { 1 };
+                push_mount(x, 0, side, x < 0.5);
+            }
+        } else {
+            let start = 0.50 - ((count - 1) as f64) * step * 0.5;
+            for i in 0..count {
+                let x = start + (i as f64) * step;
+                let tier = if i % 2 == 1 && super_cnt > 0 { 1 } else { 0 };
+                push_mount(x, tier, 0, x < 0.5);
             }
         }
-    };
-    if b.mounts > 0 {
+    } else {
+        let center = get_layout_pos(layout, fc, fd, qd);
+        let fwd = base_code <= 5;
+        if is_side && !is_carrier {
+            let pairs = (count + 1) / 2;
+            for i in 0..count {
+                let pair_idx = i / 2;
+                let x = center + ((pair_idx as f64) - ((pairs - 1) as f64) * 0.5) * step;
+                let tier = if super_cnt > 0 && pair_idx > 0 { 1 } else { 0 };
+                let side = if i % 2 == 0 { -1 } else { 1 };
+                push_mount(x, tier, side, fwd);
+            }
+        } else {
+            for i in 0..count {
+                let x = center + ((i as f64) - ((count - 1) as f64) * 0.5) * step;
+                let tier = if super_cnt >= count || (i > 0 && i <= super_cnt) {
+                    1
+                } else {
+                    0
+                };
+                let side = if is_carrier { -1 } else { 0 };
+                push_mount(x, tier, side, fwd);
+            }
+        }
+    }
+    out
+}
+
+fn solve_battery_mounts(
+    b: &GunBattery,
+    fc: f64,
+    fd: f64,
+    qd: f64,
+    is_carrier: bool,
+    is_sec: bool,
+) -> Vec<BlueprintMount> {
+    if b.mounts <= 0 || b.calibre <= 0.0 {
+        return Vec::new();
+    }
+    let mut list = Vec::new();
+    let is_casemate_battery = b.mount_type == 6 || b.mount_type == 0;
+    if b.mounts_g1 > 0 || b.mounts_g2 > 0 {
         if b.mounts_g1 > 0 {
-            add_grp(b.mounts_g1, b.layout_g1);
+            let is_sub1 =
+                is_casemate_battery || (b.mount_sub_g1 > 0 && b.mount_sub_g1 >= b.mounts_g1);
+            list.extend(solve_group_mounts(
+                b.mounts_g1,
+                b.layout_g1,
+                b.mount_super_g1,
+                b.per_mount_g1,
+                fc,
+                fd,
+                qd,
+                is_carrier,
+                is_sec,
+                b.mount_type,
+                is_sub1,
+            ));
         }
         if b.mounts_g2 > 0 {
-            add_grp(b.mounts_g2, b.layout_g2);
+            let is_sub2 =
+                is_casemate_battery || (b.mount_sub_g2 > 0 && b.mount_sub_g2 >= b.mounts_g2);
+            list.extend(solve_group_mounts(
+                b.mounts_g2,
+                b.layout_g2,
+                b.mount_super_g2,
+                b.per_mount_g2,
+                fc,
+                fd,
+                qd,
+                is_carrier,
+                is_sec,
+                b.mount_type,
+                is_sub2,
+            ));
         }
-        if b.mounts_g1 == 0 && b.mounts_g2 == 0 {
-            add_grp(b.mounts, b.layout_g1);
-        }
+    } else {
+        list = solve_group_mounts(
+            b.mounts,
+            b.layout_g1,
+            b.mount_super_g1,
+            b.per_mount_g1,
+            fc,
+            fd,
+            qd,
+            is_carrier,
+            is_sec,
+            b.mount_type,
+            is_casemate_battery || b.mount_sub_g1 > 0,
+        );
     }
     list
 }

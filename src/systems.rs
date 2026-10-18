@@ -86,14 +86,21 @@ impl DimensionlessFeatures {
             ((ship.guns.guns_weight + ship.guns.magazine + ship.weapons.weight) / disp)
                 .clamp(0.0, 0.50);
 
-        // Count dual-purpose (gun_type == 4) and automatic AA (gun_type == 5) barrels
+        // Count dual-purpose (gun_type == 4) and automatic AA/DP (gun_type == 5) barrels
         let mut dp_weighted = 0.0_f64;
         for bat in &ship.guns.batteries {
             if bat.barrels > 0 {
                 if bat.gun_type == 4 {
                     dp_weighted += bat.barrels as f64 * 1.2;
                 } else if bat.gun_type == 5 {
-                    dp_weighted += bat.barrels as f64 * 0.45;
+                    let cal_factor = if bat.calibre >= 5.0 {
+                        2.8
+                    } else if bat.calibre >= 2.8 {
+                        1.6
+                    } else {
+                        0.45
+                    };
+                    dp_weighted += bat.barrels as f64 * cal_factor;
                 } else if bat.gun_type == 3 {
                     dp_weighted += bat.barrels as f64 * 0.6;
                 }
@@ -123,7 +130,11 @@ impl DimensionlessFeatures {
         let misc_deck_ton = ship.weapons.misc_weight_deck.max(0.0);
         let misc_deck_fraction = (misc_deck_ton / disp).clamp(0.0, 0.15);
         let freeboard_factor = ((freeboard_draught_ratio - 0.70).max(0.0) / 0.35).clamp(0.0, 1.0);
-        let non_heavy_factor = if main_cal <= 6.0 {
+        let is_treaty_heavy_gun_carrier = main_cal <= 8.5
+            && ordnance_fraction <= 0.065
+            && freeboard_draught_ratio >= 0.85
+            && misc_deck_ton >= 250.0;
+        let non_heavy_factor = if main_cal <= 6.0 || is_treaty_heavy_gun_carrier {
             1.0
         } else {
             (1.0 - (main_cal - 6.0) / 6.0).clamp(0.0, 1.0)
@@ -133,7 +144,10 @@ impl DimensionlessFeatures {
             + 0.30 * freeboard_factor
             + 0.20 * non_heavy_factor
             + 0.15 * light_armour_factor;
-        if misc_deck_ton >= 250.0 && freeboard_draught_ratio >= 0.75 && main_cal <= 6.0 {
+        if misc_deck_ton >= 250.0
+            && freeboard_draught_ratio >= 0.75
+            && (main_cal <= 6.0 || is_treaty_heavy_gun_carrier)
+        {
             aviation_score = aviation_score.max(0.80);
         }
         if ship.ship_type.to_ascii_lowercase().contains("carrier") {
@@ -843,6 +857,213 @@ impl ElectricalPlantStyle {
     }
 }
 
+/// Transverse Subdivision Topology (横向分舱拓扑).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum TransverseSubdivision {
+    #[default]
+    Auto,
+    /// Single-file transverse bulkheads (1-Row, 单列横通式) - no longitudinal bulkhead, zero asymmetric list.
+    SingleFileTransverse,
+    /// Twin-file with centerline longitudinal bulkhead (2-Row, 双列中轴纵壁式) - risk of asymmetric list.
+    TwinFileCenterline,
+    /// Triple-file with centerline space + two wing compartments (3-Row, 三列中轴与两翼式) - reduced list, enhanced strength.
+    TripleFileCenterAndWings,
+    /// Quad-file multi-longitudinal cellular subdivision (4-Row, 四列多纵壁蜂窝式) - maximum redundancy & survivability.
+    QuadFileMultiLongitudinal,
+}
+
+impl TransverseSubdivision {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::SingleFileTransverse => "single_file_transverse",
+            Self::TwinFileCenterline => "twin_file_centerline",
+            Self::TripleFileCenterAndWings => "triple_file_center_and_wings",
+            Self::QuadFileMultiLongitudinal => "quad_file_multi_longitudinal",
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Auto => "Auto (Dimensionless Subdivision Match)",
+            Self::SingleFileTransverse => "1-Row · Single-File Transverse (单列横通式)",
+            Self::TwinFileCenterline => "2-Row · Twin-File Centerline (双列中轴式)",
+            Self::TripleFileCenterAndWings => "3-Row · Triple-File Center & Wings (三列中轴两翼式)",
+            Self::QuadFileMultiLongitudinal => "4-Row · Quad-File Multi-Longitudinal (四列蜂窝式)",
+        }
+    }
+
+    pub fn from_str_name(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "single_file_transverse" | "single_file" | "1_row" | "single" => {
+                Self::SingleFileTransverse
+            }
+            "twin_file_centerline" | "twin_file" | "2_row" | "twin" | "centerline" => {
+                Self::TwinFileCenterline
+            }
+            "triple_file_center_and_wings" | "triple_file" | "3_row" | "triple" | "wings" => {
+                Self::TripleFileCenterAndWings
+            }
+            "quad_file_multi_longitudinal" | "quad_file" | "4_row" | "quad" | "cellular" => {
+                Self::QuadFileMultiLongitudinal
+            }
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// Torpedo Defense System Architecture (水下防雷与吸能体系).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum TdsArchitecture {
+    #[default]
+    Auto,
+    /// Unarmoured double bottom & cellular watertight spaces (无装甲双层底).
+    UnarmouredDoubleBottom,
+    /// Coal bunker wing absorbing spaces + holding bulkhead (储煤翼舱吸能).
+    CoalBunkerWingBulkhead,
+    /// External blister bulge + holding bulkhead (外挂防雷突出部).
+    ExternalBlisterBulge,
+    /// Multi-layer liquid/void layered bulkhead sandwich (多层空液交替).
+    MultiLayerLiquidVoid,
+    /// Pugliese cylindrical collapsible absorber (普列塞可溃缩圆筒).
+    PuglieseCylindricalAbsorber,
+    /// Compound deep-depth multi-void with Ébonite Mousse foam filling (大纵深闭孔硬橡胶泡沫复合防雷).
+    CompoundEboniteDeepTds,
+}
+
+impl TdsArchitecture {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::UnarmouredDoubleBottom => "unarmoured_double_bottom",
+            Self::CoalBunkerWingBulkhead => "coal_bunker_wing_bulkhead",
+            Self::ExternalBlisterBulge => "external_blister_bulge",
+            Self::MultiLayerLiquidVoid => "multi_layer_liquid_void",
+            Self::PuglieseCylindricalAbsorber => "pugliese_cylindrical_absorber",
+            Self::CompoundEboniteDeepTds => "compound_ebonite_deep_tds",
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Auto => "Auto (Dimensionless TDS Match)",
+            Self::UnarmouredDoubleBottom => "Type 0 · Unarmoured Double Bottom (无装甲双层底)",
+            Self::CoalBunkerWingBulkhead => "Type 1 · Coal Bunker Wing Bulkhead (储煤翼舱吸能)",
+            Self::ExternalBlisterBulge => "Type 2 · External Blister Bulge (外挂防雷突出部)",
+            Self::MultiLayerLiquidVoid => "Type 3 · Multi-Layer Liquid / Void (多层空液交替)",
+            Self::PuglieseCylindricalAbsorber => {
+                "Type 4 · Pugliese Collapsible Cylinder (普列塞吸能圆筒)"
+            }
+            Self::CompoundEboniteDeepTds => {
+                "Type 5 · Deep Ébonite Foam Compound (大纵深闭孔泡沫复合)"
+            }
+        }
+    }
+
+    pub fn from_str_name(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "unarmoured_double_bottom" | "double_bottom" | "type_0" => Self::UnarmouredDoubleBottom,
+            "coal_bunker_wing_bulkhead" | "coal_bunker" | "coal" | "type_1" => {
+                Self::CoalBunkerWingBulkhead
+            }
+            "external_blister_bulge" | "blister_bulge" | "bulge" | "type_2" => {
+                Self::ExternalBlisterBulge
+            }
+            "multi_layer_liquid_void" | "liquid_void" | "multi_layer" | "type_3" => {
+                Self::MultiLayerLiquidVoid
+            }
+            "pugliese_cylindrical_absorber" | "pugliese" | "cylinder" | "type_4" => {
+                Self::PuglieseCylindricalAbsorber
+            }
+            "compound_ebonite_deep_tds" | "ebonite_mousse" | "ebonite" | "type_5" => {
+                Self::CompoundEboniteDeepTds
+            }
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// Machinery Longitudinal Arrangement Philosophy (动力机组纵向布置体系).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum MachineryArrangement {
+    #[default]
+    Auto,
+    /// Grouped forward boiler rooms + aft engine rooms (集中式前炉后机 B-E).
+    GroupedBoilerForward,
+    /// Grouped reverse engine rooms forward + boiler rooms aft (逆向集中式前机后炉 E-B, e.g. Nelson).
+    GroupedEngineForward,
+    /// Sandwich engine-boiler-engine arrangement (夹心式机-炉-机 E-B-E, e.g. Vittorio Veneto).
+    SandwichEngineBoilerEngine,
+    /// Unit alternating machinery B1-E1-B2-E2 (交替单元式动力布置, e.g. KGV, Essex, Fletcher).
+    UnitAlternatingMachinery,
+    /// Compact echelon / forced-circulation high-pressure plant (梯队穿插/增压紧凑型, e.g. Richelieu, Iowa).
+    CompactEchelonSural,
+    /// Turbo-electric / diesel-electric distributed machinery (涡轮电力/柴电分布式推进).
+    TurboElectricDistributed,
+}
+
+impl MachineryArrangement {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::GroupedBoilerForward => "grouped_boiler_forward",
+            Self::GroupedEngineForward => "grouped_engine_forward",
+            Self::SandwichEngineBoilerEngine => "sandwich_engine_boiler_engine",
+            Self::UnitAlternatingMachinery => "unit_alternating_machinery",
+            Self::CompactEchelonSural => "compact_echelon_sural",
+            Self::TurboElectricDistributed => "turbo_electric_distributed",
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Auto => "Auto (Dimensionless Machinery Match)",
+            Self::GroupedBoilerForward => {
+                "Arrangement 1 · Grouped Boilers Forward (集中式前炉后机 B-E)"
+            }
+            Self::GroupedEngineForward => {
+                "Arrangement 2 · Grouped Engines Forward (逆向集中式前机后炉 E-B)"
+            }
+            Self::SandwichEngineBoilerEngine => {
+                "Arrangement 3 · Sandwich Engine-Boiler-Engine (夹心式 E-B-E)"
+            }
+            Self::UnitAlternatingMachinery => {
+                "Arrangement 4 · Unit Alternating System (交替单元式 B-E-B-E)"
+            }
+            Self::CompactEchelonSural => {
+                "Arrangement 5 · Compact Echelon / Sural (梯队穿插增压紧凑型)"
+            }
+            Self::TurboElectricDistributed => {
+                "Arrangement 6 · Turbo-Electric Distributed (涡轮电力分布式)"
+            }
+        }
+    }
+
+    pub fn from_str_name(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "grouped_boiler_forward" | "boiler_forward" | "b_e" | "grouped_be" => {
+                Self::GroupedBoilerForward
+            }
+            "grouped_engine_forward" | "engine_forward" | "e_b" | "nelson_layout" => {
+                Self::GroupedEngineForward
+            }
+            "sandwich_engine_boiler_engine" | "sandwich" | "e_b_e" | "veneto_layout" => {
+                Self::SandwichEngineBoilerEngine
+            }
+            "unit_alternating_machinery" | "unit_alternating" | "unit_system" | "b_e_b_e" => {
+                Self::UnitAlternatingMachinery
+            }
+            "compact_echelon_sural" | "compact_echelon" | "sural" | "echelon" => {
+                Self::CompactEchelonSural
+            }
+            "turbo_electric_distributed" | "turbo_electric" | "electric" | "electric_drive" => {
+                Self::TurboElectricDistributed
+            }
+            _ => Self::Auto,
+        }
+    }
+}
+
 /// Full configuration for a ship's systems suite.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct ShipSystemsConfig {
@@ -856,6 +1077,9 @@ pub struct ShipSystemsConfig {
     pub radar_suite: RadarSuite,
     pub sonar_suite: SonarSuite,
     pub electrical_plant: ElectricalPlantStyle,
+    pub transverse_subdivision: TransverseSubdivision,
+    pub tds_architecture: TdsArchitecture,
+    pub machinery_arrangement: MachineryArrangement,
     /// Explicit turbo generator override in kW (None = auto-calculated).
     pub custom_turbo_kw: Option<f64>,
     /// Explicit diesel generator override in kW (None = auto-calculated).
@@ -885,6 +1109,9 @@ pub struct SystemsEvaluation {
     pub resolved_radar_suite: RadarSuite,
     pub resolved_sonar_suite: SonarSuite,
     pub resolved_electrical_plant: ElectricalPlantStyle,
+    pub resolved_transverse_subdivision: TransverseSubdivision,
+    pub resolved_tds_architecture: TdsArchitecture,
+    pub resolved_machinery_arrangement: MachineryArrangement,
 
     // Pure Ideal-Type soft affinities (0.0 to 1.0, sum to 1.0)
     /// Type I: Radar-Automated & All-Electric affinity.
@@ -1013,13 +1240,35 @@ impl ShipSystemsConfig {
             other => other,
         };
 
+        eval.resolved_transverse_subdivision = match self.transverse_subdivision {
+            TransverseSubdivision::Auto => Self::infer_transverse_subdivision(ship),
+            other => other,
+        };
+
+        eval.resolved_tds_architecture = match self.tds_architecture {
+            TdsArchitecture::Auto => Self::infer_tds_architecture(ship),
+            other => other,
+        };
+
+        eval.resolved_machinery_arrangement = match self.machinery_arrangement {
+            MachineryArrangement::Auto => Self::infer_machinery_arrangement(ship),
+            other => other,
+        };
+
         // 3. Electrical Load Breakdown
         let main_cal = ship.guns.batteries[0].calibre;
         let main_barrels = ship.guns.batteries[0].barrels.max(0) as f64;
         let sec_barrels =
             (ship.guns.batteries[1].barrels.max(0) + ship.guns.batteries[2].barrels.max(0)) as f64;
+        let mut auto_turret_kw = 0.0_f64;
+        for bat in &ship.guns.batteries {
+            if bat.barrels > 0 && bat.gun_type == 5 && bat.calibre >= 2.8 {
+                auto_turret_kw += bat.barrels as f64 * (bat.calibre / 3.0).powf(1.6) * 18.0;
+            }
+        }
         let turret_kw = (main_barrels * (main_cal / 12.0).powf(2.4) * 22.0)
             + (sec_barrels * 8.0)
+            + auto_turret_kw
             + (ship.weapons.torpedo1.number.max(0) as f64 * 3.5);
         eval.load_turrets_kw = turret_kw.max(10.0);
 
@@ -1254,6 +1503,92 @@ impl ShipSystemsConfig {
 
         eval
     }
+
+    /// Automatically infer Transverse Subdivision Topology based purely on hull beam, citadel beam, displacement and shafts.
+    /// Strictly decoupled from gun mounts and country labels.
+    pub fn infer_transverse_subdivision(ship: &ShipModel) -> TransverseSubdivision {
+        let b = ship.hull.beam_bulges.max(ship.hull.beam);
+        let b_cit = if ship.armour.bulkhead_beam > 0.0 {
+            ship.armour.bulkhead_beam
+        } else {
+            b * 0.75
+        };
+        let disp = ship.hull.displacement;
+        let screws = ship.hull.screws.max(ship.engine.screws);
+        let date = ship.hull.date_hull;
+
+        if b_cit < 36.0 || b < 45.0 || (screws <= 2 && disp < 4500.0) {
+            TransverseSubdivision::SingleFileTransverse
+        } else if screws == 2 || (date < 1916 && disp < 25000.0) {
+            TransverseSubdivision::TwinFileCenterline
+        } else if screws == 3 || (b_cit < 76.0 && disp < 36000.0) {
+            TransverseSubdivision::TripleFileCenterAndWings
+        } else {
+            TransverseSubdivision::QuadFileMultiLongitudinal
+        }
+    }
+
+    /// Automatically infer Torpedo Defense System Architecture based purely on underwater geometry, bulge, void filling and bulkhead type.
+    /// Strictly decoupled from gun mounts, main battery layout, and country labels.
+    pub fn infer_tds_architecture(ship: &ShipModel) -> TdsArchitecture {
+        let b = ship.hull.beam.max(1.0);
+        let b_bulges = ship.hull.beam_bulges.max(b);
+        let b_cit = if ship.armour.bulkhead_beam > 0.0 {
+            ship.armour.bulkhead_beam
+        } else {
+            b * 0.75
+        };
+        let tds_depth_ratio = ((b_bulges - b_cit) / b_bulges).clamp(0.0, 1.0);
+        let blister_ratio = (b_bulges - b) / b;
+        let void_weight = ship.weapons.void_weight;
+        let pct_coal = ship.engine.pct_coal;
+        let bh_thick = ship.armour.bulkhead;
+        let bh_type = ship.armour.bulkhead_type;
+
+        if bh_thick < 0.5 || tds_depth_ratio < 0.08 {
+            TdsArchitecture::UnarmouredDoubleBottom
+        } else if pct_coal >= 15.0 && bh_thick >= 0.5 {
+            TdsArchitecture::CoalBunkerWingBulkhead
+        } else if blister_ratio > 0.02 || ship.armour.bulge >= 1.0 {
+            TdsArchitecture::ExternalBlisterBulge
+        } else if tds_depth_ratio >= 0.30 || (void_weight >= 100.0 && tds_depth_ratio >= 0.22) {
+            TdsArchitecture::CompoundEboniteDeepTds
+        } else if bh_type == 0 && tds_depth_ratio >= 0.18 && bh_thick <= 2.8 {
+            TdsArchitecture::PuglieseCylindricalAbsorber
+        } else {
+            TdsArchitecture::MultiLayerLiquidVoid
+        }
+    }
+
+    /// Automatically infer Machinery Longitudinal Arrangement based purely on drive type, layout and powerplant era.
+    pub fn infer_machinery_arrangement(ship: &ShipModel) -> MachineryArrangement {
+        if ship.engine.drive[2] {
+            return MachineryArrangement::TurboElectricDistributed;
+        }
+        let date = ship.hull.date_engine;
+        let layout1 = ship.guns.batteries[0].layout_g1;
+        let screws = ship.hull.screws.max(ship.engine.screws);
+        let mw_factor = ship.engine.machinery_weight_factor;
+
+        if layout1 == 4
+            || (ship.guns.batteries[0].mounts_for as i32 == ship.guns.batteries[0].mounts
+                && ship.guns.batteries[0].mounts >= 3)
+        {
+            MachineryArrangement::GroupedEngineForward
+        } else if screws == 3 && date >= 1930 {
+            MachineryArrangement::SandwichEngineBoilerEngine
+        } else if mw_factor > 0.0 && mw_factor <= 0.65 && ship.hull.displacement >= 30000.0 {
+            MachineryArrangement::CompactEchelonSural
+        } else if date < 1916
+            || (ship.free.fc_length + ship.free.fd_length < 0.55
+                && ship.engine.range < 8000.0
+                && ship.hull.displacement >= 15000.0)
+        {
+            MachineryArrangement::GroupedBoilerForward
+        } else {
+            MachineryArrangement::UnitAlternatingMachinery
+        }
+    }
 }
 
 /// Evaluate pure Weberian Ideal-Type affinities strictly from dimensionless physical invariants ($\Pi$-groups).
@@ -1392,7 +1727,11 @@ pub fn evaluate_tactical_affinities(
 
     // Modality B: Rapid-Fire Cruiser Gunnery
     if (5.0..11.0).contains(&main_cal) {
-        s_b += 0.65;
+        if f.aviation_capability_ratio >= 0.75 && f.ordnance_fraction <= 0.065 {
+            s_b += 0.25;
+        } else {
+            s_b += 0.65;
+        }
     }
     if f.ordnance_fraction >= 0.08 && main_cal >= 5.0 {
         s_b += 0.30;
@@ -1408,7 +1747,10 @@ pub fn evaluate_tactical_affinities(
     if ship.weapons.misc_weight_deck >= 250.0 {
         s_c += 0.45;
     }
-    if main_cal <= 6.0 && f.freeboard_draught_ratio >= 0.75 && disp >= 5000.0 {
+    if (main_cal <= 6.0 || (main_cal <= 8.5 && f.ordnance_fraction <= 0.065))
+        && f.freeboard_draught_ratio >= 0.75
+        && disp >= 5000.0
+    {
         s_c += 0.40;
     }
 
@@ -2030,5 +2372,46 @@ mod tests {
             eval_shimakaze.resolved_mobility_regime,
             MobilityRegime::SuperCriticalHighFn
         );
+
+        // 9. Early Heavy-Gun Treaty Fleet Carrier (CV-2 USS Lexington, 1928: 8 x 8"/55 + 12 x 5"/25 AA)
+        // Verify that even when `ship_type` is cleared, dimensionless invariants (Pi_air, Pi_ord, F/T)
+        // classify CV-2 as a Fleet Carrier (BattleLineMainBody + AviationDeckProjection + TransFroudeFastCapital)
+        // rather than a Heavy Cruiser!
+        let mut cv2 = get_preset("cv2_lexington").expect("CV-2 Lexington preset");
+        cv2.ship_type.clear();
+        let eval_cv2 = cv2.systems.evaluate(&cv2);
+        assert_eq!(
+            eval_cv2.resolved_echelon,
+            TacticalEchelon::BattleLineMainBody
+        );
+        assert_eq!(
+            eval_cv2.resolved_modality,
+            CombatModality::AviationDeckProjection
+        );
+        assert_eq!(
+            eval_cv2.resolved_mobility_regime,
+            MobilityRegime::TransFroudeFastCapital
+        );
+        assert!(cv2.guns.batteries[0].broadside_weight > 1500.0);
+
+        // 10. Post-War Automatic Gun Cruiser (C-20 HMS Tiger, 1959: 4 x 6"/50 Mk N5 auto + 6 x 3"/70 Mk N1 auto)
+        let mut c20 = get_preset("c20_tiger").expect("C-20 Tiger preset");
+        c20.ship_type.clear();
+        let eval_c20 = c20.systems.evaluate(&c20);
+        assert_eq!(
+            eval_c20.resolved_echelon,
+            TacticalEchelon::OuterScoutingScreen
+        );
+        assert!(
+            eval_c20.resolved_modality == CombatModality::RapidFireSurfaceGunnery
+                || eval_c20.resolved_modality == CombatModality::ScreenEscortDefense
+        );
+        assert_eq!(
+            eval_c20.resolved_mobility_regime,
+            MobilityRegime::SlenderWaveCutting
+        );
+        assert!(c20.guns.batteries[0].shell_weight > 90.0);
+        assert!(c20.damage_shell.is_finite() && c20.damage_shell > 0.0);
+        assert!(eval_c20.load_turrets_kw > 200.0);
     }
 }

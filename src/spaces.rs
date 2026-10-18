@@ -2192,10 +2192,21 @@ fn layout_longitudinal_position(ship: &ShipModel, layout: i32) -> f64 {
     let fd = ship.free.fd_length;
     let qd = ship.free.qd_length;
     let ad = (1.0 - fc - fd - qd).max(0.0);
+    let fore_pos = (fc + 0.35 * fd).clamp(0.18, 0.36);
+    let aft_pos = (1.0 - qd - 0.35 * ad).clamp(0.66, 0.84);
+    let g = &ship.guns.batteries[0];
+    let n_total = g.mounts.max(1) as f64;
+    let fore_ratio = if g.mounts_for > 0.0 && g.mounts_for <= n_total {
+        g.mounts_for / n_total
+    } else if matches!(layout, 1 | 10) {
+        ((g.mounts + 1) / 2) as f64 / n_total
+    } else {
+        (g.mounts / 2) as f64 / n_total
+    };
     match layout {
         0 | 9 => 0.5,
-        1 | 10 => 0.4,
-        2 | 11 => 0.6,
+        1 | 10 => fore_ratio * fore_pos + (1.0 - fore_ratio) * aft_pos,
+        2 | 11 => fore_ratio * fore_pos + (1.0 - fore_ratio) * aft_pos,
         3 | 12 => fc + 0.25 * fd,
         4 | 13 => fc + 0.5 * fd,
         5 | 14 => fc + 0.75 * fd,

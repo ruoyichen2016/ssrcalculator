@@ -298,6 +298,18 @@ pub fn serialize(ship: &ShipModel) -> String {
         "systems.electrical_plant",
         ship.systems.electrical_plant.as_str().to_string(),
     );
+    push(
+        "systems.transverse_subdivision",
+        ship.systems.transverse_subdivision.as_str().to_string(),
+    );
+    push(
+        "systems.tds_architecture",
+        ship.systems.tds_architecture.as_str().to_string(),
+    );
+    push(
+        "systems.machinery_arrangement",
+        ship.systems.machinery_arrangement.as_str().to_string(),
+    );
     if let Some(kw) = ship.systems.custom_turbo_kw {
         push("systems.custom_turbo_kw", kw.to_string());
     }
@@ -848,6 +860,20 @@ fn set_value(ship: &mut ShipModel, key: &str, value: &str) -> Result<(), String>
         "systems.electrical_plant" => {
             ship.systems.electrical_plant =
                 crate::systems::ElectricalPlantStyle::from_str_name(value);
+            true
+        }
+        "systems.transverse_subdivision" => {
+            ship.systems.transverse_subdivision =
+                crate::systems::TransverseSubdivision::from_str_name(value);
+            true
+        }
+        "systems.tds_architecture" => {
+            ship.systems.tds_architecture = crate::systems::TdsArchitecture::from_str_name(value);
+            true
+        }
+        "systems.machinery_arrangement" => {
+            ship.systems.machinery_arrangement =
+                crate::systems::MachineryArrangement::from_str_name(value);
             true
         }
         "systems.custom_turbo_kw" => {

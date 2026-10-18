@@ -213,7 +213,7 @@ impl GunBattery {
     }
 
     fn date_adj_calc(date: i32) -> f64 {
-        if !(1850..=1950).contains(&date) {
+        if !(1850..=2050).contains(&date) {
             0.0
         } else if date <= 1890 {
             1.0 - (1890 - date) as f64 / 66.6666641
@@ -496,13 +496,22 @@ impl GunBattery {
             // Post-1925 mechanized high-angle DP/AA mounts (`gun_type >= 4`) and compact
             // multi-gun high-velocity/quad capital turrets carry power rammers, RPC/hydraulic
             // drives, and hoist machinery not captured by the 1906 baseline curve.
-            let tau_gun = ((self.date_gun as f64 - 1920.0) / 25.0).clamp(0.0, 1.2);
-            if self.gun_type >= 4 && self.calibre >= 3.0 && self.calibre <= 6.5 && tau_gun > 0.0 {
+            let tau_max = if self.date_gun > 1945 { 1.45 } else { 1.2 };
+            let tau_gun = ((self.date_gun as f64 - 1920.0) / 25.0).clamp(0.0, tau_max);
+            if self.gun_type >= 4 && self.calibre >= 2.8 && self.calibre <= 6.5 && tau_gun > 0.0 {
                 // High-angle DP/AA enclosed & base-ring mounts: scale by dimensionless barrel slenderness
                 // and inverse calibre scale (smaller DP calibres have higher mechanism-to-tube ratio).
                 let dp_scale = (5.5 / self.calibre.max(3.0)).clamp(0.85, 1.65);
                 let slenderness = (self.cal_length / 45.0).clamp(0.8, 1.5);
-                let mount_bonus = 1.0 + 1.45 * tau_gun * dp_scale * slenderness;
+                // Post-war automatic medium/cruiser turrets (gun_type == 5, e.g., 6"/50 Mk N5, 3"/70 Mk N1)
+                // incorporate water-cooled barrels, dual feed hoists, and power autoloaders.
+                let auto_factor =
+                    if self.gun_type == 5 && self.calibre >= 2.8 && self.date_gun >= 1945 {
+                        1.32
+                    } else {
+                        1.0
+                    };
+                let mount_bonus = 1.0 + 1.45 * tau_gun * dp_scale * slenderness * auto_factor;
                 self.mount_weight *= mount_bonus;
                 // Mechanized hoists and power drives are structural machinery borne by the hull.
                 self.gun_weight *= 1.0 + 0.45 * (mount_bonus - 1.0);
@@ -1686,7 +1695,7 @@ impl ShipModel {
     }
 
     fn prepare_hull_freeboard(&mut self) {
-        self.date_adj_float = if self.hull.date_hull < 1850 || self.hull.date_hull > 1950 {
+        self.date_adj_float = if self.hull.date_hull < 1850 || self.hull.date_hull > 2050 {
             0.0
         } else if self.hull.date_hull <= 1890 {
             1.0 - (1890 - self.hull.date_hull) as f64 / 66.6666641
@@ -2095,7 +2104,7 @@ impl ShipModel {
             6.0
         };
         self.damage_shell =
-            self.flotation / (pow(primary_calibre, 3.0) / 2.0 * self.date_adj_float);
+            self.flotation / (pow(primary_calibre, 3.0) / 2.0 * self.date_adj_float.max(0.1));
 
         let mut dt = (pow(flotation / 10000.0, 0.3333333432674408)
             + pow(h.beam_bulges / 75.0, 2.0)
@@ -2117,6 +2126,36 @@ impl ShipModel {
         if w.torpedo1.weapon_weight > 0.0 && w.torpedo1.number > 0 {
             dt *= 1.312999963760376 / (w.torpedo1.weapon_weight / w.torpedo1.number as f64);
         }
+        // TDS architecture & subdivision survivability factors
+        let resolved_tds = match self.systems.tds_architecture {
+            crate::systems::TdsArchitecture::Auto => {
+                crate::systems::ShipSystemsConfig::infer_tds_architecture(self)
+            }
+            other => other,
+        };
+        let tds_factor = match resolved_tds {
+            crate::systems::TdsArchitecture::UnarmouredDoubleBottom
+            | crate::systems::TdsArchitecture::Auto => 1.00,
+            crate::systems::TdsArchitecture::CoalBunkerWingBulkhead => 1.05,
+            crate::systems::TdsArchitecture::ExternalBlisterBulge => 1.07,
+            crate::systems::TdsArchitecture::MultiLayerLiquidVoid => 1.10,
+            crate::systems::TdsArchitecture::PuglieseCylindricalAbsorber => 1.12,
+            crate::systems::TdsArchitecture::CompoundEboniteDeepTds => 1.15,
+        };
+        let resolved_sub = match self.systems.transverse_subdivision {
+            crate::systems::TransverseSubdivision::Auto => {
+                crate::systems::ShipSystemsConfig::infer_transverse_subdivision(self)
+            }
+            other => other,
+        };
+        let sub_factor = match resolved_sub {
+            crate::systems::TransverseSubdivision::SingleFileTransverse
+            | crate::systems::TransverseSubdivision::Auto => 1.00,
+            crate::systems::TransverseSubdivision::TwinFileCenterline => 0.95,
+            crate::systems::TransverseSubdivision::TripleFileCenterAndWings => 1.05,
+            crate::systems::TransverseSubdivision::QuadFileMultiLongitudinal => 1.08,
+        };
+        dt *= tds_factor * sub_factor;
         self.damage_torp = dt;
         self.hull.draught_deep = draught_deep;
     }

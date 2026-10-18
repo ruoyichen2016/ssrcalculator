@@ -209,7 +209,6 @@ fn form_html() -> String {
                 ("arm.deck", "Main deck (in)"),
                 ("arm.deck_fc", "Forecastle deck (in)"),
                 ("arm.deck_qd", "Quarter deck (in)"),
-                ("arm.deck_coverage", "Deck coverage mode"),
                 ("arm.conning_for", "Conning tower fwd (in)"),
                 ("arm.conning_aft", "Conning tower aft (in)"),
             ][..],
@@ -217,6 +216,9 @@ fn form_html() -> String {
     ] {
         f.push_str(&format!("<h2>{title}</h2>"));
         f.push_str(&grid(fields));
+        if title == "Decks & conning tower" {
+            f.push_str(r#"<div class='grid'><label>Deck Coverage Mode<select data-key="arm.deck_coverage"><option value="0">Mode 0 · Full Midship Flat Armoured Deck (常规水平装甲甲板)</option><option value="1">Mode 1 · Sloped Turtleback Internal Slopes (内倾斜穹甲)</option><option value="2">Mode 2 · Curved Turtleback Deck (弧形穹甲 - 无垂直主带)</option><option value="3">Mode 3 · Double Horizontal Deck (双层水平甲板 - 炸弹与剥离甲板)</option><option value="4">Mode 4 · Machinery Only Deck (仅动力舱装甲甲板)</option><option value="5">Mode 5 · Magazine Only Deck (仅弹药库装甲甲板)</option><option value="6">Mode 6 · Citadel Armoured Deck (核心舱装甲甲板 - 动力+弹药库)</option></select></label></div>"#);
+        }
     }
     f.push_str("</div>");
 
@@ -251,6 +253,11 @@ fn form_html() -> String {
     f.push_str(r#"<label>Radar & EW Suite<select data-key="systems.radar_suite"><option value="auto">Auto (Dimensionless Match)</option><option value="none">None (Optical & Wireless Telegraphy Only)</option><option value="decimetric_surface_fc">Decimetric Ranging Radar + Passive Warning</option><option value="metric_search_magnetron">Metric Air/Surface Search + Cavity Magnetron</option><option value="centimetric_fc_direction_finder">Centimetric Fire-Control Radar + HF/DF Finder</option><option value="dual_band_blind_fire_cic">Dual-Band Search + Centimetric Blind-Fire + Full CIC</option></select></label>"#);
     f.push_str(r#"<label>Subsurface Sonar Suite<select data-key="systems.sonar_suite"><option value="auto">Auto (Dimensionless Match)</option><option value="none">None</option><option value="passive_hydrophones">Hull Passive Hydrophone Listening Array</option><option value="active_quartz_dome">Retractable Active Piezoelectric Quartz Dome</option><option value="multi_element_passive_array">Multi-Element Balcony Passive Array + Active Pulse</option><option value="high_power_search_sonar">High-Power Magnetostrictive Searchlight Sonar</option></select></label>"#);
     f.push_str(r#"<label>Electrical Plant Philosophy<select data-key="systems.electrical_plant"><option value="auto">Auto (Dimensionless Match)</option><option value="compact_steam">Compact Steam Dynamos (10–15% Reserve)</option><option value="balanced_turbo_diesel">Balanced Steam Turbo & Emergency Diesel (25–30% Reserve)</option><option value="subdivided_heavy_diesel">Multi-Compartment Heavy Diesel/Turbo (30–35% Reserve)</option><option value="high_margin_ac_grid">High-Margin 450V AC All-Electric Grid (40–50% Reserve)</option></select></label>"#);
+    f.push_str("</div>");
+    f.push_str("<h2>Hull Subdivision & TDS Architecture (Dimensionless & Mix-and-Match)</h2><div class='grid'>");
+    f.push_str(r#"<label>Transverse Subdivision<select data-key="systems.transverse_subdivision"><option value="auto">Auto (Dimensionless Subdivision Match)</option><option value="single_file_transverse">Single-File Without Centerline (单列通舱无中线壁)</option><option value="twin_file_centerline">Twin-File Centerline Watertight Bulkhead (双列中线密闭隔壁)</option><option value="triple_file_center_and_wings">Triple-File Centerline & Wings (三列中线机炉舱+双侧翼舱)</option><option value="quad_file_multi_longitudinal">Quad-File Multi-Longitudinal Cellular (四列多重纵隔舱蜂窝网络)</option></select></label>"#);
+    f.push_str(r#"<label>TDS Architecture<select data-key="systems.tds_architecture"><option value="auto">Auto (Dimensionless TDS Match)</option><option value="unarmoured_double_bottom">Type 0 · Unarmoured Double Bottom (无装甲双层底)</option><option value="coal_bunker_wing_bulkhead">Type 1 · Coal Bunker Wing Bulkhead (储煤翼舱吸能)</option><option value="external_blister_bulge">Type 2 · External Blister Bulge (外挂防雷突出部)</option><option value="multi_layer_liquid_void">Type 3 · Multi-Layer Liquid / Void (多层空液交替)</option><option value="pugliese_cylindrical_absorber">Type 4 · Pugliese Collapsible Cylinder (普列塞吸能圆筒)</option><option value="compound_ebonite_deep_tds">Type 5 · Deep Ébonite Foam Compound (大纵深闭孔硬橡胶泡沫复合)</option></select></label>"#);
+    f.push_str(r#"<label>Machinery Longitudinal Arrangement<select data-key="systems.machinery_arrangement"><option value="auto">Auto (Dimensionless Machinery Match)</option><option value="grouped_boiler_forward">Arrangement 1 · Grouped Boilers Forward (集中式前炉后机 B-E)</option><option value="grouped_engine_forward">Arrangement 2 · Grouped Engines Forward (逆向集中式前机后炉 E-B)</option><option value="sandwich_engine_boiler_engine">Arrangement 3 · Sandwich Engine-Boiler-Engine (夹心式 E-B-E)</option><option value="unit_alternating_machinery">Arrangement 4 · Unit Alternating System (交替单元式 B-E-B-E)</option><option value="compact_echelon_sural">Arrangement 5 · Compact Echelon / Sural (梯队穿插增压紧凑型)</option><option value="turbo_electric_distributed">Arrangement 6 · Turbo-Electric Distributed (涡轮电力分布式)</option></select></label>"#);
     f.push_str("</div>");
     f.push_str("<h2>Miscellaneous weights (tons)</h2>");
     f.push_str(&grid(&[
@@ -671,12 +678,16 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
             "\"doctrine\":{},\"tactical_echelon\":{},\"combat_modality\":{},\"mobility_regime\":{},",
             "\"main_director\":{},\"aa_director\":{},\"ballistic_computer\":{},",
             "\"radar_suite\":{},\"sonar_suite\":{},\"electrical_plant\":{},",
+            "\"transverse_subdivision\":{},\"tds_architecture\":{},\"machinery_arrangement\":{},",
             "\"resolved_doctrine\":{},\"resolved_echelon\":{},\"resolved_echelon_raw\":{},",
             "\"resolved_modality\":{},\"resolved_modality_raw\":{},",
             "\"resolved_mobility_regime\":{},\"resolved_mobility_regime_raw\":{},",
             "\"resolved_main_director\":{},\"resolved_aa_director\":{},",
             "\"resolved_ballistic_computer\":{},\"resolved_radar_suite\":{},\"resolved_sonar_suite\":{},",
             "\"resolved_electrical_plant\":{},",
+            "\"resolved_transverse_subdivision\":{},\"resolved_transverse_subdivision_raw\":{},",
+            "\"resolved_tds_architecture\":{},\"resolved_tds_architecture_raw\":{},",
+            "\"resolved_machinery_arrangement\":{},\"resolved_machinery_arrangement_raw\":{},",
             "\"match_explanation\":{},\"affinities\":{{\"type1\":{},\"type2\":{},\"type3\":{},\"type4\":{}}},",
             "\"tactical_summary\":{},\"tactical_affinities\":{},",
             "\"load_turrets_kw\":{},\"load_hull_hotel_kw\":{},\"load_fire_control_kw\":{},\"load_electronics_kw\":{},",
@@ -697,6 +708,9 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         json_str(ship.systems.radar_suite.as_str()),
         json_str(ship.systems.sonar_suite.as_str()),
         json_str(ship.systems.electrical_plant.as_str()),
+        json_str(ship.systems.transverse_subdivision.as_str()),
+        json_str(ship.systems.tds_architecture.as_str()),
+        json_str(ship.systems.machinery_arrangement.as_str()),
         json_str(sys_eval.resolved_doctrine.display_name()),
         json_str(sys_eval.resolved_echelon.display_name()),
         json_str(sys_eval.resolved_echelon.as_str()),
@@ -710,6 +724,12 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         json_str(sys_eval.resolved_radar_suite.display_name()),
         json_str(sys_eval.resolved_sonar_suite.display_name()),
         json_str(sys_eval.resolved_electrical_plant.display_name()),
+        json_str(sys_eval.resolved_transverse_subdivision.display_name()),
+        json_str(sys_eval.resolved_transverse_subdivision.as_str()),
+        json_str(sys_eval.resolved_tds_architecture.display_name()),
+        json_str(sys_eval.resolved_tds_architecture.as_str()),
+        json_str(sys_eval.resolved_machinery_arrangement.display_name()),
+        json_str(sys_eval.resolved_machinery_arrangement.as_str()),
         json_str(&sys_eval.match_explanation),
         json_num(sys_eval.type1_affinity),
         json_num(sys_eval.type2_affinity),
@@ -786,7 +806,35 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         ("belt_len", json_num(ship.armour.belt_main_length)),
         ("belt_ht", json_num(ship.armour.belt_main_height)),
         ("belt_thick", json_num(ship.armour.belt_main)),
+        ("belt_upper_thick", json_num(ship.armour.belt_upper)),
+        ("belt_upper_len", json_num(ship.armour.belt_upper_length)),
+        ("belt_upper_ht", json_num(ship.armour.belt_upper_height)),
+        ("belt_ends_thick", json_num(ship.armour.belt_ends)),
+        ("belt_ends_len", json_num(ship.armour.belt_ends_length)),
+        ("belt_ends_ht", json_num(ship.armour.belt_ends_height)),
+        ("deck_coverage", json_num(ship.armour.deck_coverage as f64)),
+        ("bulkhead_thick", json_num(ship.armour.bulkhead)),
+        ("bulkhead_len", json_num(ship.armour.bulkhead_length)),
+        ("bulkhead_ht", json_num(ship.armour.bulkhead_height)),
+        ("bulkhead_beam", json_num(ship.armour.bulkhead_beam)),
+        ("bulkhead_type", json_num(ship.armour.bulkhead_type as f64)),
+        ("bulge_thick", json_num(ship.armour.bulge)),
+        ("bulge_len", json_num(ship.armour.bulge_length)),
+        ("bulge_ht", json_num(ship.armour.bulge_height)),
+        ("belts_incline", json_num(ship.armour.belts_incline)),
+        ("void_weight", json_num(w.void_weight)),
         ("deck_thick", json_num(ship.armour.deck)),
+        ("deck_fc", json_num(ship.armour.deck_fc)),
+        ("deck_qd", json_num(ship.armour.deck_qd)),
+        ("g1_mount_type", json_num(g.batteries[0].mount_type as f64)),
+        ("g1_sub1", json_num(g.batteries[0].mount_sub_g1 as f64)),
+        ("g1_sub2", json_num(g.batteries[0].mount_sub_g2 as f64)),
+        ("g2_mount_type", json_num(g.batteries[1].mount_type as f64)),
+        ("g2_sub1", json_num(g.batteries[1].mount_sub_g1 as f64)),
+        ("g2_sub2", json_num(g.batteries[1].mount_sub_g2 as f64)),
+        ("g3_mount_type", json_num(g.batteries[2].mount_type as f64)),
+        ("g3_sub1", json_num(g.batteries[2].mount_sub_g1 as f64)),
+        ("g3_sub2", json_num(g.batteries[2].mount_sub_g2 as f64)),
         ("g1_calibre", json_num(g.batteries[0].calibre)),
         ("g1_cal_len", json_num(g.batteries[0].cal_length)),
         ("g1_arm_face", json_num(g.batteries[0].arm_face)),
@@ -798,6 +846,9 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         ("g1_m2", json_num(g.batteries[0].mounts_g2 as f64)),
         ("g1_bpm1", json_num(g.batteries[0].per_mount_g1 as f64)),
         ("g1_bpm2", json_num(g.batteries[0].per_mount_g2 as f64)),
+        ("g1_super1", json_num(g.batteries[0].mount_super_g1 as f64)),
+        ("g1_super2", json_num(g.batteries[0].mount_super_g2 as f64)),
+        ("g1_mfor", json_num(g.batteries[0].mounts_for)),
         ("g2_calibre", json_num(g.batteries[1].calibre)),
         ("g2_cal_len", json_num(g.batteries[1].cal_length)),
         ("g2_arm_face", json_num(g.batteries[1].arm_face)),
@@ -809,6 +860,21 @@ fn evaluation_json(ship: &ShipModel, message: &str) -> String {
         ("g2_m2", json_num(g.batteries[1].mounts_g2 as f64)),
         ("g2_bpm1", json_num(g.batteries[1].per_mount_g1 as f64)),
         ("g2_bpm2", json_num(g.batteries[1].per_mount_g2 as f64)),
+        ("g2_super1", json_num(g.batteries[1].mount_super_g1 as f64)),
+        ("g2_super2", json_num(g.batteries[1].mount_super_g2 as f64)),
+        ("g2_mfor", json_num(g.batteries[1].mounts_for)),
+        ("g3_calibre", json_num(g.batteries[2].calibre)),
+        ("g3_cal_len", json_num(g.batteries[2].cal_length)),
+        ("g3_mounts", json_num(g.batteries[2].mounts as f64)),
+        ("g3_layout1", json_num(g.batteries[2].layout_g1 as f64)),
+        ("g3_layout2", json_num(g.batteries[2].layout_g2 as f64)),
+        ("g3_m1", json_num(g.batteries[2].mounts_g1 as f64)),
+        ("g3_m2", json_num(g.batteries[2].mounts_g2 as f64)),
+        ("g3_bpm1", json_num(g.batteries[2].per_mount_g1 as f64)),
+        ("g3_bpm2", json_num(g.batteries[2].per_mount_g2 as f64)),
+        ("g3_super1", json_num(g.batteries[2].mount_super_g1 as f64)),
+        ("g3_super2", json_num(g.batteries[2].mount_super_g2 as f64)),
+        ("misc_deck_tons", json_num(w.misc_weight_deck)),
         ("broadside_lbs", json_num(g.broadside)),
         ("g1_shell_lbs", json_num(g.batteries[0].shell_weight)),
         (
