@@ -87,24 +87,37 @@ fn install_panic_hook() {
 }
 
 fn main() {
+    write_log(
+        "springsharp_boot.log",
+        "SpringSharp process initiated. Installing panic hook...\n",
+    );
     install_panic_hook();
 
-    if let Err(error) = app::run() {
-        let log_content = format!("=== SpringSharp Startup Error ===\nError: {}\n", error);
-        let saved_to = write_log("springsharp_startup_error.log", &log_content);
-        let dialog_msg = match saved_to {
-            Some(path) => format!(
-                "SpringSharp failed to start:\n\n{}\n\nDetails saved to:\n{}",
-                error,
-                path.display()
-            ),
-            None => format!("SpringSharp failed to start:\n\n{}", error),
-        };
+    match app::run() {
+        Ok(()) => {
+            let _ = write_log(
+                "springsharp_boot.log",
+                "SpringSharp process exited cleanly.\n",
+            );
+        }
+        Err(error) => {
+            let log_content = format!("=== SpringSharp Startup Error ===\nError: {}\n", error);
+            let saved_to = write_log("springsharp_startup_error.log", &log_content);
+            let dialog_msg = match saved_to {
+                Some(path) => format!(
+                    "SpringSharp failed to start:\n\n{}\n\nDetails saved to:\n{}",
+                    error,
+                    path.display()
+                ),
+                None => format!("SpringSharp failed to start:\n\n{}", error),
+            };
 
-        rfd::MessageDialog::new()
-            .set_title("SpringSharp Startup Error")
-            .set_description(&dialog_msg)
-            .set_level(rfd::MessageLevel::Error)
-            .show();
+            rfd::MessageDialog::new()
+                .set_title("SpringSharp Startup Error")
+                .set_description(&dialog_msg)
+                .set_level(rfd::MessageLevel::Error)
+                .show();
+        }
     }
 }
+
