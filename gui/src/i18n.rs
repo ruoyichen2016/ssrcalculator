@@ -1,6 +1,6 @@
 //! Native GUI localization helpers.
 //! Translates interface elements, navigation tabs, section cards, metric titles,
-//! and field labels into Chinese when `TextLanguage::Han` is active, while preserving
+//! and field labels into Chinese or Latin/French according to the selected language, preserving
 //! ship names, historical presets, dimensionless ratios, and standard engineering units.
 
 use springsharp::presentation::fonts::TextLanguage;
@@ -9,7 +9,7 @@ pub fn tr<'a>(lang: TextLanguage, en: &'a str, zh: &'a str) -> &'a str {
     if lang == TextLanguage::Han {
         zh
     } else {
-        en
+        springsharp::presentation::latin_ui::text(lang, en)
     }
 }
 
@@ -145,4 +145,16 @@ pub fn translate_field(label: &str) -> &str {
 
         _ => label,
     }
+}
+
+/// Current-frame language, shared by parameter labels and option controls.
+pub fn language(ui: &eframe::egui::Ui) -> TextLanguage {
+    ui.ctx()
+        .data(|d| d.get_temp(eframe::egui::Id::new("app_language")))
+        .unwrap_or_default()
+}
+
+/// Extend functional Latin labels without expanding the existing Chinese surface.
+pub fn latin<'a>(ui: &eframe::egui::Ui, label: &'a str) -> &'a str {
+    springsharp::presentation::latin_ui::text(language(ui), label)
 }

@@ -222,66 +222,66 @@ pub const DC_LOCATIONS_HAN: &[&str] = &[
 ];
 
 pub fn bow_types(lang: TextLanguage) -> &'static [&'static str] {
-    if lang == TextLanguage::Han {
-        BOW_TYPES_HAN
-    } else {
-        BOW_TYPES
+    match lang {
+        TextLanguage::Han => BOW_TYPES_HAN,
+        TextLanguage::Italic => BOW_TYPES_ITALIC,
+        TextLanguage::Germanic => BOW_TYPES,
     }
 }
 
 pub fn stern_types(lang: TextLanguage) -> &'static [&'static str] {
-    if lang == TextLanguage::Han {
-        STERN_TYPES_HAN
-    } else {
-        STERN_TYPES
+    match lang {
+        TextLanguage::Han => STERN_TYPES_HAN,
+        TextLanguage::Italic => STERN_TYPES_ITALIC,
+        TextLanguage::Germanic => STERN_TYPES,
     }
 }
 
 pub fn bulkhead_types(lang: TextLanguage) -> &'static [&'static str] {
-    if lang == TextLanguage::Han {
-        BULKHEAD_TYPES_HAN
-    } else {
-        BULKHEAD_TYPES
+    match lang {
+        TextLanguage::Han => BULKHEAD_TYPES_HAN,
+        TextLanguage::Italic => BULKHEAD_TYPES_ITALIC,
+        TextLanguage::Germanic => BULKHEAD_TYPES,
     }
 }
 
 pub fn deck_coverage(lang: TextLanguage) -> &'static [&'static str] {
-    if lang == TextLanguage::Han {
-        DECK_COVERAGE_HAN
-    } else {
-        DECK_COVERAGE
+    match lang {
+        TextLanguage::Han => DECK_COVERAGE_HAN,
+        TextLanguage::Italic => DECK_COVERAGE_ITALIC,
+        TextLanguage::Germanic => DECK_COVERAGE,
     }
 }
 
 pub fn gun_types(lang: TextLanguage) -> &'static [&'static str] {
-    if lang == TextLanguage::Han {
-        GUN_TYPES_HAN
-    } else {
-        GUN_TYPES
+    match lang {
+        TextLanguage::Han => GUN_TYPES_HAN,
+        TextLanguage::Italic => GUN_TYPES_ITALIC,
+        TextLanguage::Germanic => GUN_TYPES,
     }
 }
 
 pub fn mount_types(lang: TextLanguage) -> &'static [&'static str] {
-    if lang == TextLanguage::Han {
-        MOUNT_TYPES_HAN
-    } else {
-        MOUNT_TYPES
+    match lang {
+        TextLanguage::Han => MOUNT_TYPES_HAN,
+        TextLanguage::Italic => MOUNT_TYPES_ITALIC,
+        TextLanguage::Germanic => MOUNT_TYPES,
     }
 }
 
 pub fn guns_in_mount(lang: TextLanguage) -> &'static [&'static str] {
-    if lang == TextLanguage::Han {
-        GUNS_IN_MOUNT_HAN
-    } else {
-        GUNS_IN_MOUNT
+    match lang {
+        TextLanguage::Han => GUNS_IN_MOUNT_HAN,
+        TextLanguage::Italic => GUNS_IN_MOUNT_ITALIC,
+        TextLanguage::Germanic => GUNS_IN_MOUNT,
     }
 }
 
 pub fn mount_layouts(lang: TextLanguage) -> &'static [&'static str] {
-    if lang == TextLanguage::Han {
-        MOUNT_LAYOUTS_HAN
-    } else {
-        MOUNT_LAYOUTS
+    match lang {
+        TextLanguage::Han => MOUNT_LAYOUTS_HAN,
+        TextLanguage::Italic => MOUNT_LAYOUTS_ITALIC,
+        TextLanguage::Germanic => MOUNT_LAYOUTS,
     }
 }
 
@@ -296,6 +296,12 @@ pub fn weapon_locations_lang(kind: WeaponKind, lang: TextLanguage) -> &'static [
             WeaponKind::Torpedo => TORPEDO_LOCATIONS_HAN,
             WeaponKind::Mine => MINE_LOCATIONS_HAN,
             WeaponKind::DepthCharge => DC_LOCATIONS_HAN,
+        }
+    } else if lang == TextLanguage::Italic {
+        match kind {
+            WeaponKind::Torpedo => TORPEDO_LOCATIONS_ITALIC,
+            WeaponKind::Mine => MINE_LOCATIONS_ITALIC,
+            WeaponKind::DepthCharge => DC_LOCATIONS_ITALIC,
         }
     } else {
         match kind {
@@ -334,9 +340,156 @@ pub fn for_field_lang(key: &str, lang: TextLanguage) -> Option<&'static [&'stati
     })
 }
 
+pub const BOW_TYPES_ITALIC: &[&str] = &[
+    "Prora ordinaria",
+    "Prora bulbosa recta",
+    "Prora bulbosa prominens",
+    "Prora rostrata",
+];
+
+pub const STERN_TYPES_ITALIC: &[&str] = &["Poupe de croiseur", "Puppis truncata", "Puppis rotunda"];
+
+pub const GUN_TYPES_ITALIC: &[&str] = &[
+    "Canon à chargement par la bouche",
+    "Canon à chargement par la culasse",
+    "Canon à tir rapide",
+    "Canon antiaérien",
+    "Canon à double usage",
+    "Canon automatique à tir rapide",
+    "Mitrailleuse",
+];
+
+pub const MOUNT_TYPES_ITALIC: &[&str] = &[
+    "Affût de bordée",
+    "Tourelle Coles/Ericsson",
+    "Affût en barbette ouverte",
+    "Tourelle sur barbette",
+    "Affût de pont avec monte-munitions",
+    "Affût de pont",
+    "Affût en casemate",
+];
+
+pub const GUNS_IN_MOUNT_ITALIC: &[&str] = &[
+    "Affût simple (1)",
+    "Affût double à deux étages (2)",
+    "Affût quadruple à quatre étages (4)",
+    "Affût jumelé (2)",
+    "Affût à deux canons (2)",
+    "Affût quadruple à deux étages (4)",
+    "Affût triple (3)",
+    "Affût à trois canons (3)",
+    "Affût sextuple à deux étages (6)",
+    "Affût quadruple (4)",
+    "Affût à quatre canons (4)",
+    "Affût octuple à deux étages (8)",
+    "Affût quintuple (5)",
+    "Affût à cinq canons (5)",
+    "Affût décuple à deux étages (10)",
+];
+
+pub const BULKHEAD_TYPES_ITALIC: &[&str] = &["Clausurae additae", "Clausurae roboratae"];
+
+pub const DECK_COVERAGE_ITALIC: &[&str] = &[
+    "Tabulata loricata — plura",
+    "Tabulatum loricatum — unum",
+    "Ponts protégés — plusieurs",
+    "Pont protégé — unique",
+    "Arca loricata super machinas",
+    "Arca loricata super cellas munitionum",
+    "Arca loricata super machinas et cellas munitionum",
+];
+
+pub const TORPEDO_LOCATIONS_ITALIC: &[&str] = &[
+    "Tube fixe sur affût de pont",
+    "Tube orientable latéral sur pont",
+    "Tube orientable axial sur pont",
+    "Recharge sur pont",
+    "Tube immergé à la proue",
+    "Tube immergé à la poupe",
+    "Tubes immergés à la proue et à la poupe",
+    "Tube immergé latéral",
+    "Recharge sous-marine",
+];
+
+pub const MINE_LOCATIONS_ITALIC: &[&str] = &[
+    "Supra aquam — rails de mouillage à la poupe",
+    "Sub aqua — tubes de mouillage à la proue",
+    "Sub aqua — tubes de mouillage à la poupe",
+    "Sub aqua — tubes de mouillage latéraux",
+];
+
+pub const DC_LOCATIONS_ITALIC: &[&str] = &[
+    "Rails de grenadage à la poupe",
+    "Lance-grenades sous-marines",
+    "Mortiers ASM type Hedgehog",
+    "Mortiers ASM type Squid",
+];
+
+pub const MOUNT_LAYOUTS_ITALIC: &[&str] = &[
+    "In linea media — distributa",
+    "In linea media — in extremitatibus (prora >= puppis)",
+    "In linea media — in extremitatibus (puppis >= prora)",
+    "In linea media — in parte anteriore tabulati anterioris",
+    "In linea media — in tabulato anteriore",
+    "In linea media — in parte posteriore tabulati anterioris",
+    "In linea media — in parte anteriore tabulati posterioris",
+    "In linea media — in tabulato posteriore",
+    "In linea media — in parte posteriore tabulati posterioris",
+    "Ad latera — distributa",
+    "Ad latera — in extremitatibus (prora >= puppis)",
+    "Ad latera — in extremitatibus (puppis >= prora)",
+    "Ad latera — in parte anteriore tabulati anterioris",
+    "Ad latera — in tabulato anteriore",
+    "Ad latera — in parte posteriore tabulati anterioris",
+    "Ad latera — in parte anteriore tabulati posterioris",
+    "Ad latera — in tabulato posteriore",
+    "Ad latera — in parte posteriore tabulati posterioris",
+    "Nullum",
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn localized_catalogs_preserve_every_stored_index() {
+        for catalog in [
+            bow_types,
+            stern_types,
+            bulkhead_types,
+            deck_coverage,
+            gun_types,
+            mount_types,
+            guns_in_mount,
+            mount_layouts,
+        ] {
+            let en = catalog(TextLanguage::Germanic);
+            for lang in [TextLanguage::Han, TextLanguage::Italic] {
+                let localized = catalog(lang);
+                assert_eq!(localized.len(), en.len());
+                assert!(localized.iter().all(|label| !label.is_empty()));
+            }
+        }
+        for kind in [
+            WeaponKind::Torpedo,
+            WeaponKind::Mine,
+            WeaponKind::DepthCharge,
+        ] {
+            let en = weapon_locations(kind);
+            for lang in TextLanguage::ALL {
+                assert_eq!(weapon_locations_lang(kind, lang).len(), en.len());
+            }
+        }
+        assert_eq!(
+            gun_types(TextLanguage::Italic)[1],
+            "Canon à chargement par la culasse"
+        );
+        assert_eq!(
+            mount_types(TextLanguage::Italic)[3],
+            "Tourelle sur barbette"
+        );
+        assert_eq!(mount_layouts(TextLanguage::Italic)[18], "Nullum");
+    }
 
     #[test]
     fn labels_are_bounds_safe() {

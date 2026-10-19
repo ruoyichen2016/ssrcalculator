@@ -661,6 +661,9 @@ pub fn speed_power(
         if original {
             engine.resistance_model = ResistanceModel::Original;
             engine.blend_weight = 1.0;
+            engine.power_factor = 1.0;
+            engine.original_power_factor = 1.0;
+            engine.cfd_proxy_enabled = false;
         }
         (0..=40)
             .map(|i| {

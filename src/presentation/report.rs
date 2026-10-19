@@ -1,61 +1,229 @@
+use super::fonts::TextLanguage;
+
+pub fn report_text<'a>(language: TextLanguage, en: &'a str, zh: &'a str, la: &'a str) -> &'a str {
+    match language {
+        TextLanguage::Germanic => en,
+        TextLanguage::Han => zh,
+        TextLanguage::Italic => la,
+    }
+}
+
+// Choose the template before formatting so names and user-entered text are untouched.
+macro_rules! report_format {
+    ($language:expr, $en:literal, $zh:literal, $la:literal $(, $arg:expr)* $(,)?) => {
+        match $language {
+            TextLanguage::Han => format!($zh $(, $arg)*),
+            TextLanguage::Italic => format!($la $(, $arg)*),
+            TextLanguage::Germanic => format!($en $(, $arg)*),
+        }
+    };
+}
+
 use crate::model::{metric_calc, Conversion, POUNDS2KG, SQFEET2SQMETRES};
 use crate::*;
 use std::fmt;
-fn gun_type_name(idx: i32) -> &'static str {
+fn gun_type_name(idx: i32, language: TextLanguage) -> &'static str {
     match idx {
-        0 => "Muzzle loading gun",
-        1 => "Breech loading gun",
-        2 => "Quick firing gun",
-        3 => "Anti-air gun",
-        4 => "Dual purpose gun",
-        5 => "Auto rapid fire gun",
-        6 => "Machine gun",
-        _ => "gun",
+        0 => report_text(
+            language,
+            "Muzzle loading gun",
+            "前装炮",
+            "Canon à chargement par la bouche",
+        ),
+        1 => report_text(
+            language,
+            "Breech loading gun",
+            "后装炮",
+            "Canon à chargement par la culasse",
+        ),
+        2 => report_text(language, "Quick firing gun", "速射炮", "Canon à tir rapide"),
+        3 => report_text(language, "Anti-air gun", "高射炮", "Canon antiaérien"),
+        4 => report_text(
+            language,
+            "Dual purpose gun",
+            "高平两用炮",
+            "Canon à double usage",
+        ),
+        5 => report_text(
+            language,
+            "Auto rapid fire gun",
+            "自动速射炮",
+            "Canon automatique à tir rapide",
+        ),
+        6 => report_text(language, "Machine gun", "机枪", "Mitrailleuse"),
+        _ => report_text(language, "gun", "火炮", "Tormentum"),
     }
 }
 
-fn mount_type_name(idx: i32) -> &'static str {
+fn mount_type_name(idx: i32, language: TextLanguage) -> &'static str {
     match idx {
-        0 => "in broadside mount",
-        1 => "in Coles/Ericsson turret mount",
-        2 => "in open barbette mount",
-        3 => "in turret on barbette mount",
-        4 => "in deck and hoist mount",
-        5 => "in deck mount",
-        6 => "in casemate mount",
-        _ => "mount",
+        0 => report_text(
+            language,
+            "in broadside mount",
+            "舷侧炮架",
+            "Affût de bordée",
+        ),
+        1 => report_text(
+            language,
+            "in Coles/Ericsson turret mount",
+            "科尔斯／埃里克森式炮塔",
+            "Tourelle Coles/Ericsson",
+        ),
+        2 => report_text(
+            language,
+            "in open barbette mount",
+            "露天炮座",
+            "Affût en barbette ouverte",
+        ),
+        3 => report_text(
+            language,
+            "in turret on barbette mount",
+            "炮座式炮塔",
+            "Tourelle sur barbette",
+        ),
+        4 => report_text(
+            language,
+            "in deck and hoist mount",
+            "带扬弹机甲板炮架",
+            "Affût de pont avec monte-munitions",
+        ),
+        5 => report_text(language, "in deck mount", "甲板炮架", "Affût de pont"),
+        6 => report_text(
+            language,
+            "in casemate mount",
+            "炮廓炮架",
+            "Affût en casemate",
+        ),
+        _ => report_text(language, "mount", "炮架", "Affût"),
     }
 }
 
-fn layout_name(idx: i32) -> &'static str {
+fn layout_name(idx: i32, language: TextLanguage) -> &'static str {
     match idx {
-        0 => "Centreline - distributed",
-        1 => "Centreline - ends (fore >= aft)",
-        2 => "Centreline - ends (aft >= fore)",
-        3 => "Centreline - fore deck forward",
-        4 => "Centreline - fore deck",
-        5 => "Centreline - fore deck aft",
-        6 => "Centreline - aft deck forward",
-        7 => "Centreline - aft deck",
-        8 => "Centreline - aft deck aft",
-        9 => "Sides - distributed",
-        10 => "Sides - ends (fore >= aft)",
-        11 => "Sides - ends (aft >= fore)",
-        12 => "Sides - fore deck forward",
-        13 => "Sides - fore deck",
-        14 => "Sides - fore deck aft",
-        15 => "Sides - aft deck forward",
-        16 => "Sides - aft deck",
-        17 => "Sides - aft deck aft",
-        _ => "None",
+        0 => report_text(
+            language,
+            "Centreline - distributed",
+            "中线分散布置",
+            "In linea media — distributa",
+        ),
+        1 => report_text(
+            language,
+            "Centreline - ends (fore >= aft)",
+            "中线两端布置（前部不少于后部）",
+            "In linea media — in extremitatibus (prora >= puppis)",
+        ),
+        2 => report_text(
+            language,
+            "Centreline - ends (aft >= fore)",
+            "中线两端布置（后部不少于前部）",
+            "In linea media — in extremitatibus (puppis >= prora)",
+        ),
+        3 => report_text(
+            language,
+            "Centreline - fore deck forward",
+            "中线前甲板前部",
+            "In linea media — in parte anteriore tabulati anterioris",
+        ),
+        4 => report_text(
+            language,
+            "Centreline - fore deck",
+            "中线前甲板",
+            "In linea media — in tabulato anteriore",
+        ),
+        5 => report_text(
+            language,
+            "Centreline - fore deck aft",
+            "中线前甲板后部",
+            "In linea media — in parte posteriore tabulati anterioris",
+        ),
+        6 => report_text(
+            language,
+            "Centreline - aft deck forward",
+            "中线后甲板前部",
+            "In linea media — in parte anteriore tabulati posterioris",
+        ),
+        7 => report_text(
+            language,
+            "Centreline - aft deck",
+            "中线后甲板",
+            "In linea media — in tabulato posteriore",
+        ),
+        8 => report_text(
+            language,
+            "Centreline - aft deck aft",
+            "中线后甲板后部",
+            "In linea media — in parte posteriore tabulati posterioris",
+        ),
+        9 => report_text(
+            language,
+            "Sides - distributed",
+            "两舷分散布置",
+            "Ad latera — distributa",
+        ),
+        10 => report_text(
+            language,
+            "Sides - ends (fore >= aft)",
+            "两舷两端布置（前部不少于后部）",
+            "Ad latera — in extremitatibus (prora >= puppis)",
+        ),
+        11 => report_text(
+            language,
+            "Sides - ends (aft >= fore)",
+            "两舷两端布置（后部不少于前部）",
+            "Ad latera — in extremitatibus (puppis >= prora)",
+        ),
+        12 => report_text(
+            language,
+            "Sides - fore deck forward",
+            "两舷前甲板前部",
+            "Ad latera — in parte anteriore tabulati anterioris",
+        ),
+        13 => report_text(
+            language,
+            "Sides - fore deck",
+            "两舷前甲板",
+            "Ad latera — in tabulato anteriore",
+        ),
+        14 => report_text(
+            language,
+            "Sides - fore deck aft",
+            "两舷前甲板后部",
+            "Ad latera — in parte posteriore tabulati anterioris",
+        ),
+        15 => report_text(
+            language,
+            "Sides - aft deck forward",
+            "两舷后甲板前部",
+            "Ad latera — in parte anteriore tabulati posterioris",
+        ),
+        16 => report_text(
+            language,
+            "Sides - aft deck",
+            "两舷后甲板",
+            "Ad latera — in tabulato posteriore",
+        ),
+        17 => report_text(
+            language,
+            "Sides - aft deck aft",
+            "两舷后甲板后部",
+            "Ad latera — in parte posteriore tabulati posterioris",
+        ),
+        _ => report_text(language, "None", "无", "Nullum"),
     }
 }
 
-fn gun_description(b: &crate::model::GunBattery, main: bool) -> String {
+fn gun_description(b: &crate::model::GunBattery, main: bool, language: TextLanguage) -> String {
     if b.barrels <= 0 || b.calibre <= 0.0 {
-        return format!(
+        return report_format!(
+            language,
             "      No {} battery",
-            if main { "main" } else { "secondary" }
+            "      无{}炮组",
+            "      Nulla tormenta {}",
+            if main {
+                report_text(language, "main", "主", "principalia")
+            } else {
+                report_text(language, "secondary", "副", "secundaria")
+            }
         );
     }
     let mm = b.calibre * 25.4;
@@ -64,25 +232,38 @@ fn gun_description(b: &crate::model::GunBattery, main: bool) -> String {
     } else {
         format!("{mm:.0}")
     };
-    let mut d = format!(
+    let mut d = report_format!(
+        language,
         "      {} - {:.2}\" / {} mm {:.1} cal gun{}",
+        "      {} 门 — {:.2}\" / {} mm，{:.1} 倍径火炮{}",
+        "      Tormenta: {} — {:.2}\" / {} mm, {:.1} calibres{}",
         b.barrels,
         b.calibre,
         mm_text,
         b.cal_length,
-        if b.barrels > 1 { "s" } else { "" }
+        if language == TextLanguage::Germanic && b.barrels > 1 {
+            "s"
+        } else {
+            ""
+        }
     );
-    d.push_str(&format!(
+    d.push_str(&report_format!(
+        language,
         " - {:.2}lbs / {:.2}kg shells, {} per gun",
+        " — 弹重 {:.2}lbs / {:.2}kg，每门备弹 {} 发",
+        " — pondus proiectilis {:.2}lbs / {:.2}kg; {} proiectilia pro singulo tormento",
         b.shell_weight,
         metric_calc(b.shell_weight, Conversion::Pounds2Kg),
         b.magazine
     ));
-    d.push_str(&format!(
+    d.push_str(&report_format!(
+        language,
         "\n\t  {} {}{}, {} Model",
-        gun_type_name(b.gun_type),
-        mount_type_name(b.mount_type),
-        if b.mounts_g1 + b.mounts_g2 > 1 {
+        "\n\t  {}，{}{}，{} 年型",
+        "\n\t  {}, {}{}, exemplar anni {}",
+        gun_type_name(b.gun_type, language),
+        mount_type_name(b.mount_type, language),
+        if language == TextLanguage::Germanic && b.mounts_g1 + b.mounts_g2 > 1 {
             "s"
         } else {
             ""
@@ -94,27 +275,46 @@ fn gun_description(b: &crate::model::GunBattery, main: bool) -> String {
             "\n\t  {} x {} {}",
             b.mounts_g1,
             b.per_mount_g1,
-            layout_name(b.layout_g1)
+            layout_name(b.layout_g1, language)
         ));
         if b.mount_super_g1 > 0 {
-            d.push_str(&format!(
+            d.push_str(&report_format!(
+                language,
                 "\n\t\t{} raised mount{}",
+                "\n\t\t{} 座背负式炮架{}",
+                "\n\t\tAffûts surélevés: {}{}",
                 b.mount_super_g1,
-                if b.mount_super_g1 > 1 { "s" } else { "" }
+                if language == TextLanguage::Germanic && b.mount_super_g1 > 1 {
+                    "s"
+                } else {
+                    ""
+                }
             ));
         }
         if b.mount_sub_g1 > 0 {
             let placement = if b.mount_type == 0 {
-                " on upper deck"
+                report_text(
+                    language,
+                    " on upper deck",
+                    "，位于上甲板",
+                    " in tabulato superiore",
+                )
             } else if b.mount_sub_g1 > 1 {
-                " in casemates"
+                report_text(language, " in casemates", "，位于炮廓", " en casemate")
             } else {
-                " in casemate"
+                report_text(language, " in casemate", "，位于炮廓", " en casemate")
             };
-            d.push_str(&format!(
+            d.push_str(&report_format!(
+                language,
                 "\n\t\t{} hull mount{}{placement}",
+                "\n\t\t{} 座船体炮架{}{placement}",
+                "\n\t\tAffûts de coque: {}{}{placement}",
                 b.mount_sub_g1,
-                if b.mount_sub_g1 > 1 { "s" } else { "" }
+                if language == TextLanguage::Germanic && b.mount_sub_g1 > 1 {
+                    "s"
+                } else {
+                    ""
+                }
             ));
         }
     }
@@ -123,50 +323,94 @@ fn gun_description(b: &crate::model::GunBattery, main: bool) -> String {
             "\n\t  {} x {} {}",
             b.mounts_g2,
             b.per_mount_g2,
-            layout_name(b.layout_g2)
+            layout_name(b.layout_g2, language)
         ));
         if b.mount_super_g2 > 0 {
-            d.push_str(&format!(
+            d.push_str(&report_format!(
+                language,
                 "\n\t\t{} raised mount{}",
+                "\n\t\t{} 座背负式炮架{}",
+                "\n\t\tAffûts surélevés: {}{}",
                 b.mount_super_g2,
-                if b.mount_super_g2 > 1 { "s" } else { "" }
+                if language == TextLanguage::Germanic && b.mount_super_g2 > 1 {
+                    "s"
+                } else {
+                    ""
+                }
             ));
         }
         if b.mount_sub_g2 > 0 {
             let placement = if b.mount_type == 0 {
                 if b.sub_sub_chk {
-                    " on gun deck"
+                    report_text(
+                        language,
+                        " on gun deck",
+                        "，位于炮甲板",
+                        " in tabulato tormentorum",
+                    )
                 } else {
-                    " on upper deck"
+                    report_text(
+                        language,
+                        " on upper deck",
+                        "，位于上甲板",
+                        " in tabulato superiore",
+                    )
                 }
             } else if b.sub_sub_chk {
-                " in lower casemates"
+                report_text(
+                    language,
+                    " in lower casemates",
+                    "，位于下层炮廓",
+                    " en casemate inférieure",
+                )
             } else if b.mount_sub_g2 > 1 {
-                " in casemates"
+                report_text(language, " in casemates", "，位于炮廓", " en casemate")
             } else {
-                " in casemate"
+                report_text(language, " in casemate", "，位于炮廓", " en casemate")
             };
-            d.push_str(&format!(
+            d.push_str(&report_format!(
+                language,
                 "\n\t\t{} hull mount{}{placement}",
+                "\n\t\t{} 座船体炮架{}{placement}",
+                "\n\t\tAffûts de coque: {}{}{placement}",
                 b.mount_sub_g2,
-                if b.mount_sub_g2 > 1 { "s" } else { "" }
+                if language == TextLanguage::Germanic && b.mount_sub_g2 > 1 {
+                    "s"
+                } else {
+                    ""
+                }
             ));
         }
     }
     if b.free_gun > 0.0 {
         let use_note = if b.free_gun < 12.0 {
-            "Limited use in any sea"
+            report_text(
+                language,
+                "Limited use in any sea",
+                "所有海况下使用均受限制",
+                "Usus in omni statu maris limitatus",
+            )
         } else if b.free_gun < 16.0 {
-            "Limited use in all but light seas"
+            report_text(
+                language,
+                "Limited use in all but light seas",
+                "除轻浪外，使用均受限制",
+                "Usus limitatus nisi in mari parum agitato",
+            )
         } else {
-            "Limited use in heavy seas"
+            report_text(
+                language,
+                "Limited use in heavy seas",
+                "大浪中使用受限制",
+                "Usus in mari valde agitato limitatus",
+            )
         };
         d.push_str(&format!("\n\t\t{use_note}"));
     }
     d
 }
 
-fn ship_classification(ship: &ShipModel) -> Vec<String> {
+fn ship_classification(ship: &ShipModel, language: TextLanguage) -> Vec<String> {
     let h = &ship.hull;
     let a = &ship.armour;
     let g = &ship.guns;
@@ -174,19 +418,127 @@ fn ship_classification(ship: &ShipModel) -> Vec<String> {
     let mut lines = Vec::new();
 
     let sys_eval = ship.systems.evaluate(ship);
-    lines.push(format!(
+    lines.push(report_format!(
+        language,
         "Fleet Tactical Role: {}",
-        crate::presentation::classification(&sys_eval.tactical_affinities)
+        "舰队战术定位：{}",
+        "Munus in classe: {}",
+        if language != TextLanguage::Germanic {
+            let profile = &sys_eval.tactical_affinities;
+            let echelon = match profile.dominant_echelon {
+                TacticalEchelon::Auto => report_text(language, "", "自动", "Automaticum"),
+                TacticalEchelon::BattleLineMainBody => {
+                    report_text(language, "", "主力决战本队", "Acies principalis")
+                }
+                TacticalEchelon::FastWingVanguard => report_text(
+                    language,
+                    "",
+                    "快速翼与前卫游击队",
+                    "Ala celeris et agmen antecursorum",
+                ),
+                TacticalEchelon::OuterScoutingScreen => {
+                    report_text(language, "", "外层侦察与搜索幕", "Exploratores exteriores")
+                }
+                TacticalEchelon::InnerFleetScreen => report_text(
+                    language,
+                    "",
+                    "舰队内层护卫幕",
+                    "Praesidium interius classis",
+                ),
+                TacticalEchelon::FlotillaAssaultLine => report_text(
+                    language,
+                    "",
+                    "水雷突击支队",
+                    "Flottille d’attaque à la torpille",
+                ),
+            };
+            let modality = match profile.dominant_modality {
+                CombatModality::Auto => report_text(language, "", "自动", "Automaticum"),
+                CombatModality::HeavyArtilleryCitadel => report_text(
+                    language,
+                    "",
+                    "重炮装甲堡垒",
+                    "Arx loricata cum tormentis gravibus",
+                ),
+                CombatModality::RapidFireSurfaceGunnery => report_text(
+                    language,
+                    "",
+                    "高射速水面火炮",
+                    "Tormenta celeriter ignem facientia",
+                ),
+                CombatModality::AviationDeckProjection => {
+                    report_text(language, "", "航空甲板立体投射", "Navis aeroplanorum")
+                }
+                CombatModality::MassedTorpedoStrike => report_text(
+                    language,
+                    "",
+                    "重雷击水面突击",
+                    "Attaque massive à la torpille",
+                ),
+                CombatModality::ScreenEscortDefense => report_text(
+                    language,
+                    "",
+                    "防空反潜多维护卫",
+                    "Défense antiaérienne et anti-sous-marine",
+                ),
+            };
+            let mobility = match profile.dominant_mobility {
+                MobilityRegime::Auto => report_text(language, "", "自动", "Automaticum"),
+                MobilityRegime::HeavyDisplacementBlock => report_text(
+                    language,
+                    "",
+                    "丰满排水量稳性体制",
+                    "Coque à déplacement lourd",
+                ),
+                MobilityRegime::TransFroudeFastCapital => report_text(
+                    language,
+                    "",
+                    "跨弗劳德高速主力体制",
+                    "Grande coque rapide trans-Froude",
+                ),
+                MobilityRegime::SlenderWaveCutting => report_text(
+                    language,
+                    "",
+                    "细长破浪远洋巡航体制",
+                    "Corpus gracile undas secans",
+                ),
+                MobilityRegime::SuperCriticalHighFn => report_text(
+                    language,
+                    "",
+                    "超临界半滑行体制",
+                    "Coque à grande vitesse et semi-planante",
+                ),
+            };
+            format!("{echelon} × {modality} × {mobility}")
+        } else {
+            crate::presentation::classification(&sys_eval.tactical_affinities)
+        }
     ));
 
     if g.batteries[0].mount_type == 2 || g.batteries[1].mount_type == 2 {
-        lines.push("Barbette ship".to_string());
+        lines.push(
+            report_text(
+                language,
+                "Barbette ship",
+                "露炮座舰",
+                "Navis tormentis in barbette instructa",
+            )
+            .to_string(),
+        );
     }
     if (g.batteries[0].layout_g1 == 4 || g.batteries[0].layout_g1 == 10)
         && g.batteries[0].mount_adj > 0.6
         && h.date_hull < 1895
     {
-        lines.push("Central citadel ship".to_string());
+        lines.push(
+            report_text(
+                language,
+                "Central citadel ship",
+                "中央装甲堡舰",
+                "Navis arce media munita",
+            )
+            .to_string(),
+        );
     }
     let has_old_mount = (0..3).any(|i| g.batteries[i].mount_type == 0);
     if has_old_mount {
@@ -198,17 +550,47 @@ fn ship_classification(ship: &ShipModel) -> Vec<String> {
                     && g.batteries[i].gun_sub_g1 + g.batteries[i].gun_sub_g2 > 0
             });
             lines.push(if has_arm_back {
-                "Armoured Casemate Ship".to_string()
+                report_text(
+                    language,
+                    "Armoured Casemate Ship",
+                    "装甲炮廓舰",
+                    "Navis loricata tormentis en casemate instructa",
+                )
+                .to_string()
             } else if ship.free.fc_length + ship.free.qd_length < 0.5 {
                 if has_sub {
-                    "Armoured Frigate (Broadside ironclad)".to_string()
+                    report_text(
+                        language,
+                        "Armoured Frigate (Broadside ironclad)",
+                        "装甲巡航舰（舷侧炮铁甲舰）",
+                        "Frégate cuirassée à batterie latérale",
+                    )
+                    .to_string()
                 } else {
-                    "Armoured Corvette (Broadside ironclad)".to_string()
+                    report_text(
+                        language,
+                        "Armoured Corvette (Broadside ironclad)",
+                        "装甲轻巡航舰（舷侧炮铁甲舰）",
+                        "Corvette cuirassée à batterie latérale",
+                    )
+                    .to_string()
                 }
             } else if has_sub {
-                "Armoured Frigate (Central battery ironclad)".to_string()
+                report_text(
+                    language,
+                    "Armoured Frigate (Central battery ironclad)",
+                    "装甲巡航舰（中央炮房铁甲舰）",
+                    "Frégate cuirassée à batterie centrale",
+                )
+                .to_string()
             } else {
-                "Armoured Corvette (Central battery ironclad)".to_string()
+                report_text(
+                    language,
+                    "Armoured Corvette (Central battery ironclad)",
+                    "装甲轻巡航舰（中央炮房铁甲舰）",
+                    "Corvette cuirassée à batterie centrale",
+                )
+                .to_string()
             });
         } else {
             let has_sub = (0..3).any(|i| {
@@ -216,26 +598,78 @@ fn ship_classification(ship: &ShipModel) -> Vec<String> {
                     && g.batteries[i].gun_sub_g1 + g.batteries[i].gun_sub_g2 > 0
             });
             lines.push(if has_sub {
-                "Frigate (Unarmoured)".to_string()
+                report_text(
+                    language,
+                    "Frigate (Unarmoured)",
+                    "巡航舰（无装甲）",
+                    "Frégate non cuirassée",
+                )
+                .to_string()
             } else {
-                "Corvette (Unarmoured)".to_string()
+                report_text(
+                    language,
+                    "Corvette (Unarmoured)",
+                    "轻巡航舰（无装甲）",
+                    "Corvette non cuirassée",
+                )
+                .to_string()
             });
         }
     }
     if h.block <= 0.0 || h.block > 1.0 {
-        lines.push("DESIGN FAILURE: Displacement impossible with given dimensions".to_string());
+        lines.push(
+            report_text(
+                language,
+                "DESIGN FAILURE: Displacement impossible with given dimensions",
+                "设计失败：给定尺度无法实现该排水量",
+                "CONSILIUM INVALIDUM: déplacement cum dimensionibus datis impossibile",
+            )
+            .to_string(),
+        );
     }
     if h.displacement > 0.0 && h.displacement <= g.broadside / 4.0 {
-        lines.push("DESIGN FAILURE: Gun weight too much for hull".to_string());
+        lines.push(
+            report_text(
+                language,
+                "DESIGN FAILURE: Gun weight too much for hull",
+                "设计失败：火炮重量超过船体承载能力",
+                "CONSILIUM INVALIDUM: pondus tormentorum facultatem corporis navis excedit",
+            )
+            .to_string(),
+        );
     }
     if h.displacement > 0.0 && a.weight > h.displacement {
-        lines.push("DESIGN FAILURE: Armour weight too much for hull".to_string());
+        lines.push(
+            report_text(
+                language,
+                "DESIGN FAILURE: Armour weight too much for hull",
+                "设计失败：装甲重量超过船体承载能力",
+                "CONSILIUM INVALIDUM: pondus loricae facultatem corporis navis excedit",
+            )
+            .to_string(),
+        );
     }
     if p.strength_comp < 0.5 {
-        lines.push("DESIGN FAILURE: Overall load weight too much for hull".to_string());
+        lines.push(
+            report_text(
+                language,
+                "DESIGN FAILURE: Overall load weight too much for hull",
+                "设计失败：总载荷超过船体承载能力",
+                "CONSILIUM INVALIDUM: onus totale facultatem corporis navis excedit",
+            )
+            .to_string(),
+        );
     }
     if p.metacentre <= 0.0 {
-        lines.push("DESIGN FAILURE: Ship will capsize".to_string());
+        lines.push(
+            report_text(
+                language,
+                "DESIGN FAILURE: Ship will capsize",
+                "设计失败：舰船将倾覆",
+                "CONSILIUM INVALIDUM: navis evertetur",
+            )
+            .to_string(),
+        );
     }
     lines
 }
@@ -261,6 +695,10 @@ pub fn html_escape(s: &str) -> String {
 }
 
 pub fn generate_report(ship: &ShipModel) -> String {
+    generate_report_with_language(ship, TextLanguage::Germanic)
+}
+
+pub fn generate_report_with_language(ship: &ShipModel, language: TextLanguage) -> String {
     let mut r = String::new();
     let h = &ship.hull;
     let a = &ship.armour;
@@ -269,24 +707,52 @@ pub fn generate_report(ship: &ShipModel) -> String {
     let w = &ship.weapons;
     let p = &ship;
 
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "{}, {} {} laid down {}\n",
-        ship.name, ship.country, ship.ship_type, h.date_hull
+        "{}，{} {}，{} 年开工\n",
+        "{}, {} {}; carina posita anno {}\n",
+        ship.name,
+        ship.country,
+        ship.ship_type,
+        h.date_hull
     ));
     if h.date_hull != h.date_engine {
-        r.push_str(&format!("(Engine {})\n", h.date_engine));
+        r.push_str(&report_format!(
+            language,
+            "(Engine {})\n",
+            "（主机设计年代 {}）\n",
+            "(Machinae anni {})\n",
+            h.date_engine
+        ));
     }
-    for line in ship_classification(ship) {
+    for line in ship_classification(ship, language) {
         r.push_str(&format!("\n{line}"));
     }
 
-    r.push_str("\nDisplacement:\n");
-    r.push_str(&format!(
+    r.push_str(report_text(
+        language,
+        "\nDisplacement:\n",
+        "\n排水量：\n",
+        "\nDéplacement:\n",
+    ));
+    r.push_str(&report_format!(
+        language,
         "\t{:.0} t light; {:.0} t standard; {:.0} t normal; {:.0} t full load\n",
-        p.disp_light, p.disp_standard, h.displacement, p.disp_max_load
+        "\t空载 {:.0} t；标准 {:.0} t；正常 {:.0} t；满载 {:.0} t\n",
+        "\t{:.0} t navis vacua; {:.0} t standard; {:.0} t ordinarium; {:.0} t pleno onere\n",
+        p.disp_light,
+        p.disp_standard,
+        h.displacement,
+        p.disp_max_load
     ));
 
-    r.push_str("\nDimensions:\n");
+    r.push_str(report_text(
+        language,
+        "\nDimensions:\n",
+        "\n船体尺度（总长／水线长 × 型宽 × 正常／满载吃水）：\n",
+        "\nDimensiones:\n",
+    ));
     r.push_str(&format!(
         "\t({:.1} ft / {:.1} ft) x {:.1} ft x ({:.1} / {:.1} ft)\n",
         h.length_oa, h.length, h.beam, h.draught, h.draught_deep
@@ -300,22 +766,32 @@ pub fn generate_report(ship: &ShipModel) -> String {
         metric_calc(h.draught_deep, Conversion::Feet2Metres),
     ));
     if h.beam_bulges > h.beam {
-        r.push_str(&format!(
+        r.push_str(&report_format!(
+            language,
             "\tBulges: {:.1} ft / {:.1} m\n",
+            "\t含防雷突出部型宽：{:.1} ft / {:.1} m\n",
+            "\tLatitudo cum bulges antitorpilles: {:.1} ft / {:.1} m\n",
             h.beam_bulges,
             metric_calc(h.beam_bulges, Conversion::Feet2Metres)
         ));
     }
 
-    r.push_str("\nArmament:\n");
+    r.push_str(report_text(
+        language,
+        "\nArmament:\n",
+        "\n武备：\n",
+        "\nArmamenta:\n",
+    ));
     for (i, b) in g.batteries.iter().enumerate() {
         if b.barrels <= 0 {
             continue;
         }
-        r.push_str(&format!("\n{}", gun_description(b, i == 0)));
+        r.push_str(&format!("\n{}", gun_description(b, i == 0, language)));
     }
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "\n\tBroadside: {:.0} lbs / {:.0} kg; Magazine: {:.0} tons\n",
+        "\n\t舷侧齐射弹重：{:.0} lbs / {:.0} kg；弹药库：{:.0} 长吨\n", "\n\tPondus salvae lateralis: {:.0} lbs / {:.0} kg; cella munitionum: {:.0} tonnes longues\n",
         g.broadside,
         metric_calc(g.broadside, Conversion::Pounds2Kg),
         g.magazine
@@ -327,12 +803,20 @@ pub fn generate_report(ship: &ShipModel) -> String {
             continue;
         }
         let kind = match wp.kind {
-            WeaponKind::Torpedo => "torpedo",
-            WeaponKind::Mine => "mine",
-            WeaponKind::DepthCharge => "depth charge/AS mortar",
+            WeaponKind::Torpedo => report_text(language, "torpedo", "鱼雷", "torpille"),
+            WeaponKind::Mine => report_text(language, "mine", "水雷", "mine marine"),
+            WeaponKind::DepthCharge => report_text(
+                language,
+                "depth charge/AS mortar",
+                "深水炸弹／反潜迫击炮",
+                "grenade sous-marine / mortier anti-sous-marin",
+            ),
         };
-        r.push_str(&format!(
+        r.push_str(&report_format!(
+            language,
             "\t{} x {:.1} {} (location {}), {:.2} tons\n",
+            "\t{} × {:.1} {}（位置编号 {}），{:.2} 长吨\n",
+            "\t{} x {:.1} {} (locus {}), {:.2} tonnes longues\n",
             wp.number,
             wp.size,
             kind,
@@ -341,136 +825,286 @@ pub fn generate_report(ship: &ShipModel) -> String {
         ));
     }
 
-    r.push_str("\nArmour:\n");
-    r.push_str(&format!(
+    r.push_str(report_text(
+        language,
+        "\nArmour:\n",
+        "\n装甲：\n",
+        "\nLoricatio:\n",
+    ));
+    r.push_str(&report_format!(
+        language,
         "\tMain belt: {:.1}\" x {:.0} ft x {:.1} ft, {:.0} tons\n",
-        a.belt_main, a.belt_main_length, a.belt_main_height, a.weight_belt_main
+        "\t主装甲带：{:.1}\" × {:.0} ft × {:.1} ft，{:.0} 长吨\n",
+        "\tCingulum principale: {:.1}\" x {:.0} ft x {:.1} ft, {:.0} tonnes longues\n",
+        a.belt_main,
+        a.belt_main_length,
+        a.belt_main_height,
+        a.weight_belt_main
     ));
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "\tBelt ends: {:.1}\" x {:.0} ft x {:.1} ft, {:.0} tons\n",
-        a.belt_ends, a.belt_ends_length, a.belt_ends_height, a.weight_belt_ends
+        "\t艏艉装甲带：{:.1}\" × {:.0} ft × {:.1} ft，{:.0} 长吨\n",
+        "\tExtremitates cinguli: {:.1}\" x {:.0} ft x {:.1} ft, {:.0} tonnes longues\n",
+        a.belt_ends,
+        a.belt_ends_length,
+        a.belt_ends_height,
+        a.weight_belt_ends
     ));
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "\tUpper belt: {:.1}\" x {:.0} ft x {:.1} ft, {:.0} tons\n",
-        a.belt_upper, a.belt_upper_length, a.belt_upper_height, a.weight_belt_upper
+        "\t上层装甲带：{:.1}\" × {:.0} ft × {:.1} ft，{:.0} 长吨\n",
+        "\tCingulum superius: {:.1}\" x {:.0} ft x {:.1} ft, {:.0} tonnes longues\n",
+        a.belt_upper,
+        a.belt_upper_length,
+        a.belt_upper_height,
+        a.weight_belt_upper
     ));
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "\tBulkhead: {:.1}\" x {:.0} ft x {:.1} ft, {:.0} tons\n",
-        a.bulkhead, a.bulkhead_length, a.bulkhead_height, a.weight_bulkhead
+        "\t装甲横舱壁：{:.1}\" × {:.0} ft × {:.1} ft，{:.0} 长吨\n",
+        "\tClausura transversa loricata: {:.1}\" x {:.0} ft x {:.1} ft, {:.0} tonnes longues\n",
+        a.bulkhead,
+        a.bulkhead_length,
+        a.bulkhead_height,
+        a.weight_bulkhead
     ));
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "\tBulge: {:.1}\" x {:.0} ft x {:.1} ft, {:.0} tons\n",
-        a.bulge, a.bulge_length, a.bulge_height, a.weight_bulge
+        "\t防雷突出部：{:.1}\" × {:.0} ft × {:.1} ft，{:.0} 长吨\n",
+        "\tBulge antitorpilles: {:.1}\" x {:.0} ft x {:.1} ft, {:.0} tonnes longues\n",
+        a.bulge,
+        a.bulge_length,
+        a.bulge_height,
+        a.weight_bulge
     ));
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "\tDecks: {:.1}\" (FC {:.1}\", QD {:.1}\"), {:.0} tons\n",
-        a.deck, a.deck_fc, a.deck_qd, a.weight_deck
+        "\t装甲甲板：{:.1}\"（艏楼 {:.1}\"，后甲板 {:.1}\"），{:.0} 长吨\n",
+        "\tTabulata: {:.1}\" (prora {:.1}\", puppis {:.1}\"), {:.0} tonnes longues\n",
+        a.deck,
+        a.deck_fc,
+        a.deck_qd,
+        a.weight_deck
     ));
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "\tConning: {:.1}\" + {:.1}\", {:.0} tons\n",
-        a.conning_for, a.conning_aft, a.weight_conning
+        "\t指挥塔：{:.1}\" + {:.1}\"，{:.0} 长吨\n",
+        "\tTurres imperatoriae: {:.1}\" + {:.1}\", {:.0} tonnes longues\n",
+        a.conning_for,
+        a.conning_aft,
+        a.weight_conning
     ));
-    r.push_str(&format!("\tTotal armour: {:.0} tons\n", a.weight));
+    r.push_str(&report_format!(
+        language,
+        "\tTotal armour: {:.0} tons\n",
+        "\t装甲总重：{:.0} 长吨\n",
+        "\tPondus loricae totale: {:.0} tonnes longues\n",
+        a.weight
+    ));
 
-    r.push_str("\nMachinery:\n");
-    let fuel_desc = describe_fuel(e);
-    r.push_str(&format!("\tFuel: {fuel_desc}\n"));
-    r.push_str(&format!(
-        "\tMax speed: {:.1} kt, cruise: {:.1} kt\n",
-        e.speed_max, e.speed_cruise
+    r.push_str(report_text(
+        language,
+        "\nMachinery:\n",
+        "\n动力：\n",
+        "\nMachinae:\n",
     ));
-    r.push_str(&format!(
+    let fuel_desc = describe_fuel(e, language);
+    r.push_str(&report_format!(
+        language,
+        "\tFuel: {fuel_desc}\n",
+        "\t燃料／能源：{fuel_desc}\n",
+        "\tFons energiae: {fuel_desc}\n"
+    ));
+    r.push_str(&report_format!(
+        language,
+        "\tMax speed: {:.1} kt, cruise: {:.1} kt\n",
+        "\t最高航速：{:.1} kt；巡航速度：{:.1} kt\n",
+        "\tCeleritas maxima: {:.1} kt; celeritas itineraria: {:.1} kt\n",
+        e.speed_max,
+        e.speed_cruise
+    ));
+    r.push_str(&report_format!(
+        language,
         "\tMax power: {:.0} hp / {:.0} kW; cruise power: {:.0} hp / {:.0} kW\n",
+        "\t最大功率：{:.0} hp / {:.0} kW；巡航功率：{:.0} hp / {:.0} kW\n",
+        "\tPotentia maxima: {:.0} hp / {:.0} kW; potentia itineraria: {:.0} hp / {:.0} kW\n",
         e.hp_max,
         metric_calc(e.hp_max, Conversion::Hp2Kw),
         e.hp_cruise,
         metric_calc(e.hp_cruise, Conversion::Hp2Kw)
     ));
-    r.push_str(if e.resistance_model == crate::model::ResistanceModel::Original {
-        "\tNote: power uses the original SpringSharp empirical model (reconstructed, unimproved).\n"
+    r.push_str(if e.blend_weight < 1.0 - 1e-9 {
+        report_text(language,
+            "\tNote: power blends Holtrop-Mennen-style and original SpringSharp models.\n",
+            "\t说明：功率混合使用 Holtrop-Mennen 类模型和原版 SpringSharp 模型。\n", "\tNota: potentia ex mixtura exemplarium Holtrop-Mennen et SpringSharp originalis computatur.\n")
+    } else if e.resistance_model == crate::model::ResistanceModel::Original {
+        report_text(language, "\tNote: power uses the original SpringSharp empirical model (reconstructed, unimproved).\n", "\t说明：功率采用原版 SpringSharp 经验模型（重建实现，未改进）。\n", "\tNota: potentia ex exemplari empirico originali SpringSharp computatur (reconstructo, non emendato).\n")
     } else {
-        "\tNote: power uses the improved Holtrop-Mennen-style model.\n"
+        report_text(language, "\tNote: power uses the improved Holtrop-Mennen-style model.\n", "\t说明：功率采用改进的 Holtrop-Mennen 类模型。\n", "\tNota: potentia ex exemplari emendato generis Holtrop-Mennen computatur.\n")
     });
-    r.push_str(&format!(
+    r.push_str(&report_format!(language,
+        "\tPower factors (improved/original): {:.3}/{:.3}; Holtrop blend share: {:.3}; CFD correction: {}\n",
+        "\t功率校准系数（改进／原版）：{:.3}/{:.3}；Holtrop 混合占比：{:.3}；CFD 修正：{}\n", "\tFactores potentiae (emendatus/originalis): {:.3}/{:.3}; pars Holtrop in mixtura: {:.3}; correctio CFD: {}\n",
+        e.power_factor, e.original_power_factor,
+        if e.blend_weight < 1.0 - 1e-9 { e.blend_weight.clamp(0.0, 1.0) }
+        else if e.resistance_model == crate::model::ResistanceModel::Original { 0.0 }
+        else { 1.0 },
+        if e.cfd_proxy_enabled { report_text(language, "enabled", "启用", "activa") }
+        else { report_text(language, "disabled", "禁用", "inactiva") }));
+    r.push_str(&report_format!(
+        language,
         "\tEngine weight: {:.0} tons; bunker normal: {:.0} tons / max {:.0} tons\n",
+        "\t动力装置重量：{:.0} 长吨；正常燃料储量：{:.0} 长吨／最大 {:.0} 长吨\n", "\tPondus machinarum: {:.0} tonnes longues; combustibile ordinarium: {:.0} tonnes longues / maximum {:.0} tonnes longues\n",
         e.engine_weight,
         e.bunker,
         e.bunker * 1.8
     ));
     if e.qpc_applicable {
-        r.push_str(&format!(
-            "\tPropulsion: QPC={:.3} (used in power calculation), hull={:.3}, open-water={:.3}, shaft={:.3}\n",
+        r.push_str(&report_format!(language, "\tPropulsion: QPC={:.3} (used in power calculation), hull={:.3}, open-water={:.3}, shaft={:.3}\n", "\t推进效率：QPC={:.3}（参与功率计算），船身效率={:.3}，敞水效率={:.3}，轴系效率={:.3}\n", "\tPropulsio: QPC={:.3} (in computatione potentiae adhibitum), rendement de coque={:.3}, rendement en eau libre={:.3}, rendement de ligne d’arbre={:.3}\n",
             e.qpc, e.hull_efficiency, e.open_water_efficiency, e.shaft_efficiency
         ));
     } else {
-        r.push_str("\tPropulsion: original empirical shaft-power fit; no explicit QPC applies.\n");
+        r.push_str(report_text(
+            language,
+            "\tPropulsion: original empirical shaft-power fit; no explicit QPC applies.\n",
+            "\t推进：原版经验轴功率拟合，不显式使用 QPC。\n", "\tPropulsio: potentia in axe ex formula empirica originali; QPC explicite non adhibetur.\n",
+        ));
     }
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "\tScrews: {}; range: {:.0} nm\n",
-        e.screws, e.range
+        "\t螺旋桨数：{}；续航力：{:.0} nm\n",
+        "\tHelices: {}; spatium navigationis: {:.0} nm\n",
+        e.screws,
+        e.range
     ));
 
-    r.push_str("\nPerformance:\n");
-    r.push_str(&format!(
+    r.push_str(report_text(
+        language,
+        "\nPerformance:\n",
+        "\n性能：\n",
+        "\nProprietates nauticae:\n",
+    ));
+    r.push_str(&report_format!(
+        language,
         "\tRoom: hull {:.1}%, deck {:.1}%\n",
+        "\t空间占用：船体 {:.1}%，甲板 {:.1}%\n",
+        "\tSpatium occupatum: corpus navis {:.1}%, tabulatum {:.1}%\n",
         p.room_hull * 100.0,
         p.room_deck * 100.0
     ));
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "\tStability: {:.2}; metacentre: {:.2} ft\n",
-        p.stability_adj, p.metacentre
+        "\t稳性：{:.2}；初稳性高：{:.2} ft\n",
+        "\tStabilitas: {:.2}; hauteur métacentrique: {:.2} ft\n",
+        p.stability_adj,
+        p.metacentre
     ));
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "\tSeakeeping: {:.2}; steadiness: {:.0}\n",
-        p.seakeeping, p.steadiness_adj
+        "\t耐波性：{:.2}；平台平稳性：{:.0}\n",
+        "\tTenue à la mer: {:.2}; stabilitas tormentorum: {:.0}\n",
+        p.seakeeping,
+        p.steadiness_adj
     ));
-    r.push_str(&format!("\tRecoil: {:.2}\n", p.recoil));
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
+        "\tRecoil: {:.2}\n",
+        "\t后坐力指标：{:.2}\n",
+        "\tRecul: {:.2}\n",
+        p.recoil
+    ));
+    r.push_str(&report_format!(
+        language,
         "\tStructural weight: {:.0} lb/sq ft / {:.0} kg/sq m\n",
+        "\t单位面积结构重量：{:.0} lb/sq ft / {:.0} kg/sq m\n",
+        "\tPondus structurae per aream: {:.0} lb/sq ft / {:.0} kg/sq m\n",
         p.struct_weight,
         p.struct_weight / SQFEET2SQMETRES * POUNDS2KG
     ));
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "\tStrength cross/long/composite: {:.2}/{:.2}/{:.2}\n",
-        p.strength_cross, p.strength_long, p.strength_comp
+        "\t横向／纵向／综合强度：{:.2}/{:.2}/{:.2}\n",
+        "\tFirmitas transversa/longitudinalis/composita: {:.2}/{:.2}/{:.2}\n",
+        p.strength_cross,
+        p.strength_long,
+        p.strength_comp
     ));
-    r.push_str(&format!(
+    r.push_str(&report_format!(
+        language,
         "\tCost: £{:.3}M / ${:.3}M\n",
-        p.cost_pounds, p.cost_dollars
+        "\t造价：{:.3} 百万英镑／{:.3} 百万美元\n",
+        "\tPretium: £{:.3}M / ${:.3}M\n",
+        p.cost_pounds,
+        p.cost_dollars
     ));
 
     if p.strength_comp < 0.5 {
-        r.push_str("\nDESIGN FAILURE: Hull structure insufficient to carry required loads!\n");
+        r.push_str(report_text(
+            language,
+            "\nDESIGN FAILURE: Hull structure insufficient to carry required loads!\n",
+            "\n设计失败：船体结构不足以承受所需载荷！\n",
+            "\nCONSILIUM INVALIDUM: structura navis oneribus sustinendis non sufficit!\n",
+        ));
     } else if p.strength_comp < 0.995 {
-        r.push_str("\nWARNING: Hull structure strained by open sea conditions!\n");
+        r.push_str(report_text(
+            language,
+            "\nWARNING: Hull structure strained by open sea conditions!\n",
+            "\n警告：外海条件下船体结构强度不足！\n",
+            "\nMONITUM: structura navis in alto mari nimis oneratur!\n",
+        ));
     }
     // Same convergence caveat as `ShipModel::summary`: the report is the other
     // place a user reads the weight breakdown, so it must carry the warning too.
     if p.iterations > 0 && !p.converged {
-        r.push_str(&format!(
-            "\nWARNING: armour/machinery weight iteration did not converge after {} iterations (relative residual {:.2e}); the weight breakdown is approximate.\n",
+        r.push_str(&report_format!(language, "\nWARNING: armour/machinery weight iteration did not converge after {} iterations (relative residual {:.2e}); the weight breakdown is approximate.\n", "\n警告：装甲／动力重量迭代在 {} 次后仍未收敛（相对残差 {:.2e}）；重量分项仅为近似值。\n", "\nMONITUM: iteratio ponderum loricae et machinarum post {} iterationes non convergit (résidu relatif {:.2e}); pondera approximata sunt.\n",
             p.iterations, p.iteration_residual
         ));
     }
+    super::report_comparison::append_comparison(&mut r, ship, language);
     r
 }
 
 pub fn generate_html_report(ship: &ShipModel) -> String {
-    let text = generate_report(ship);
+    generate_html_report_with_language(ship, TextLanguage::Germanic)
+}
+
+pub fn generate_html_report_with_language(ship: &ShipModel, language: TextLanguage) -> String {
+    let text = generate_report_with_language(ship, language);
+    let tag = report_text(language, "en", "zh-CN", "la");
     let body = html_escape(&text).replace('\n', "<br>\n");
     format!(
-        "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>{}</title></head><body>\n<pre>{body}</pre>\n</body></html>\n",
+        "<!doctype html>\n<html lang=\"{tag}\"><head><meta charset=\"utf-8\"><title>{}</title></head><body>\n<pre>{body}</pre>\n</body></html>\n",
         html_escape(&ship.name)
     )
 }
 
-fn describe_fuel(e: &crate::model::EngineValues) -> String {
+fn describe_fuel(e: &crate::model::EngineValues, language: TextLanguage) -> String {
     let fuel_names = [
-        "coal-fired boilers",
-        "oil-fired boilers",
-        "diesel motors",
-        "petrol motors",
-        "batteries",
+        report_text(
+            language,
+            "coal-fired boilers",
+            "燃煤锅炉",
+            "caldaria carbonibus calefacta",
+        ),
+        report_text(
+            language,
+            "oil-fired boilers",
+            "燃油锅炉",
+            "caldaria oleo calefacta",
+        ),
+        report_text(language, "diesel motors", "柴油机", "moteurs Diesel"),
+        report_text(language, "petrol motors", "汽油机", "moteurs à essence"),
+        report_text(language, "batteries", "蓄电池", "accumulateurs électriques"),
     ];
     let selected: Vec<&str> = e
         .fuel
@@ -479,7 +1113,7 @@ fn describe_fuel(e: &crate::model::EngineValues) -> String {
         .filter_map(|(i, &v)| if v { Some(fuel_names[i]) } else { None })
         .collect();
     if selected.is_empty() {
-        "none".to_string()
+        report_text(language, "none", "无", "nullum").to_string()
     } else {
         selected.join(", ")
     }
@@ -945,6 +1579,67 @@ impl ShipSummary for ShipModel {
 mod tests {
     use super::*;
     #[test]
+    fn localized_reports_preserve_user_text_and_values() {
+        let mut ship = demo_ship();
+        ship.name = "Displacement <script>舰船 & Test</script>".into();
+        ship.country = "Machinery".into();
+        ship.calculate();
+        let before = serialize(&ship);
+        let en = generate_report_with_language(&ship, TextLanguage::Germanic);
+        let zh = generate_report_with_language(&ship, TextLanguage::Han);
+        assert_eq!(serialize(&ship), before);
+        assert!(zh.contains(&ship.name));
+        assert!(zh.contains(&ship.country));
+        for heading in [
+            "排水量：",
+            "武备：",
+            "装甲：",
+            "动力：",
+            "性能：",
+            "原版 SpringSharp 公式对照（Rust 重建口径）",
+        ] {
+            assert!(zh.contains(heading), "missing {heading}");
+        }
+        assert!(!zh.contains("\nDisplacement:"));
+        assert!(!zh.contains("laid down"));
+        assert!(!zh.contains("Fleet Tactical Role"));
+        assert!(en.contains("Original SpringSharp formula comparison (Rust reconstruction)"));
+        // Locale changes templates, never the numerical results or their precision.
+        for value in [ship.engine.hp_max, ship.engine.hp_cruise, ship.disp_light] {
+            assert!(en.contains(&format!("{value:.0}")));
+            assert!(zh.contains(&format!("{value:.0}")));
+        }
+        let latin = generate_report_with_language(&ship, TextLanguage::Italic);
+        assert!(latin.contains("Armamenta:"));
+        assert!(latin.contains("Machinae:"));
+        assert!(latin.contains("Déplacement:"));
+        assert!(latin.contains("Comparatio formularum originalium SpringSharp"));
+        assert!(!latin.contains("laid down"));
+        assert!(!latin.contains("Original SpringSharp formula comparison"));
+        assert!(latin.contains(&ship.name));
+        assert!(
+            generate_html_report_with_language(&ship, TextLanguage::Italic).contains("lang=\"la\"")
+        );
+        let html = generate_html_report_with_language(&ship, TextLanguage::Han);
+        assert!(html.contains("lang=\"zh-CN\""));
+        assert!(html.contains("&lt;script&gt;舰船 &amp; Test&lt;/script&gt;"));
+        assert!(!html.contains("<script>"));
+    }
+
+    #[test]
+    fn chinese_report_keeps_failure_and_convergence_warnings() {
+        let mut ship = demo_ship();
+        ship.calculate();
+        ship.strength_comp = 0.4;
+        ship.converged = false;
+        ship.iterations = 50;
+        let report = generate_report_with_language(&ship, TextLanguage::Han);
+        assert!(report.contains("设计失败：船体结构不足"));
+        assert!(report.contains("50 次后仍未收敛"));
+        assert!(report.contains("对照提示：至少一列重量迭代未收敛"));
+    }
+
+    #[test]
     fn report_contains_ship_name() {
         let mut ship = ShipModel::new();
         ship.name = "Report Test".into();
@@ -992,7 +1687,7 @@ mod tests {
         ship.armour.belt_main_length = 200.0;
         ship.armour.belt_main_height = 10.0;
         ship.calculate();
-        let classes = ship_classification(&ship);
+        let classes = ship_classification(&ship, TextLanguage::Germanic);
         assert!(classes.iter().any(|c| c.contains("Armoured")));
         let report = generate_report(&ship);
         assert!(report.contains("Muzzle loading gun"));

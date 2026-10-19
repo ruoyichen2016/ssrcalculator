@@ -342,7 +342,7 @@ fn page(work: &Workbench, fields: &Fields, message: &str, error: bool, analysis:
         format!(
             "<p class=\"notice {}\" role=\"status\">{}</p>",
             if error { "error" } else { "success" },
-            html_escape(message)
+            html_escape(&crate::presentation::latin_ui::status(language, message))
         ),
     );
     let model = if ship.engine.blend_weight.clamp(0.0, 1.0) < 1.0 - 1e-9 {
@@ -371,11 +371,18 @@ fn page(work: &Workbench, fields: &Fields, message: &str, error: bool, analysis:
             }
         ),
     );
-    let report = crate::generate_report(ship);
+    let report = crate::generate_report_with_language(ship, language);
     let alerts = report
         .lines()
         .map(str::trim)
-        .filter(|line| line.starts_with("WARNING") || line.starts_with("DESIGN FAILURE"))
+        .filter(|line| {
+            line.starts_with("WARNING")
+                || line.starts_with("DESIGN FAILURE")
+                || line.starts_with("警告：")
+                || line.starts_with("设计失败：")
+                || line.starts_with("MONITUM:")
+                || line.starts_with("CONSILIUM INVALIDUM:")
+        })
         .map(|line| format!("<p class=\"design-alert\">{}</p>", html_escape(line)))
         .collect::<String>();
     slots.insert("alerts".into(), alerts);
@@ -406,10 +413,7 @@ fn page(work: &Workbench, fields: &Fields, message: &str, error: bool, analysis:
     slots.insert("historical".into(), historical(ship));
     slots.insert("spaces".into(), spaces(ship));
     slots.insert("analysis".into(), analysis.into());
-    slots.insert(
-        "report".into(),
-        html_escape(&crate::generate_report(&result.ship)),
-    );
+    slots.insert("report".into(), html_escape(&report));
     forms::render(PAGE, &values, &slots)
 }
 
@@ -665,12 +669,21 @@ fn spaces(ship: &ShipModel) -> String {
     out
 }
 fn export(result: &Evaluation, metric: bool, arcs: bool, fields: &Fields) -> String {
-    let language =
-        crate::presentation::fonts::TextLanguage::parse(get(fields, "text_language")).tag();
+    let selected_language =
+        crate::presentation::fonts::TextLanguage::parse(get(fields, "text_language"));
+    use crate::presentation::report::report_text as tr;
+    let language = tr(selected_language, "en", "zh-CN", "la");
+    let report_heading = tr(selected_language, "Report", "报告", "Relatio");
+    let parameters_heading = tr(
+        selected_language,
+        "Design parameters",
+        "设计参数",
+        "Parametri consilii",
+    );
     let title_class = if get(fields, "serif_titles") == "true" {
         "serif-title"
     } else {
         "lang-text"
     };
-    format!("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{}</title><style>{CSS}</style><body><article class=\"export-report\"><h1 class=\"{title_class}\" lang=\"{language}\">{}</h1>{}{}{}{}<h2>Report</h2><pre class=\"report\">{}</pre><h2>Design parameters</h2><pre class=\"report\">{}</pre></article></body></html>",html_escape(&result.ship.name),html_escape(&result.ship.name),svg::blueprint(result,metric,arcs),metrics(&result.ship,metric),svg::speed_power(result,None,metric),svg::immunity(result,metric),html_escape(&crate::generate_report(&result.ship)),html_escape(&serialize(&result.ship)))
+    format!("<!doctype html><html lang=\"{language}\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{}</title><style>{CSS}</style><body><article class=\"export-report\"><h1 class=\"{title_class}\" lang=\"{language}\">{}</h1>{}{}{}{}<h2>{report_heading}</h2><pre class=\"report\">{}</pre><h2>{parameters_heading}</h2><pre class=\"report\">{}</pre></article></body></html>",html_escape(&result.ship.name),html_escape(&result.ship.name),svg::blueprint(result,metric,arcs),metrics(&result.ship,metric),svg::speed_power(result,None,metric),svg::immunity(result,metric),html_escape(&crate::generate_report_with_language(&result.ship, selected_language)),html_escape(&serialize(&result.ship)))
 }

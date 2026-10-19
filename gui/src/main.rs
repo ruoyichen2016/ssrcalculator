@@ -5,6 +5,7 @@
 mod app;
 mod fonts;
 mod i18n;
+mod startup;
 mod theme;
 
 use std::fs::OpenOptions;
@@ -57,7 +58,7 @@ fn install_panic_hook() {
             "Box<dyn Any> (unknown panic payload)".to_string()
         };
 
-        let backtrace = std::backtrace::Backtrace::capture();
+        let backtrace = std::backtrace::Backtrace::force_capture();
         let log_content = format!(
             "=== SpringSharp Fatal Crash ===\nLocation: {}\nMessage: {}\n\nBacktrace:\n{}\n",
             location, payload, backtrace
@@ -87,20 +88,27 @@ fn install_panic_hook() {
 }
 
 fn main() {
-    write_log(
-        "springsharp_boot.log",
-        "SpringSharp process initiated. Installing panic hook...\n",
-    );
+    startup::log("Process initiated; installing panic hook");
     install_panic_hook();
 
-    match app::run() {
+    let renderer = match startup::renderer() {
+        Ok(renderer) => renderer,
+        Err(error) => {
+            startup::log(&error);
+            rfd::MessageDialog::new()
+                .set_title("SpringSharp Startup Error")
+                .set_description(&error)
+                .set_level(rfd::MessageLevel::Error)
+                .show();
+            std::process::exit(1);
+        }
+    };
+    match app::run(renderer) {
         Ok(()) => {
-            let _ = write_log(
-                "springsharp_boot.log",
-                "SpringSharp process exited cleanly.\n",
-            );
+            startup::log("Process exited cleanly");
         }
         Err(error) => {
+            startup::log(&format!("Startup failed: {error}"));
             let log_content = format!("=== SpringSharp Startup Error ===\nError: {}\n", error);
             let saved_to = write_log("springsharp_startup_error.log", &log_content);
             let dialog_msg = match saved_to {
@@ -117,7 +125,7 @@ fn main() {
                 .set_description(&dialog_msg)
                 .set_level(rfd::MessageLevel::Error)
                 .show();
+            std::process::exit(1);
         }
     }
 }
-

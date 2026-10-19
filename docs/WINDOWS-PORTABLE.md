@@ -21,7 +21,7 @@ Serif: Noto Serif + Noto Serif CJK JP (Mincho shapes for both Chinese and Japane
 Monospace: Noto Sans Mono + CJK SC fallback.
 
 Select Serif to use the serif family for ship names/headings.
-Font groups are Linguae Germanicae (English/German), 汉字 (Chinese/Japanese), and Linguae Italicae (Latin/French). These are typography groups, not UI translations; grouped text uses collection/script metadata rather than pretending to be one language.
+Font groups are Linguae Germanicae (English/German), 汉字 (Chinese/Japanese), and Linguae Italicae (Latin/French). Font selection uses collection/script metadata. Report language is English, Chinese, or Latin with French fallback as detailed below.
 English, German, French, Latin diacritics, Chinese and Japanese kana/Han are supported by
 these bundled fonts. English UI labels remain the fallback. Unrepresented rare
 characters can still require an additional font; no font claims all Unicode.
@@ -84,3 +84,52 @@ complete three-dimensional firing/smoke simulation. The planner is a concept
 layout heuristic, not a naval architecture arrangement solver. It does not add
 mass or change the stability calculation; existing miscellaneous/topweight
 inputs remain the source of mass. Frontends project the same part/mast geometry.
+
+Single-file startup diagnostics
+-------------------------------
+The standalone SpringSharp.exe embeds its fonts and can be copied to a local
+folder without assets. Windows may show an unknown-publisher/reputation prompt
+before application code starts because this build is unsigned. No application
+log can be written while Windows is still blocking launch. For personal testing,
+a paid signing certificate is not required; only allow a build whose origin you
+have verified. Signing identifies the publisher but does not guarantee immediate
+SmartScreen reputation for a new release. See:
+https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation
+
+After launch, springsharp_boot.log appends timestamped, process-specific startup
+stages beside the exe, falling back to the working directory or TEMP if needed.
+Startup errors return a nonzero exit code and write springsharp_startup_error.log;
+Rust panics write springsharp_crash.log with a forced backtrace. Native driver or
+loader failures may not invoke the Rust panic handler.
+
+To isolate a graphics-driver problem, launch from PowerShell:
+    .\SpringSharp.exe --renderer glow
+or explicitly select the default backend:
+    .\SpringSharp.exe --renderer wgpu
+The explicit selection bypasses automatic fallback, making each backend testable.
+
+Report language and original-formula comparison
+----------------------------------------------
+The report follows the selected text language: 汉字 renders Chinese, Germanic
+renders English, and Italic renders Latin with French nautical/technical terms
+where a suitable Latin expression is unavailable.
+Switching language preserves user-entered names, design inputs and calculated
+values. The desktop report, Web report and HTML export use the same generator.
+
+Each calculated report ends with current / original-formula / percentage-difference
+columns. The original-formula column uses the same design with the reconstructed
+SpringSharp empirical resistance model, unit power factors, no blending and no
+CFD correction, then recalculates dependent values. Remaining weight, stability,
+combat-system and iteration calculations use this project's engine. This is a
+Rust reconstruction comparison, not a result obtained by running SpringSharp 3.0.
+The appendix reports convergence and uses long tons for mass.
+
+Interface language scope
+------------------------
+The Italic selection also uses Latin with French technical terms in parameter
+labels, discrete option catalogs, existing localized headings/navigation, metric
+cards and weight legends. Selected functional actions, propulsion choices and
+status messages additionally use the same policy. Chinese retains its existing
+localization scope; this does not attempt to translate every decorative heading,
+proper name or diagnostic. Language switching never changes saved field keys,
+option indices, design inputs or the committed calculation snapshot.

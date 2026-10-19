@@ -17,7 +17,7 @@ pub fn label_for(key: &str, lang: TextLanguage) -> &str {
         .lines()
         .filter_map(|line| line.split_once('\t'))
         .find(|(id, _)| *id == key)
-        .map(|(_, label)| label)
+        .map(|(_, label)| super::latin_ui::text(lang, label))
         .unwrap_or(key)
 }
 
@@ -96,4 +96,25 @@ pub fn han_label(key: &str) -> Option<&'static str> {
         "engine.holtrop_correlation_factor" => "Holtrop 相关阻力因子",
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn latin_covers_existing_chinese_fields_without_expanding_chinese() {
+        for (key, en) in CATALOG.lines().filter_map(|line| line.split_once('\t')) {
+            if let Some(zh) = han_label(key) {
+                assert_eq!(label_for(key, TextLanguage::Han), zh);
+                assert_ne!(
+                    label_for(key, TextLanguage::Italic),
+                    en,
+                    "missing Latin field {key}"
+                );
+            } else {
+                assert_eq!(label_for(key, TextLanguage::Han), en);
+            }
+        }
+        assert_eq!(label_for("custom.key", TextLanguage::Italic), "custom.key");
+    }
 }

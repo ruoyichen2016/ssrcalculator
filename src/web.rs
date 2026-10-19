@@ -437,6 +437,66 @@ mod tests {
     }
 
     #[test]
+    fn selected_language_reaches_report_preview_and_export() {
+        let base = serialize(&crate::features::demo_ship());
+        for (language, heading, comparison) in [
+            (
+                "und-Hani",
+                "排水量：",
+                "原版 SpringSharp 公式对照（Rust 重建口径）",
+            ),
+            (
+                "gem",
+                "Displacement:",
+                "Original SpringSharp formula comparison",
+            ),
+            (
+                "und-Latn",
+                "Déplacement:",
+                "Comparatio formularum originalium SpringSharp",
+            ),
+        ] {
+            let body = encoded(&[
+                ("base_design", &base),
+                ("text_language", language),
+                ("action", "calculate"),
+            ]);
+            for path in ["/workbench", "/export/report.html"] {
+                let response = route("POST", path, &body);
+                assert_eq!(response.status, 200);
+                assert!(
+                    response.body.contains(heading),
+                    "missing {heading} in {path}"
+                );
+                assert!(
+                    response.body.contains(comparison),
+                    "missing comparison in {path}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn latin_parameter_labels_and_options_keep_transport_keys() {
+        let base = serialize(&crate::features::demo_ship());
+        let body = encoded(&[
+            ("base_design", &base),
+            ("text_language", "und-Latn"),
+            ("action", "calculate"),
+        ]);
+        let response = route("POST", "/workbench", &body);
+        assert_eq!(response.status, 200);
+        assert!(response.body.contains("Longitudo ad lineam aquae (ft)"));
+        assert!(response.body.contains("Clausurae roboratae"));
+        assert!(response.body.contains("Parametri dati computati"));
+        assert!(response.body.contains("name=\"hull.length\""));
+        assert!(response.body.contains("name=\"arm.bulkhead_type\""));
+        let saved = route("POST", "/export/design.ssr", &body);
+        assert!(saved.body.contains("hull.length=600\n"));
+        assert!(!saved.body.contains("Longitudo"));
+    }
+
+    #[test]
     fn native_upload_and_solver_actions() {
         let design = serialize(&crate::features::demo_ship());
         let upload=format!("--testboundary\r\nContent-Disposition: form-data; name=\"design_file\"; filename=\"ship.ssr\"\r\nContent-Type: text/plain\r\n\r\n{design}\r\n--testboundary--\r\n");

@@ -162,7 +162,7 @@ pub fn heading(ui: &mut egui::Ui, text: &str) {
     let display_text = if lang == springsharp::presentation::fonts::TextLanguage::Han {
         translate_heading(text)
     } else {
-        text
+        springsharp::presentation::latin_ui::text(lang, text)
     };
     ui.add_space(2.0);
     ui.horizontal(|ui| {

@@ -5,10 +5,12 @@
 //! ship-design inputs, a calibration page and a report/calculate page.
 
 use eframe::egui;
+use springsharp::design::Evaluation;
 use springsharp::presentation::fonts::TextLanguage;
 use springsharp::workbench::{Command, Workbench};
 use springsharp::DisplayName;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use springsharp::model::{ResistanceModel, WeaponKind, WeaponMount};
 use springsharp::spaces::calculate_internal_spaces;
@@ -52,6 +54,7 @@ pub struct SpringSharpApp {
     target_displacement: f64,
     metric_units: bool,
     compare_preset_idx: Option<usize>,
+    report_cache: Option<(Arc<Evaluation>, TextLanguage, String)>,
 }
 
 impl SpringSharpApp {
@@ -81,6 +84,7 @@ impl SpringSharpApp {
             target_displacement: 35000.0,
             metric_units: false,
             compare_preset_idx: None,
+            report_cache: None,
         }
     }
 
@@ -291,6 +295,10 @@ impl SpringSharpApp {
             });
         if self.text_language != prev_lang {
             crate::fonts::install(ui.ctx(), self.text_language);
+            // Labels below the selector must use the new language in this frame.
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(egui::Id::new("app_language"), self.text_language));
+            ui.ctx().request_repaint();
         }
         let serif_lbl = self.tr("Serif titles", "衬线标题");
         ui.checkbox(&mut self.serif_titles, serif_lbl);
@@ -315,7 +323,17 @@ impl SpringSharpApp {
                 } else {
                     theme::MUTED
                 };
-                ui.label(egui::RichText::new(&self.status).small().color(color));
+                ui.label(
+                    egui::RichText::new(
+                        springsharp::presentation::latin_ui::status(
+                            self.text_language,
+                            &self.status,
+                        )
+                        .as_ref(),
+                    )
+                    .small()
+                    .color(color),
+                );
             });
     }
 
@@ -752,8 +770,11 @@ impl SpringSharpApp {
                 drag_f64(ui, "Armour face (in)", &mut g.arm_face, 0.1, 0.0..=40.0);
                 drag_f64(ui, "Armour back (in)", &mut g.arm_back, 0.1, 0.0..=40.0);
                 drag_f64(ui, "Armour bottom (in)", &mut g.arm_bottom, 0.1, 0.0..=40.0);
-                ui.checkbox(&mut g.super_super_chk, "Super-super");
-                ui.checkbox(&mut g.sub_sub_chk, "Sub-sub");
+                ui.checkbox(
+                    &mut g.super_super_chk,
+                    crate::i18n::latin(ui, "Super-super"),
+                );
+                ui.checkbox(&mut g.sub_sub_chk, crate::i18n::latin(ui, "Sub-sub"));
             });
         }
     }
@@ -762,7 +783,7 @@ impl SpringSharpApp {
         use springsharp::presentation::superstructure_text::{archetype_name, planning_notes};
         use springsharp::superstructure::Archetype;
         ui.collapsing("Superstructure", |ui| {
-            if ui.button("Reset layout").clicked() { self.workbench.design.draft.superstructure = Default::default(); }
+            if ui.button(crate::i18n::latin(ui, "Reset layout")).clicked() { self.workbench.design.draft.superstructure = Default::default(); }
             let cfg = &mut self.workbench.design.draft.superstructure;
             egui::ComboBox::from_id_salt("superstructure_type").selected_text(archetype_name(cfg.archetype)).show_ui(ui, |ui| {
                 for kind in Archetype::ALL { ui.selectable_value(&mut cfg.archetype, kind, archetype_name(kind)); }
@@ -771,11 +792,11 @@ impl SpringSharpApp {
                 for style in springsharp::superstructure::MastStyle::ALL {ui.selectable_value(&mut cfg.mast,style,springsharp::presentation::superstructure_text::mast_name(style));}
             });
             ui.small("Positions / dimensions: fractions of hull length from bow. Geometry only; mass is not added.");
-            ui.horizontal(|ui| { ui.label("Funnels (0 = Auto)"); ui.add(egui::DragValue::new(&mut cfg.funnel_count).range(0..=4)); });
+            ui.horizontal(|ui| { ui.label(crate::i18n::latin(ui, "Funnels (0 = Auto)")); ui.add(egui::DragValue::new(&mut cfg.funnel_count).range(0..=4)); });
             drag_f64(ui, "Funnel spacing (0 = Auto)", &mut cfg.funnel_spacing, 0.005, 0.0..=0.2);
             for (name, correction) in [("Bridge", &mut cfg.bridge), ("Aft deckhouse", &mut cfg.aft), ("Funnel group", &mut cfg.funnels)] {
                 ui.push_id(name, |ui| { ui.collapsing(name, |ui| {
-                    ui.checkbox(&mut correction.locked, "Lock geometry");
+                    ui.checkbox(&mut correction.locked, crate::i18n::latin(ui, "Lock geometry"));
                     if correction.locked {
                         drag_f64(ui, "Position", &mut correction.x, 0.005, 0.0..=1.0);
                         drag_f64(ui, "Length", &mut correction.length, 0.005, 0.005..=0.5);
@@ -839,17 +860,17 @@ impl SpringSharpApp {
             0.1..=3.0,
         );
         ui.horizontal(|ui| {
-            ui.label("Resistance model:");
+            ui.label(crate::i18n::latin(ui, "Resistance model:"));
             egui::ComboBox::from_id_salt("resistance_model")
                 .selected_text(match e.resistance_model {
-                    ResistanceModel::Original => "Original",
+                    ResistanceModel::Original => crate::i18n::latin(ui, "Original"),
                     ResistanceModel::HoltropMennen => "Holtrop-Mennen",
                 })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
                         &mut e.resistance_model,
                         ResistanceModel::Original,
-                        "Original",
+                        crate::i18n::latin(ui, "Original"),
                     );
                     ui.selectable_value(
                         &mut e.resistance_model,
@@ -915,7 +936,7 @@ impl SpringSharpApp {
             0.0..=1.0,
         );
         ui.separator();
-        ui.label("Fuel types");
+        ui.label(crate::i18n::latin(ui, "Fuel types"));
         for (i, v) in e.fuel.iter_mut().enumerate() {
             let name = match i {
                 0 => "Coal fired boilers",
@@ -924,18 +945,18 @@ impl SpringSharpApp {
                 3 => "Petrol motors",
                 _ => "Batteries",
             };
-            ui.checkbox(v, name);
+            ui.checkbox(v, crate::i18n::latin(ui, name));
         }
-        ui.label("Engine types");
+        ui.label(crate::i18n::latin(ui, "Engine types"));
         for (i, v) in e.engine_types.iter_mut().enumerate() {
             let name = match i {
                 0 => "Simple reciprocating",
                 1 => "Complex reciprocating",
                 _ => "Steam turbines",
             };
-            ui.checkbox(v, name);
+            ui.checkbox(v, crate::i18n::latin(ui, name));
         }
-        ui.label("Drive types");
+        ui.label(crate::i18n::latin(ui, "Drive types"));
         for (i, v) in e.drive.iter_mut().enumerate() {
             let name = match i {
                 0 => "Direct",
@@ -943,7 +964,7 @@ impl SpringSharpApp {
                 2 => "Electric",
                 _ => "Hydraulic",
             };
-            ui.checkbox(v, name);
+            ui.checkbox(v, crate::i18n::latin(ui, name));
         }
     }
 
@@ -966,7 +987,10 @@ impl SpringSharpApp {
                     r.factor,
                     r.train_mape * 100.0
                 ));
-                if ui.button("Apply regime model").clicked() {
+                if ui
+                    .button(crate::i18n::latin(ui, "Apply regime model"))
+                    .clicked()
+                {
                     self.execute(Command::Regime);
                 }
             }
@@ -979,7 +1003,10 @@ impl SpringSharpApp {
             }
         }
         ui.separator();
-        ui.label("Nested-LOOCV (out-of-sample) comparison:");
+        ui.label(crate::i18n::latin(
+            ui,
+            "Nested-LOOCV (out-of-sample) comparison:",
+        ));
         ui.monospace(self.regime_summary.as_str());
         ui.separator();
         ui.colored_label(
@@ -995,7 +1022,7 @@ impl SpringSharpApp {
              target displacement (converges in 4-6 iterations).",
         );
         ui.horizontal(|ui| {
-            ui.label("Target normal displacement:");
+            ui.label(crate::i18n::latin(ui, "Target normal displacement:"));
             drag_f64(
                 ui,
                 "tons",
@@ -1003,7 +1030,10 @@ impl SpringSharpApp {
                 500.0,
                 100.0..=120000.0,
             );
-            if ui.button("Solve & Scale Hull").clicked() {
+            if ui
+                .button(crate::i18n::latin(ui, "Solve & Scale Hull"))
+                .clicked()
+            {
                 self.execute(Command::Displacement(self.target_displacement));
             }
         });
@@ -1014,11 +1044,17 @@ impl SpringSharpApp {
             "Compare your current design against a pinned baseline or historical warship preset.",
         );
         ui.horizontal(|ui| {
-            if ui.button("Pin current as baseline").clicked() {
+            if ui
+                .button(crate::i18n::latin(ui, "Pin current as baseline"))
+                .clicked()
+            {
                 self.execute(Command::PinBaseline);
                 self.compare_preset_idx = None;
             }
-            if ui.button("Clear comparison").clicked() {
+            if ui
+                .button(crate::i18n::latin(ui, "Clear comparison"))
+                .clicked()
+            {
                 self.execute(Command::ClearComparison);
                 self.compare_preset_idx = None;
             }
@@ -1137,7 +1173,7 @@ impl SpringSharpApp {
                             let p_sign = if pct > 0.0 { "+" } else { "" };
                             ui.label(format!("{p_sign}{pct:.1}%"));
                         } else {
-                            ui.label("–");
+                            ui.label(crate::i18n::latin(ui, "–"));
                         }
                         ui.end_row();
                     }
@@ -1146,20 +1182,41 @@ impl SpringSharpApp {
     }
 
     fn page_report(&mut self, ui: &mut egui::Ui) {
-        crate::theme::heading(ui, "Report and files");
+        let language = self.text_language;
+        let tr = |en, zh, la| springsharp::presentation::report::report_text(language, en, zh, la);
+        crate::theme::heading(
+            ui,
+            tr("Report and files", "报告与文件", "Relatio et documenta"),
+        );
         ui.horizontal(|ui| {
-            if ui.button("Calculate and regenerate report").clicked() {
+            if ui
+                .button(tr(
+                    "Calculate and regenerate report",
+                    "计算并重新生成报告",
+                    "Computare et relationem renovare",
+                ))
+                .clicked()
+            {
                 self.recalculate();
             }
-            if ui.button("Load demo").clicked() {
+            if ui
+                .button(tr("Load demo", "载入示例", "Exemplum aperire"))
+                .clicked()
+            {
                 self.execute(Command::Demo);
             }
         });
         ui.horizontal(|ui| {
-            if ui.button("Open .ssr…").clicked() {
+            if ui
+                .button(tr("Open .ssr…", "打开 .ssr…", "Aperire .ssr…"))
+                .clicked()
+            {
                 self.open_design();
             }
-            if ui.button("Save .ssr…").clicked() {
+            if ui
+                .button(tr("Save .ssr…", "保存 .ssr…", "Servare .ssr…"))
+                .clicked()
+            {
                 self.save_design();
             }
         });
@@ -1167,10 +1224,21 @@ impl SpringSharpApp {
             ui.label(path.display().to_string());
         }
         ui.separator();
-        ui.label(&self.status);
+        ui.label(
+            springsharp::presentation::latin_ui::status(self.text_language, &self.status).as_ref(),
+        );
         let result = self.workbench.design.result();
-        let report_text = springsharp::generate_report(&result.ship);
-        let mut report = report_text.as_str();
+        // Recompute the comparison only when the committed design or language changes.
+        if !matches!(&self.report_cache, Some((snapshot, language, _))
+            if Arc::ptr_eq(snapshot, &result) && *language == self.text_language)
+        {
+            self.report_cache = Some((
+                Arc::clone(&result),
+                self.text_language,
+                springsharp::generate_report_with_language(&result.ship, self.text_language),
+            ));
+        }
+        let mut report = self.report_cache.as_ref().unwrap().2.as_str();
         egui::ScrollArea::vertical().show(ui, |ui| {
             ui.add(
                 egui::TextEdit::multiline(&mut report)
@@ -1316,7 +1384,7 @@ impl SpringSharpApp {
             .num_columns(2)
             .spacing([12.0, 6.0])
             .show(ui, |ui| {
-                ui.label("Style Ideal Type:");
+                ui.label(crate::i18n::latin(ui, "Style Ideal Type:"));
                 egui::ComboBox::from_id_salt("sys_doctrine")
                     .selected_text(self.workbench.design.draft.systems.doctrine.display_name())
                     .show_ui(ui, |ui| {
@@ -1353,7 +1421,7 @@ impl SpringSharpApp {
                     });
                 ui.end_row();
 
-                ui.label("Tactical Echelon:");
+                ui.label(crate::i18n::latin(ui, "Tactical Echelon:"));
                 egui::ComboBox::from_id_salt("sys_tactical_echelon")
                     .selected_text(
                         if self.workbench.design.draft.systems.tactical_echelon
@@ -1404,7 +1472,7 @@ impl SpringSharpApp {
                     });
                 ui.end_row();
 
-                ui.label("Combat Modality:");
+                ui.label(crate::i18n::latin(ui, "Combat Modality:"));
                 egui::ComboBox::from_id_salt("sys_combat_modality")
                     .selected_text(
                         if self.workbench.design.draft.systems.combat_modality
@@ -1455,7 +1523,7 @@ impl SpringSharpApp {
                     });
                 ui.end_row();
 
-                ui.label("Mobility Regime:");
+                ui.label(crate::i18n::latin(ui, "Mobility Regime:"));
                 egui::ComboBox::from_id_salt("sys_mobility_regime")
                     .selected_text(
                         if self.workbench.design.draft.systems.mobility_regime
@@ -1504,7 +1572,7 @@ impl SpringSharpApp {
                     });
                 ui.end_row();
 
-                ui.label("Main Battery Director:");
+                ui.label(crate::i18n::latin(ui, "Main Battery Director:"));
                 egui::ComboBox::from_id_salt("sys_main_dir")
                     .selected_text(
                         if self.workbench.design.draft.systems.main_director == MainDirector::Auto {
@@ -1558,7 +1626,7 @@ impl SpringSharpApp {
                     });
                 ui.end_row();
 
-                ui.label("AA / Secondary Director:");
+                ui.label(crate::i18n::latin(ui, "AA / Secondary Director:"));
                 egui::ComboBox::from_id_salt("sys_aa_dir")
                     .selected_text(
                         if self.workbench.design.draft.systems.aa_director == AaDirector::Auto {
@@ -1607,7 +1675,7 @@ impl SpringSharpApp {
                     });
                 ui.end_row();
 
-                ui.label("Ballistic Computer:");
+                ui.label(crate::i18n::latin(ui, "Ballistic Computer:"));
                 egui::ComboBox::from_id_salt("sys_comp")
                     .selected_text(
                         if self.workbench.design.draft.systems.ballistic_computer
@@ -1666,7 +1734,7 @@ impl SpringSharpApp {
                     });
                 ui.end_row();
 
-                ui.label("Radar & EW Suite:");
+                ui.label(crate::i18n::latin(ui, "Radar & EW Suite:"));
                 egui::ComboBox::from_id_salt("sys_radar")
                     .selected_text(
                         if self.workbench.design.draft.systems.radar_suite == RadarSuite::Auto {
@@ -1715,7 +1783,7 @@ impl SpringSharpApp {
                     });
                 ui.end_row();
 
-                ui.label("Subsurface Sonar Suite:");
+                ui.label(crate::i18n::latin(ui, "Subsurface Sonar Suite:"));
                 egui::ComboBox::from_id_salt("sys_sonar")
                     .selected_text(
                         if self.workbench.design.draft.systems.sonar_suite == SonarSuite::Auto {
@@ -1764,7 +1832,7 @@ impl SpringSharpApp {
                     });
                 ui.end_row();
 
-                ui.label("Electrical Plant Style:");
+                ui.label(crate::i18n::latin(ui, "Electrical Plant Style:"));
                 egui::ComboBox::from_id_salt("sys_plant")
                     .selected_text(
                         if self.workbench.design.draft.systems.electrical_plant
@@ -1813,7 +1881,7 @@ impl SpringSharpApp {
                     });
                 ui.end_row();
 
-                ui.label("Belt-TDS Joint");
+                ui.label(crate::i18n::latin(ui, "Belt-TDS Joint"));
                 egui::ComboBox::from_id_salt("sys_belt_tds_junction")
                     .selected_text(
                         if self.workbench.design.draft.systems.belt_tds_junction
@@ -1872,7 +1940,7 @@ impl SpringSharpApp {
                     });
                 ui.end_row();
 
-                ui.label("Horizontal Protection");
+                ui.label(crate::i18n::latin(ui, "Horizontal Protection"));
                 egui::ComboBox::from_id_salt("sys_horizontal_protection")
                     .selected_text(
                         if self.workbench.design.draft.systems.horizontal_protection
@@ -1976,7 +2044,7 @@ impl SpringSharpApp {
                         ui.label(format!("{sim:.dec$}"));
                         ui.label(format!("{r:.dec$}"));
                         if na || r <= 0.0 {
-                            ui.label("n/a (splinter)");
+                            ui.label(crate::i18n::latin(ui, "n/a (splinter)"));
                         } else {
                             let pct = (sim - r) / r * 100.0;
                             let color = if pct.abs() <= 10.0 {
@@ -2055,7 +2123,7 @@ impl SpringSharpApp {
                     ui.label(format!("{vol:.0}"));
                     ui.end_row();
                 }
-                ui.label("Room ratio (Hull / Required)");
+                ui.label(crate::i18n::latin(ui, "Room ratio (Hull / Required)"));
                 ui.label(format!("{:.3}", sp.room_hull_improved));
                 ui.end_row();
             });
@@ -2074,7 +2142,10 @@ impl SpringSharpApp {
             if self.target_cg != previous_target {
                 self.workbench.clear_placement();
             }
-            if ui.button("Run arrangement optimizer").clicked() {
+            if ui
+                .button(crate::i18n::latin(ui, "Run arrangement optimizer"))
+                .clicked()
+            {
                 self.execute(Command::Arrange(self.target_cg));
             }
         });
@@ -2224,7 +2295,10 @@ impl SpringSharpApp {
         let ship = &result.ship;
         crate::theme::heading(ui, "Vessel Blueprint Schematic");
         ui.horizontal(|ui| {
-            ui.checkbox(&mut self.show_arcs, "Show 290° Turret Firing Arcs");
+            ui.checkbox(
+                &mut self.show_arcs,
+                crate::i18n::latin(ui, "Show 290° Turret Firing Arcs"),
+            );
             ui.separator();
             let dim_lbl = if self.metric_units {
                 format!(
@@ -3607,6 +3681,7 @@ impl SpringSharpApp {
         orig_engine.power_factor = 1.0;
         orig_engine.original_power_factor = 1.0;
         orig_engine.blend_weight = 1.0;
+        orig_engine.cfd_proxy_enabled = false;
 
         let mut pts = Vec::new();
         let mut max_hp = 1000.0_f64;
@@ -3715,7 +3790,10 @@ impl SpringSharpApp {
         let ship = &result.ship;
         let g1 = &ship.guns.batteries[0];
         if g1.calibre <= 0.0 || g1.barrels <= 0 {
-            ui.label("No active main battery guns for exterior ballistics analysis.");
+            ui.label(crate::i18n::latin(
+                ui,
+                "No active main battery guns for exterior ballistics analysis.",
+            ));
             return;
         }
 
@@ -3727,7 +3805,10 @@ impl SpringSharpApp {
         );
 
         if iz.curve.is_empty() {
-            ui.label("Ballistic trajectory calculation produced no curve points.");
+            ui.label(crate::i18n::latin(
+                ui,
+                "Ballistic trajectory calculation produced no curve points.",
+            ));
             return;
         }
 
@@ -4101,6 +4182,12 @@ fn weapon_mount_ui(ui: &mut egui::Ui, title: &str, id_salt: &str, m: &mut Weapon
                 field_label(ui, "Weapon kind:");
                 let (torp_txt, mine_txt, dc_txt) = if lang == TextLanguage::Han {
                     ("鱼雷 (Torpedo)", "水雷 (Mine)", "深弹/反潜臼炮 (DC/Mortar)")
+                } else if lang == TextLanguage::Italic {
+                    (
+                        "Torpille",
+                        "Mine marine",
+                        "Grenade sous-marine / mortier ASM",
+                    )
                 } else {
                     ("Torpedo", "Mine", "Depth charge / AS mortar")
                 };
@@ -4141,7 +4228,7 @@ fn field_label(ui: &mut egui::Ui, label: &str) {
     let display_text = if lang == TextLanguage::Han {
         crate::i18n::translate_field(label)
     } else {
-        label
+        springsharp::presentation::latin_ui::text(lang, label)
     };
     let width = 230.0_f32.min(ui.available_width() * 0.5);
     ui.add_sized(
@@ -4160,7 +4247,10 @@ fn combo_i32(ui: &mut egui::Ui, label: &str, value: &mut i32, options: &[&str]) 
             .unwrap_or(TextLanguage::Germanic);
         let options = localized_options(label, options, lang);
         let curr_idx = (*value).max(0) as usize;
-        let selected_text = options.get(curr_idx).copied().unwrap_or("Other");
+        let selected_text = options
+            .get(curr_idx)
+            .copied()
+            .unwrap_or(crate::i18n::latin(ui, "Other"));
         egui::ComboBox::from_id_salt(ui.id().with(label))
             .selected_text(selected_text)
             .width(220.0)
@@ -4173,34 +4263,16 @@ fn combo_i32(ui: &mut egui::Ui, label: &str, value: &mut i32, options: &[&str]) 
 }
 
 fn localized_options<'a>(label: &str, options: &'a [&'a str], lang: TextLanguage) -> &'a [&'a str] {
-    if lang != TextLanguage::Han {
-        return options;
-    }
     match label {
-        "Bow shape" => opts::BOW_TYPES_HAN,
-        "Stern shape" => opts::STERN_TYPES_HAN,
-        "Bulkhead type" => opts::BULKHEAD_TYPES_HAN,
-        "Deck coverage" => opts::DECK_COVERAGE_HAN,
-        "Gun type" => opts::GUN_TYPES_HAN,
-        "Mount type" => opts::MOUNT_TYPES_HAN,
-        "Guns/mount G1" | "Guns/mount G2" => opts::GUNS_IN_MOUNT_HAN,
-        "Layout G1" | "Layout G2" => opts::MOUNT_LAYOUTS_HAN,
-        "Location" => {
-            if options.len() == 9 {
-                opts::TORPEDO_LOCATIONS_HAN
-            } else if options.len() == 4 {
-                if options
-                    .first()
-                    .is_some_and(|s| s.contains("Stern depth charge"))
-                {
-                    opts::DC_LOCATIONS_HAN
-                } else {
-                    opts::MINE_LOCATIONS_HAN
-                }
-            } else {
-                options
-            }
-        }
+        "Bow shape" => opts::bow_types(lang),
+        "Stern shape" => opts::stern_types(lang),
+        "Bulkhead type" => opts::bulkhead_types(lang),
+        "Deck coverage" => opts::deck_coverage(lang),
+        "Gun type" => opts::gun_types(lang),
+        "Mount type" => opts::mount_types(lang),
+        "Guns/mount G1" | "Guns/mount G2" => opts::guns_in_mount(lang),
+        "Layout G1" | "Layout G2" => opts::mount_layouts(lang),
+        // Weapon locations already arrive in the selected language from their kind.
         _ => options,
     }
 }
@@ -4231,7 +4303,7 @@ fn drag_i32(ui: &mut egui::Ui, label: &str, value: &mut i32) {
     });
 }
 
-pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(renderer: Option<eframe::Renderer>) -> Result<(), Box<dyn std::error::Error>> {
     let make_options = |renderer| eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1360.0, 880.0])
@@ -4242,9 +4314,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let make_creator = || {
         let creator: eframe::AppCreator = Box::new(|cc| {
+            crate::startup::log("Graphics initialized; installing fonts");
             let missing = crate::fonts::install(&cc.egui_ctx, TextLanguage::Germanic);
             crate::theme::install(&cc.egui_ctx);
+            crate::startup::log("Fonts installed; creating workbench");
             let mut app = SpringSharpApp::new();
+            crate::startup::log("Workbench created");
             if !missing.is_empty() {
                 app.status = format!("Missing bundled fonts: {}", missing.join(", "));
             }
@@ -4253,6 +4328,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         creator
     };
 
+    if let Some(renderer) = renderer {
+        crate::startup::log(&format!("Starting requested renderer: {renderer:?}"));
+        return eframe::run_native("SpringSharp Rust", make_options(renderer), make_creator())
+            .map_err(Into::into);
+    }
+    crate::startup::log("Starting primary renderer: Wgpu");
     match eframe::run_native(
         "SpringSharp Rust",
         make_options(eframe::Renderer::Wgpu),
@@ -4260,7 +4341,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     ) {
         Ok(()) => Ok(()),
         Err(wgpu_err) => {
-            eprintln!("Primary renderer (Wgpu) failed: {wgpu_err}. Attempting fallback to Glow (OpenGL)...");
+            crate::startup::log(&format!("Wgpu failed: {wgpu_err}; starting Glow fallback"));
             eframe::run_native(
                 "SpringSharp Rust",
                 make_options(eframe::Renderer::Glow),
@@ -4275,7 +4356,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 }
-
 
 /// Segmented, rounded weight-distribution bar with hover details and a legend.
 fn weight_bar(ui: &mut egui::Ui, ship: &springsharp::model::ShipModel, metric: bool) {
@@ -4297,6 +4377,17 @@ fn weight_bar(ui: &mut egui::Ui, ship: &springsharp::model::ShipModel, metric: b
                 "燃油燃煤",
                 "杂项空舱",
                 "其余载荷",
+            )
+        } else if lang == TextLanguage::Italic {
+            (
+                "Corpus navis",
+                "Loricatio",
+                "Machinae",
+                "Armamenta",
+                "Cella munitionum",
+                "Combustibile",
+                "Cetera",
+                "Onus reliquum",
             )
         } else {
             (
@@ -4346,6 +4437,8 @@ fn weight_bar(ui: &mut egui::Ui, ship: &springsharp::model::ShipModel, metric: b
         );
         let subt = if lang == TextLanguage::Han {
             format!("基准: {:.0} 吨标准排水量", total * scale)
+        } else if lang == TextLanguage::Italic {
+            format!("ex {:.0} t du déplacement normal", total * scale)
         } else {
             format!("of {:.0} t normal", total * scale)
         };
@@ -4428,6 +4521,8 @@ fn weight_bar(ui: &mut egui::Ui, ship: &springsharp::model::ShipModel, metric: b
             ui.label(egui::RichText::new(name).strong().color(color));
             let tip = if lang == TextLanguage::Han {
                 format!("{:.0} t  ·  占标排 {pct:.1}%", wt * scale)
+            } else if lang == TextLanguage::Italic {
+                format!("{:.0} t  ·  {pct:.1}% du déplacement normal", wt * scale)
             } else {
                 format!("{:.0} t  ·  {pct:.1}% of normal", wt * scale)
             };
@@ -4457,4 +4552,87 @@ fn weight_bar(ui: &mut egui::Ui, ship: &springsharp::model::ShipModel, metric: b
             });
         }
     });
+}
+
+#[cfg(test)]
+mod language_tests {
+    use super::*;
+
+    fn rendered_text(shape: &egui::Shape, out: &mut String) {
+        match shape {
+            egui::Shape::Text(text) => {
+                out.push_str(text.galley.text());
+                out.push('\n');
+            }
+            egui::Shape::Vec(shapes) => {
+                for shape in shapes {
+                    rendered_text(shape, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn switching_language_renders_fields_and_options_without_changing_design() {
+        let ctx = egui::Context::default();
+        crate::fonts::install(&ctx, TextLanguage::Germanic);
+        let mut app = SpringSharpApp::new();
+        let before = springsharp::serialize(&app.workbench.design.draft);
+        let snapshot = app.workbench.design.result();
+        for (lang, field, option) in [
+            (TextLanguage::Germanic, "Length WL (ft)", "Normal bow"),
+            (TextLanguage::Han, "水线长 (ft)", "常规型船艏 (Normal)"),
+            (
+                TextLanguage::Italic,
+                "Longitudo ad lineam aquae (ft)",
+                "Prora ordinaria",
+            ),
+            (TextLanguage::Germanic, "Length WL (ft)", "Normal bow"),
+        ] {
+            app.text_language = lang;
+            ctx.data_mut(|d| d.insert_temp(egui::Id::new("app_language"), lang));
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1600.0, 1400.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    app.page_hull(ui);
+                    combo_i32(
+                        ui,
+                        "Bow shape",
+                        &mut app.workbench.design.draft.free.bow,
+                        opts::BOW_TYPES,
+                    );
+                },
+            );
+            let mut text = String::new();
+            for clipped in &output.shapes {
+                rendered_text(&clipped.shape, &mut text);
+            }
+            output.textures_delta.clear();
+            assert!(text.contains(field), "{lang:?}: missing {field}: {text}");
+            assert!(text.contains(option), "{lang:?}: missing {option}: {text}");
+            assert_eq!(springsharp::serialize(&app.workbench.design.draft), before);
+            assert!(Arc::ptr_eq(&snapshot, &app.workbench.design.result()));
+        }
+    }
+
+    #[test]
+    fn weapon_locations_keep_kind_and_index_in_every_language() {
+        for lang in TextLanguage::ALL {
+            for kind in [
+                WeaponKind::Torpedo,
+                WeaponKind::Mine,
+                WeaponKind::DepthCharge,
+            ] {
+                let options = opts::weapon_locations_lang(kind, lang);
+                assert_eq!(localized_options("Location", options, lang), options);
+            }
+        }
+    }
 }
