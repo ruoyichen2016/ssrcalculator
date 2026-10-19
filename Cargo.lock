@@ -5,3 +5,10 @@ version = 4
 [[package]]
 name = "springsharp"
 version = "0.3.0"
+dependencies = [
+ "springsharp-core",
+]
+
+[[package]]
+name = "springsharp-core"
+version = "0.3.0"

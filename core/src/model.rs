@@ -5,8 +5,6 @@
 //! WinForms UI.  All dimensions/weights are in the same Imperial units used by
 //! the original engine (feet, inches, long tons and pounds).
 
-use std::fmt;
-
 pub const FEET2METRES: f64 = 0.3048;
 pub const INCH2MM: f64 = 25.4;
 pub const POUNDS2KG: f64 = 0.45359236;
@@ -1524,6 +1522,7 @@ pub struct ShipModel {
     pub space_stores_volume_per_ton: f64,
     pub planing_calibration_factor: f64,
     pub systems: crate::systems::ShipSystemsConfig,
+    pub superstructure: crate::superstructure::Config,
 
     // performance results
     pub room_hull: f64,
@@ -1602,6 +1601,7 @@ impl Default for ShipModel {
             space_stores_volume_per_ton: 0.0,
             planing_calibration_factor: 1.0,
             systems: crate::systems::ShipSystemsConfig::default(),
+            superstructure: crate::superstructure::Config::default(),
             room_hull: 0.0,
             room_deck: 0.0,
             room_float: 0.0,
@@ -2127,6 +2127,7 @@ impl ShipModel {
             dt *= 1.312999963760376 / (w.torpedo1.weapon_weight / w.torpedo1.number as f64);
         }
         // TDS architecture & subdivision survivability factors
+        let feats = crate::systems::DimensionlessFeatures::from_ship(self);
         let resolved_tds = match self.systems.tds_architecture {
             crate::systems::TdsArchitecture::Auto => {
                 crate::systems::ShipSystemsConfig::infer_tds_architecture(self)
@@ -2155,140 +2156,47 @@ impl ShipModel {
             crate::systems::TransverseSubdivision::TripleFileCenterAndWings => 1.05,
             crate::systems::TransverseSubdivision::QuadFileMultiLongitudinal => 1.08,
         };
-        dt *= tds_factor * sub_factor;
+        let resolved_junc = match self.systems.belt_tds_junction {
+            crate::systems::BeltTdsJunction::Auto => {
+                crate::systems::ShipSystemsConfig::infer_belt_tds_junction(
+                    self,
+                    &feats,
+                    resolved_tds,
+                )
+            }
+            other => other,
+        };
+        let junc_factor = match resolved_junc {
+            crate::systems::BeltTdsJunction::DirectSkinDoubleBottom
+            | crate::systems::BeltTdsJunction::Auto => 1.00,
+            crate::systems::BeltTdsJunction::SteppedShelfCitadel => 1.02,
+            crate::systems::BeltTdsJunction::TurtlebackSlopeKneeJoint => 1.03,
+            crate::systems::BeltTdsJunction::SpacedAbsorberShelfJoint => 1.03,
+            crate::systems::BeltTdsJunction::IntegralTaperedHoldingBulkhead => 1.05,
+        };
+        let resolved_horiz = match self.systems.horizontal_protection {
+            crate::systems::HorizontalProtectionStyle::Auto => {
+                crate::systems::ShipSystemsConfig::infer_horizontal_protection_style(
+                    self,
+                    &feats,
+                    resolved_junc,
+                )
+            }
+            other => other,
+        };
+        let horiz_factor = match resolved_horiz {
+            crate::systems::HorizontalProtectionStyle::LightSplinterWeatherDeck
+            | crate::systems::HorizontalProtectionStyle::Auto => 1.00,
+            crate::systems::HorizontalProtectionStyle::ProtectedTurtlebackCarapace => 1.02,
+            crate::systems::HorizontalProtectionStyle::ArmouredFlightDeckHangarBox => 1.03,
+            crate::systems::HorizontalProtectionStyle::MonolithicCitadelBoxDeck => 1.04,
+            crate::systems::HorizontalProtectionStyle::LowTurtlebackSlopedCitadel => 1.05,
+            crate::systems::HorizontalProtectionStyle::MultiLayerBombDecappingSandwich => 1.06,
+        };
+        self.damage_shell *= horiz_factor;
+        dt *= tds_factor * sub_factor * junc_factor;
         self.damage_torp = dt;
         self.hull.draught_deep = draught_deep;
-    }
-}
-
-/// Human-readable summary of the most important design results.
-pub struct Summary {
-    pub lines: Vec<String>,
-}
-
-impl fmt::Display for Summary {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for line in &self.lines {
-            writeln!(f, "{line}")?;
-        }
-        Ok(())
-    }
-}
-
-impl ShipModel {
-    pub fn summary(&self) -> Summary {
-        let g = &self.guns;
-        let e = &self.engine;
-        let h = &self.hull;
-        let mut lines = vec![
-            format!("Ship: {} ({}, {})", self.name, self.country, self.ship_type),
-            format!("Normal displacement: {:.0} tons", h.displacement),
-            format!(
-                "Dimensions: {:.1} x {:.1} x {:.1} ft, block coefficient {:.3}",
-                h.length, h.beam_bulges, h.draught, h.block
-            ),
-            format!(
-                "Freeboard: {:.2} ft (distributed {:.2} ft)",
-                self.free.freeboard, self.free.free_distributed
-            ),
-            format!(
-                "Speed: max {:.1} kt, cruise {:.1} kt",
-                e.speed_max, e.speed_cruise
-            ),
-            format!(
-                "Power: max {:.0} hp, cruise {:.0} hp",
-                e.hp_max, e.hp_cruise
-            ),
-            if e.qpc_applicable {
-                format!(
-                    "Propulsion: QPC={:.3} (wake={:.3}, thrust deduction={:.3}); used in power calculation",
-                    e.qpc, e.wake_fraction, e.thrust_deduction
-                )
-            } else {
-                "Propulsion: original empirical shaft-power fit; no explicit QPC (the Holtrop-style efficiency breakdown is not used)."
-                    .to_string()
-            },
-            match self.engine.resistance_model {
-                ResistanceModel::Original => {
-                    "Note: power uses the original SpringSharp empirical model (reconstructed, unimproved)."
-                        .to_string()
-                }
-                ResistanceModel::HoltropMennen => {
-                    "Note: power uses the improved Holtrop-Mennen-style model.".to_string()
-                }
-            },
-            format!("Engine weight: {:.0} tons", e.engine_weight),
-            format!(
-                "Bunker: {:.0} tons normal, {:.0} tons max",
-                e.bunker,
-                e.bunker * 1.8
-            ),
-            format!("Load weight: {:.0} tons", e.load_weight),
-            format!("Hull weight: {:.0} tons", e.hull_weight),
-            format!(
-                "Guns: {:.0} tons gun/mount + {:.0} tons gun armour",
-                g.guns_weight, g.arm_weight
-            ),
-            format!(
-                "Magazine: {:.0} tons, broadside {:.0} lbs",
-                g.magazine, g.broadside
-            ),
-            format!(
-                "Armour: belts {:.0}, decks {:.0}, conning {:.0}, total {:.0} tons",
-                self.armour.weight_belts,
-                self.armour.weight_deck,
-                self.armour.weight_conning,
-                self.armour.weight
-            ),
-            format!("Secondary weapons: {:.0} tons", self.weapons.weight),
-            format!(
-                "Room: hull {:.1}%, deck {:.1}%",
-                self.room_hull * 100.0,
-                self.room_deck * 100.0
-            ),
-            format!(
-                "Stability: {:.2}, metacentre {:.2} ft",
-                self.stability_adj, self.metacentre
-            ),
-            format!(
-                "Seakeeping: {:.2}, steadiness {:.0}",
-                self.seakeeping, self.steadiness_adj
-            ),
-            format!("Recoil: {:.2}", self.recoil),
-            format!("Structural weight: {:.0} lbs/sq ft", self.struct_weight),
-            format!(
-                "Strength cross/long/composite: {:.2}/{:.2}/{:.2}",
-                self.strength_cross, self.strength_long, self.strength_comp
-            ),
-            format!(
-                "Cost: £{:.3}M / ${:.3}M",
-                self.cost_pounds, self.cost_dollars
-            ),
-            format!(
-                "Flotation: {:.0} tons; shell hits {:.1}; torpedo hits {:.1}",
-                self.flotation, self.damage_shell, self.damage_torp
-            ),
-        ];
-        if self.strength_comp < 0.5 {
-            lines.push(
-                "DESIGN FAILURE: Hull structure insufficient to carry required loads!".into(),
-            );
-        } else if self.strength_comp < 0.995 {
-            lines.push("WARNING: Hull structure strained by open sea conditions!".into());
-        }
-        // The armour <-> machinery cycle is a fixed-point iteration.  If it hits
-        // its iteration cap the reported weights are still the last iterate, but
-        // they are no longer trustworthy to the usual tolerance, so say so
-        // instead of silently reporting them as settled.  Guarded on
-        // `iterations > 0` so a model that has never been calculated (where the
-        // flag is still at its default) does not warn spuriously.
-        if self.iterations > 0 && !self.converged {
-            lines.push(format!(
-                "WARNING: armour/machinery weight iteration did not converge after {} iterations (relative residual {:.2e}); the weight breakdown is approximate.",
-                self.iterations, self.iteration_residual
-            ));
-        }
-        Summary { lines }
     }
 }
 
@@ -2505,29 +2413,5 @@ mod tests {
         a.calculate();
         assert_eq!(a.iterations, iters_a);
         assert!((a.armour.weight - weight_a).abs() <= 1e-9 * weight_a.abs().max(1.0));
-    }
-
-    #[test]
-    fn convergence_status_is_surfaced_in_summary_and_report() {
-        let mut ship = crate::features::demo_ship();
-        ship.calculate();
-        assert!(!ship.summary().to_string().contains("did not converge"));
-        assert!(!crate::features::generate_report(&ship).contains("did not converge"));
-
-        // Force the not-converged state directly: building a design that
-        // genuinely diverges is not portable, and the reporting path is what is
-        // under test here.
-        ship.converged = false;
-        ship.iterations = 50;
-        ship.iteration_residual = 1e-3;
-        assert!(ship.summary().to_string().contains("did not converge"));
-        let report = crate::features::generate_report(&ship);
-        assert!(report.contains("did not converge"));
-        assert!(report.contains("50 iterations"));
-
-        // A model that has never been calculated must not warn spuriously.
-        let fresh = ShipModel::new();
-        assert!(!fresh.summary().to_string().contains("did not converge"));
-        assert!(!crate::features::generate_report(&fresh).contains("did not converge"));
     }
 }

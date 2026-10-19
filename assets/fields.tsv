@@ -1,0 +1,257 @@
+# Stable engine key	English display label
+meta.name	Name
+meta.country	Country
+meta.type	Type
+hull.length	Length WL (ft)
+hull.beam	Beam (ft)
+hull.beam_bulges	Beam over bulges (ft)
+hull.draught	Draught (ft)
+hull.block	Block coefficient
+hull.date_hull	Hull year
+hull.date_engine	Engine year
+hull.lcb_percent	LCB (% L, + fwd)
+hull.midship_coefficient	Midship coeff Cm
+hull.bulb_area_sqft	Bulb area (sq ft)
+hull.bulb_centre_height_ft	Bulb centre height (ft)
+hull.transom_area_sqft	Transom area (sq ft)
+hull.appendage_area_sqft	Appendage area (sq ft)
+hull.stern_shape	Stern shape Cstern
+free.bow	Bow
+free.stern	Stern
+free.transom_width	Transom width (fraction)
+free.length_bow	Bow angle (deg)
+free.length_ram	Ram length (ft)
+free.length_stern	Stern overhang (ft)
+free.fc_length	Forecastle length (fraction)
+free.fd_length	Forward deck length (fraction)
+free.qd_length	Quarter deck length (fraction)
+free.free_fc_for	Forecastle fwd (ft)
+free.free_fc_aft	Forecastle aft (ft)
+free.free_fd_for	Forward deck fwd (ft)
+free.free_fd_aft	Forward deck aft (ft)
+free.free_ad_for	Aft deck fwd (ft)
+free.free_ad_aft	Aft deck aft (ft)
+free.free_qd_for	Quarter deck fwd (ft)
+free.free_qd_aft	Quarter deck aft (ft)
+arm.belt_main	Main belt (in)
+arm.belt_main_length	Main belt length (ft)
+arm.belt_main_height	Main belt height (ft)
+arm.belt_ends	Ends belt (in)
+arm.belt_ends_length	Ends belt length (ft)
+arm.belt_ends_height	Ends belt height (ft)
+arm.belt_upper	Upper belt (in)
+arm.belt_upper_length	Upper belt length (ft)
+arm.belt_upper_height	Upper belt height (ft)
+arm.belts_incline	Belt incline (deg)
+arm.bulkhead	Bulkhead (in)
+arm.bulkhead_length	Bulkhead length (ft)
+arm.bulkhead_height	Bulkhead height (ft)
+arm.bulkhead_beam	Beam between bulkheads (ft)
+arm.bulkhead_type	Bulkhead type (0/1)
+arm.bulge	Bulge (in)
+arm.bulge_length	Bulge length (ft)
+arm.bulge_height	Bulge height (ft)
+arm.deck	Main deck (in)
+arm.deck_fc	Forecastle deck (in)
+arm.deck_qd	Quarter deck (in)
+arm.conning_for	Conning tower fwd (in)
+arm.conning_aft	Conning tower aft (in)
+arm.deck_coverage	Deck Coverage Mode
+gun0.barrels	Barrels
+gun0.calibre	Calibre (in)
+gun0.cal_length	Barrel length (cal)
+gun0.date_gun	Model year
+gun0.magazine	Rounds per gun
+gun0.gun_type	Gun type
+gun0.mount_type	Mount type
+gun0.mounts	Mounts
+gun0.layout_g1	Layout
+gun0.guns_in_mount_g1	Barrels per mount
+gun0.mount_super_g1	Superfiring mounts
+gun0.mount_sub_g1	Hull mounts
+gun0.weight_adj_g1	Weight adjustment
+gun0.layout_g2	Layout
+gun0.guns_in_mount_g2	Barrels per mount
+gun0.mount_super_g2	Superfiring mounts
+gun0.mount_deck_g2	Deck mounts
+gun0.mount_sub_g2	Hull mounts
+gun0.weight_adj_g2	Weight adjustment
+gun0.arm_face	Face
+gun0.arm_back	Back / barbette
+gun0.arm_bottom	Bottom / hoist
+gun1.barrels	Barrels
+gun1.calibre	Calibre (in)
+gun1.cal_length	Barrel length (cal)
+gun1.date_gun	Model year
+gun1.magazine	Rounds per gun
+gun1.gun_type	Gun type
+gun1.mount_type	Mount type
+gun1.mounts	Mounts
+gun1.layout_g1	Layout
+gun1.guns_in_mount_g1	Barrels per mount
+gun1.mount_super_g1	Superfiring mounts
+gun1.mount_sub_g1	Hull mounts
+gun1.weight_adj_g1	Weight adjustment
+gun1.layout_g2	Layout
+gun1.guns_in_mount_g2	Barrels per mount
+gun1.mount_super_g2	Superfiring mounts
+gun1.mount_deck_g2	Deck mounts
+gun1.mount_sub_g2	Hull mounts
+gun1.weight_adj_g2	Weight adjustment
+gun1.arm_face	Face
+gun1.arm_back	Back / barbette
+gun1.arm_bottom	Bottom / hoist
+gun2.barrels	Barrels
+gun2.calibre	Calibre (in)
+gun2.cal_length	Barrel length (cal)
+gun2.date_gun	Model year
+gun2.magazine	Rounds per gun
+gun2.gun_type	Gun type
+gun2.mount_type	Mount type
+gun2.mounts	Mounts
+gun2.layout_g1	Layout
+gun2.guns_in_mount_g1	Barrels per mount
+gun2.mount_super_g1	Superfiring mounts
+gun2.mount_sub_g1	Hull mounts
+gun2.weight_adj_g1	Weight adjustment
+gun2.layout_g2	Layout
+gun2.guns_in_mount_g2	Barrels per mount
+gun2.mount_super_g2	Superfiring mounts
+gun2.mount_deck_g2	Deck mounts
+gun2.mount_sub_g2	Hull mounts
+gun2.weight_adj_g2	Weight adjustment
+gun2.arm_face	Face
+gun2.arm_back	Back / barbette
+gun2.arm_bottom	Bottom / hoist
+gun3.barrels	Barrels
+gun3.calibre	Calibre (in)
+gun3.cal_length	Barrel length (cal)
+gun3.date_gun	Model year
+gun3.magazine	Rounds per gun
+gun3.gun_type	Gun type
+gun3.mount_type	Mount type
+gun3.mounts	Mounts
+gun3.layout_g1	Layout
+gun3.guns_in_mount_g1	Barrels per mount
+gun3.mount_super_g1	Superfiring mounts
+gun3.mount_sub_g1	Hull mounts
+gun3.weight_adj_g1	Weight adjustment
+gun3.layout_g2	Layout
+gun3.guns_in_mount_g2	Barrels per mount
+gun3.mount_super_g2	Superfiring mounts
+gun3.mount_deck_g2	Deck mounts
+gun3.mount_sub_g2	Hull mounts
+gun3.weight_adj_g2	Weight adjustment
+gun3.arm_face	Face
+gun3.arm_back	Back / barbette
+gun3.arm_bottom	Bottom / hoist
+gun4.barrels	Barrels
+gun4.calibre	Calibre (in)
+gun4.cal_length	Barrel length (cal)
+gun4.date_gun	Model year
+gun4.magazine	Rounds per gun
+gun4.gun_type	Gun type
+gun4.mount_type	Mount type
+gun4.mounts	Mounts
+gun4.layout_g1	Layout
+gun4.guns_in_mount_g1	Barrels per mount
+gun4.mount_super_g1	Superfiring mounts
+gun4.mount_sub_g1	Hull mounts
+gun4.weight_adj_g1	Weight adjustment
+gun4.layout_g2	Layout
+gun4.guns_in_mount_g2	Barrels per mount
+gun4.mount_super_g2	Superfiring mounts
+gun4.mount_deck_g2	Deck mounts
+gun4.mount_sub_g2	Hull mounts
+gun4.weight_adj_g2	Weight adjustment
+gun4.arm_face	Face
+gun4.arm_back	Back / barbette
+gun4.arm_bottom	Bottom / hoist
+weap0.kind	Kind
+weap0.number	Number
+weap0.loads	Loads / reloads
+weap0.size	Size
+weap0.length	Length (ft, torpedo)
+weap0.location	Location index
+weap1.kind	Kind
+weap1.number	Number
+weap1.loads	Loads / reloads
+weap1.size	Size
+weap1.length	Length (ft, torpedo)
+weap1.location	Location index
+weap2.kind	Kind
+weap2.number	Number
+weap2.loads	Loads / reloads
+weap2.size	Size
+weap2.length	Length (ft, torpedo)
+weap2.location	Location index
+weap3.kind	Kind
+weap3.number	Number
+weap3.loads	Loads / reloads
+weap3.size	Size
+weap3.length	Length (ft, torpedo)
+weap3.location	Location index
+weap4.kind	Kind
+weap4.number	Number
+weap4.loads	Loads / reloads
+weap4.size	Size
+weap4.length	Length (ft, torpedo)
+weap4.location	Location index
+systems.doctrine	Style Ideal Type
+systems.tactical_echelon	Tactical Echelon
+systems.combat_modality	Combat Modality
+systems.mobility_regime	Mobility Regime
+systems.main_director	Main Director
+systems.aa_director	AA / Secondary Director
+systems.ballistic_computer	Ballistic Computer
+systems.radar_suite	Radar & EW Suite
+systems.sonar_suite	Subsurface Sonar Suite
+systems.electrical_plant	Electrical Plant Philosophy
+systems.transverse_subdivision	Transverse Subdivision
+systems.tds_architecture	TDS Architecture
+systems.machinery_arrangement	Machinery Longitudinal Arrangement
+systems.belt_tds_junction	Underwater Belt & TDS Joint
+systems.horizontal_protection	Horizontal Protection Topology
+misc.vital	Vital spaces
+misc.hull	Hull spaces
+misc.deck	Deck spaces
+misc.above	Above-water
+misc.void	Void
+engine.speed_max	Max speed (kt)
+engine.speed_cruise	Cruise speed (kt)
+engine.range	Range (nm)
+engine.pct_coal	Coal share (%)
+engine.screws	Screws
+perf.steadiness	Trim / steadiness
+engine.resistance_model	Model
+engine.power_factor	Power factor
+engine.original_power_factor	Original-model factor
+engine.blend_weight	Holtrop blend weight (1 = none)
+engine.machinery_weight_factor	Machinery weight factor (1.0 = std, ~0.50 = DD)
+engine.holtrop_viscous_factor	Holtrop viscous factor
+engine.holtrop_wave_factor	Holtrop wave factor
+engine.holtrop_correlation_factor	Holtrop correlation factor
+spaces.crew_volume_per_person	Crew m³/person
+spaces.machinery_volume_per_kw	Machinery m³/kW
+spaces.stores_volume_per_ton	Stores m³/ton
+
+superstructure.funnel_count	Funnels (0 = Auto)
+superstructure.funnel_spacing	Funnel spacing (0 = Auto)
+superstructure.bridge.shift	Relative shift
+superstructure.bridge.length_scale	Length multiplier
+superstructure.bridge.height_scale	Height multiplier
+superstructure.bridge.x	Locked position
+superstructure.bridge.length	Locked length
+superstructure.bridge.height	Locked height
+superstructure.aft.shift	Relative shift
+superstructure.aft.length_scale	Length multiplier
+superstructure.aft.height_scale	Height multiplier
+superstructure.aft.x	Locked position
+superstructure.aft.length	Locked length
+superstructure.aft.height	Locked height
+superstructure.funnels.shift	Relative shift
+superstructure.funnels.length_scale	Length multiplier
+superstructure.funnels.height_scale	Height multiplier
+superstructure.funnels.x	Locked position
+superstructure.funnels.length	Locked length
+superstructure.funnels.height	Locked height

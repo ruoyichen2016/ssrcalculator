@@ -1,5 +1,18 @@
 # SpringSharp Rust Roadmap
 
+## Current web architecture — 2026-10-18
+
+The workbench now uses zero JavaScript: independent HTML/CSS templates, native
+form submissions, Rust calculation snapshots and Rust-rendered SVG. Native egui
+is retained and shares the same engine, blueprint layout and `Workbench` command
+layer. Loading, calibration, solvers, comparison and arrangement now use shared
+transactions with immutable result snapshots. Historical sections
+below describe earlier browser implementations and endpoints; the current routes
+and module layout are documented in README.md. Numerical code is now an independent
+`core` crate; report/display/font policy lives in `src/presentation`. Windows
+portable packaging and the managed native Web launcher are documented in
+`docs/WINDOWS-PORTABLE.md`.
+
 ## P0 hardening (completed 2026-09-27)
 
 - Version-control baseline (git) and reproducible build (`default-run = "springsharp"`)

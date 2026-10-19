@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}} · SpringSharp</title>
+{{stylesheet}}
+<link rel="stylesheet" href="/assets/fonts.css">
+</head>
+<body>
+<header>
+  <h1>SPRING<span>SHARP</span> · Workbench</h1>
+  <span class="hint">HTML</span>
+  <form action="/open" method="post" enctype="multipart/form-data" class="file-open">
+    <label>Open design<input type="file" name="design_file" accept=".ssr,.txt" required></label>
+    <button type="submit">Open .ssr</button>
+  </form>
+</header>
+<form id="design" action="/workbench" method="post">
+  <input type="hidden" name="base_design" value="{{snapshot}}">
+  <input type="hidden" name="baseline" value="{{baseline}}">
+  <nav class="toolbar workbench-toolbar" aria-label="Design actions">
+    <button class="primary" name="action" value="calculate">Calculate</button>
+    <button name="action" value="demo" formnovalidate>Demo design</button>
+    <select name="preset" aria-label="Historical preset">{{presets}}</select>
+    <button name="action" value="preset" formnovalidate>Load preset</button>
+    <button formaction="/export/design.ssr">Save .ssr</button>
+    <button formaction="/export/report.html">Export HTML</button>
+    <label class="check"><input type="checkbox" name="metric" value="true" {{metric}}> Metric results</label>
+    <input type="hidden" name="arcs" value="{{arcs_value}}">
+    <label>Font group<select name="text_language">{{languages}}</select></label>
+    <label class="check"><input type="hidden" name="serif_titles" value="false"><input type="checkbox" name="serif_titles" value="true" {{checked:serif_titles}}> Serif</label>
+  </nav>
+  <p class="workflow-note">Edit parameters, then Calculate. The blueprint, metrics and report show the last submitted calculation; typing alone does not update results.</p>
+  {{message}}
+  <main>
+    <section class="panel editor">
+      {{editor}}
+      <details class="editor-section" id="solvers">
+        <summary>Calibration & Solvers</summary>
+        <p class="hint">Actions below submit the current form and return a newly calculated design.</p>
+        <div class="row">
+          <button name="action" value="regime">Apply regime model</button>
+          <button name="action" value="blend">Apply blended model</button>
+          <button name="action" value="reset">Original SpringSharp</button>
+        </div>
+        <div class="row">
+          <label>Target power (hp)<input name="target_hp" type="number" step="any" value="{{value:target_hp}}"></label>
+          <button name="action" value="speed">Solve max speed</button>
+        </div>
+        <div class="row">
+          <label>Bunker (tons)<input name="target_bunker" type="number" step="any" value="{{value:target_bunker}}"></label>
+          <button name="action" value="range">Solve range</button>
+        </div>
+        <div class="row">
+          <label>Target displacement (tons)<input name="target_disp" type="number" step="any" value="{{value:target_disp}}"></label>
+          <button name="action" value="displacement">Scale displacement</button>
+        </div>
+      </details>
+      <details class="editor-section" id="comparison">
+        <summary>Comparison & General Arrangement</summary>
+        <div class="row">
+          <button name="action" value="pin">Pin submitted design as baseline</button>
+          <button name="action" value="compare">Compare with selected historical preset</button>
+          <button name="action" value="clear_compare">Clear comparison</button>
+        </div>
+        <div class="row">
+          <label>Target vertical CG (fraction of depth)<input name="target_cg" type="number" step="0.01" value="{{value:target_cg}}"></label>
+          <button name="action" value="compartments">Run arrangement optimizer</button>
+        </div>
+        <p class="hint">Planning-level arrangement model. Results are regenerated from the submitted design.</p>
+      </details>
+      <details class="editor-section" id="external-data">
+        <summary>External Data & Planing</summary>
+        <label>External CSV<textarea name="external" rows="6" spellcheck="false">{{value:external}}</textarea></label>
+        <div class="row">
+          <button name="action" value="external">Validate external data</button>
+          <button name="action" value="external_calibrate">Calibrate external data</button>
+          <button name="action" value="planing_calibrate">Planing factor from CSV</button>
+        </div>
+        <div class="grid">
+          <label>Length (ft)<input name="p_length" type="number" step="any" value="{{value:p_length}}"></label>
+          <label>Beam (ft)<input name="p_beam" type="number" step="any" value="{{value:p_beam}}"></label>
+          <label>Displacement (lbs)<input name="p_disp" type="number" step="any" value="{{value:p_disp}}"></label>
+          <label>Speed (kt)<input name="p_speed" type="number" step="any" value="{{value:p_speed}}"></label>
+          <label>Factor<input name="p_factor" type="number" step="any" value="{{value:p_factor}}"></label>
+        </div>
+        <button name="action" value="planing">Estimate planing power</button>
+      </details>
+      <details class="editor-section" id="raw">
+        <summary>Raw .ssr</summary>
+        <p class="hint">Apply replaces the parameter form with this text. Other actions use the parameter form.</p>
+        <textarea name="raw_design" rows="20" spellcheck="false">{{raw}}</textarea>
+        <button name="action" value="raw" formnovalidate>Apply raw design</button>
+      </details>
+    </section>
+    <section class="panel results" id="results">
+      <h2 class="design-title {{title_class}}" lang="{{language}}">{{title}}</h2>
+      <p class="hint">{{subtitle}}</p>
+      {{status}}
+      <div class="blueprint-toolbar">
+        <span>BLUEPRINT SCHEMATIC</span>
+        <div class="blueprint-actions">
+          <button name="action" value="arcs" aria-pressed="{{arcs_value}}">Arcs</button>
+          <button formaction="/export/blueprint.svg">Export SVG</button>
+          <button formaction="/blueprint" formtarget="_blank">Expand</button>
+        </div>
+      </div>
+      {{blueprint}}
+      {{superstructure_notes}}
+      {{alerts}}
+      {{metrics}}
+      {{comparison}}
+      <details open><summary>Speed & Power</summary>{{speed_chart}}</details>
+      <details><summary>Armour Penetration & Immunity</summary>{{immunity_chart}}</details>
+      <details><summary>Electrical & Combat Systems</summary>{{systems}}</details>
+      <details><summary>Historical Benchmark & Nearest Ships</summary>{{historical}}</details>
+      <details><summary>Internal Spaces</summary>{{spaces}}</details>
+      {{analysis}}
+      <details><summary>Calculation Report</summary><pre class="report">{{report}}</pre></details>
+    </section>
+  </main>
+</form>
+<footer>SpringSharp · HTML</footer>
+</body>
+</html>

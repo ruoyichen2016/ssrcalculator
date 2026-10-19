@@ -201,7 +201,7 @@ pub fn get_preset(id: &str) -> Option<ShipModel> {
         "shimakaze" => preset_shimakaze(),
         "hood" => preset_hood(),
         "essex" => preset_essex(),
-        "kgv" => preset_kgv(),
+        "kgv" | "king_george_v" => preset_kgv(),
         "scharnhorst" => preset_scharnhorst(),
         "cv2_lexington" | "lexington" | "cv2" => preset_cv2_lexington(),
         "c20_tiger" | "tiger" | "c20" => preset_c20_tiger(),

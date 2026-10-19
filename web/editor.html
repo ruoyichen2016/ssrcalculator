@@ -1,0 +1,988 @@
+<details class="editor-section" id="hull" open>
+<summary>Hull &amp; Freeboard</summary>
+<h2>Ship</h2>
+<div class="grid">
+<label>{{label:meta.name}}<input value="{{value:meta.name}}" name="meta.name"></label>
+<label>{{label:meta.country}}<input value="{{value:meta.country}}" name="meta.country"></label>
+<label>{{label:meta.type}}<input list="shipTypes" value="{{value:meta.type}}" name="meta.type"></label><datalist id="shipTypes">
+<option value="Battleship"></option>
+<option value="Battlecruiser"></option>
+<option value="Carrier"></option>
+<option value="Heavy cruiser"></option>
+<option value="Light cruiser"></option>
+<option value="Destroyer"></option></datalist>
+</div>
+<h2>Hull</h2>
+<div class="grid">
+<label>{{label:hull.length}}<input type="number" step="any" value="{{value:hull.length}}" name="hull.length"></label>
+<label>{{label:hull.beam}}<input type="number" step="any" value="{{value:hull.beam}}" name="hull.beam"></label>
+<label>{{label:hull.beam_bulges}}<input type="number" step="any" value="{{value:hull.beam_bulges}}" name="hull.beam_bulges"></label>
+<label>{{label:hull.draught}}<input type="number" step="any" value="{{value:hull.draught}}" name="hull.draught"></label>
+<label>{{label:hull.block}}<input type="number" step="any" value="{{value:hull.block}}" name="hull.block"></label>
+<label>{{label:hull.date_hull}}<input type="number" step="any" value="{{value:hull.date_hull}}" name="hull.date_hull"></label>
+<label>{{label:hull.date_engine}}<input type="number" step="any" value="{{value:hull.date_engine}}" name="hull.date_engine"></label>
+</div>
+<h2>Hull form (resistance detail, 0 = auto)</h2>
+<div class="grid">
+<label>{{label:hull.lcb_percent}}<input type="number" step="any" value="{{value:hull.lcb_percent}}" name="hull.lcb_percent"></label>
+<label>{{label:hull.midship_coefficient}}<input type="number" step="any" value="{{value:hull.midship_coefficient}}" name="hull.midship_coefficient"></label>
+<label>{{label:hull.bulb_area_sqft}}<input type="number" step="any" value="{{value:hull.bulb_area_sqft}}" name="hull.bulb_area_sqft"></label>
+<label>{{label:hull.bulb_centre_height_ft}}<input type="number" step="any" value="{{value:hull.bulb_centre_height_ft}}" name="hull.bulb_centre_height_ft"></label>
+<label>{{label:hull.transom_area_sqft}}<input type="number" step="any" value="{{value:hull.transom_area_sqft}}" name="hull.transom_area_sqft"></label>
+<label>{{label:hull.appendage_area_sqft}}<input type="number" step="any" value="{{value:hull.appendage_area_sqft}}" name="hull.appendage_area_sqft"></label>
+<label>{{label:hull.stern_shape}}<input type="number" step="any" value="{{value:hull.stern_shape}}" name="hull.stern_shape"></label>
+</div>
+<h2>Ends</h2>
+<div class="grid">
+<label>{{label:free.bow}}<select name="free.bow">
+<option value="0" {{selected:free.bow:0}}>0 · Normal bow</option>
+<option value="1" {{selected:free.bow:1}}>1 · Bulbous bow - straight</option>
+<option value="2" {{selected:free.bow:2}}>2 · Bulbous bow - forward</option>
+<option value="3" {{selected:free.bow:3}}>3 · Ram bow</option></select></label>
+<label>{{label:free.stern}}<select name="free.stern">
+<option value="0" {{selected:free.stern:0}}>0 · Cruiser stern</option>
+<option value="1" {{selected:free.stern:1}}>1 · Transom stern</option>
+<option value="2" {{selected:free.stern:2}}>2 · Round stern</option></select></label>
+<label>{{label:free.transom_width}}<input type="number" step="any" value="{{value:free.transom_width}}" name="free.transom_width"></label>
+<label>{{label:free.length_bow}}<input type="number" step="any" value="{{value:free.length_bow}}" name="free.length_bow"></label>
+<label>{{label:free.length_ram}}<input type="number" step="any" value="{{value:free.length_ram}}" name="free.length_ram"></label>
+<label>{{label:free.length_stern}}<input type="number" step="any" value="{{value:free.length_stern}}" name="free.length_stern"></label>
+</div>
+<h2>Freeboard</h2>
+<div class="grid">
+<label>{{label:free.fc_length}}<input type="number" step="any" value="{{value:free.fc_length}}" name="free.fc_length"></label>
+<label>{{label:free.fd_length}}<input type="number" step="any" value="{{value:free.fd_length}}" name="free.fd_length"></label>
+<label>{{label:free.qd_length}}<input type="number" step="any" value="{{value:free.qd_length}}" name="free.qd_length"></label>
+<label>{{label:free.free_fc_for}}<input type="number" step="any" value="{{value:free.free_fc_for}}" name="free.free_fc_for"></label>
+<label>{{label:free.free_fc_aft}}<input type="number" step="any" value="{{value:free.free_fc_aft}}" name="free.free_fc_aft"></label>
+<label>{{label:free.free_fd_for}}<input type="number" step="any" value="{{value:free.free_fd_for}}" name="free.free_fd_for"></label>
+<label>{{label:free.free_fd_aft}}<input type="number" step="any" value="{{value:free.free_fd_aft}}" name="free.free_fd_aft"></label>
+<label>{{label:free.free_ad_for}}<input type="number" step="any" value="{{value:free.free_ad_for}}" name="free.free_ad_for"></label>
+<label>{{label:free.free_ad_aft}}<input type="number" step="any" value="{{value:free.free_ad_aft}}" name="free.free_ad_aft"></label>
+<label>{{label:free.free_qd_for}}<input type="number" step="any" value="{{value:free.free_qd_for}}" name="free.free_qd_for"></label>
+<label>{{label:free.free_qd_aft}}<input type="number" step="any" value="{{value:free.free_qd_aft}}" name="free.free_qd_aft"></label>
+</div>
+</details>
+<details class="editor-section" id="armour">
+<summary>Armour</summary>
+<h2>Belts</h2>
+<div class="grid">
+<label>{{label:arm.belt_main}}<input type="number" step="any" value="{{value:arm.belt_main}}" name="arm.belt_main"></label>
+<label>{{label:arm.belt_main_length}}<input type="number" step="any" value="{{value:arm.belt_main_length}}" name="arm.belt_main_length"></label>
+<label>{{label:arm.belt_main_height}}<input type="number" step="any" value="{{value:arm.belt_main_height}}" name="arm.belt_main_height"></label>
+<label>{{label:arm.belt_ends}}<input type="number" step="any" value="{{value:arm.belt_ends}}" name="arm.belt_ends"></label>
+<label>{{label:arm.belt_ends_length}}<input type="number" step="any" value="{{value:arm.belt_ends_length}}" name="arm.belt_ends_length"></label>
+<label>{{label:arm.belt_ends_height}}<input type="number" step="any" value="{{value:arm.belt_ends_height}}" name="arm.belt_ends_height"></label>
+<label>{{label:arm.belt_upper}}<input type="number" step="any" value="{{value:arm.belt_upper}}" name="arm.belt_upper"></label>
+<label>{{label:arm.belt_upper_length}}<input type="number" step="any" value="{{value:arm.belt_upper_length}}" name="arm.belt_upper_length"></label>
+<label>{{label:arm.belt_upper_height}}<input type="number" step="any" value="{{value:arm.belt_upper_height}}" name="arm.belt_upper_height"></label>
+<label>{{label:arm.belts_incline}}<input type="number" step="any" value="{{value:arm.belts_incline}}" name="arm.belts_incline"></label>
+</div>
+<h2>Torpedo bulkhead &amp; bulges</h2>
+<div class="grid">
+<label>{{label:arm.bulkhead}}<input type="number" step="any" value="{{value:arm.bulkhead}}" name="arm.bulkhead"></label>
+<label>{{label:arm.bulkhead_length}}<input type="number" step="any" value="{{value:arm.bulkhead_length}}" name="arm.bulkhead_length"></label>
+<label>{{label:arm.bulkhead_height}}<input type="number" step="any" value="{{value:arm.bulkhead_height}}" name="arm.bulkhead_height"></label>
+<label>{{label:arm.bulkhead_beam}}<input type="number" step="any" value="{{value:arm.bulkhead_beam}}" name="arm.bulkhead_beam"></label>
+<label>{{label:arm.bulkhead_type}}<select name="arm.bulkhead_type">{{options:arm.bulkhead_type}}</select></label>
+<label>{{label:arm.bulge}}<input type="number" step="any" value="{{value:arm.bulge}}" name="arm.bulge"></label>
+<label>{{label:arm.bulge_length}}<input type="number" step="any" value="{{value:arm.bulge_length}}" name="arm.bulge_length"></label>
+<label>{{label:arm.bulge_height}}<input type="number" step="any" value="{{value:arm.bulge_height}}" name="arm.bulge_height"></label>
+</div>
+<h2>Decks &amp; conning tower</h2>
+<div class="grid">
+<label>{{label:arm.deck}}<input type="number" step="any" value="{{value:arm.deck}}" name="arm.deck"></label>
+<label>{{label:arm.deck_fc}}<input type="number" step="any" value="{{value:arm.deck_fc}}" name="arm.deck_fc"></label>
+<label>{{label:arm.deck_qd}}<input type="number" step="any" value="{{value:arm.deck_qd}}" name="arm.deck_qd"></label>
+<label>{{label:arm.conning_for}}<input type="number" step="any" value="{{value:arm.conning_for}}" name="arm.conning_for"></label>
+<label>{{label:arm.conning_aft}}<input type="number" step="any" value="{{value:arm.conning_aft}}" name="arm.conning_aft"></label>
+</div>
+<div class="grid">
+<label>{{label:arm.deck_coverage}}<select name="arm.deck_coverage">{{options:arm.deck_coverage}}</select></label>
+</div>
+</details>
+<details class="editor-section" id="guns">
+<summary>Guns</summary>
+<details class="battery-section" id="gun0" open>
+<summary>Main battery</summary>
+<h2>Guns</h2>
+<div class="grid">
+<label>{{label:gun0.barrels}}<input type="number" step="any" value="{{value:gun0.barrels}}" name="gun0.barrels"></label>
+<label>{{label:gun0.calibre}}<input type="number" step="any" value="{{value:gun0.calibre}}" name="gun0.calibre"></label>
+<label>{{label:gun0.cal_length}}<input type="number" step="any" value="{{value:gun0.cal_length}}" name="gun0.cal_length"></label>
+<label>{{label:gun0.date_gun}}<input type="number" step="any" value="{{value:gun0.date_gun}}" name="gun0.date_gun"></label>
+<label>{{label:gun0.magazine}}<input type="number" step="any" value="{{value:gun0.magazine}}" name="gun0.magazine"></label>
+<label>{{label:gun0.gun_type}}<select name="gun0.gun_type">
+<option value="0" {{selected:gun0.gun_type:0}}>0 · Muzzle loading gun</option>
+<option value="1" {{selected:gun0.gun_type:1}}>1 · Breech loading gun</option>
+<option value="2" {{selected:gun0.gun_type:2}}>2 · Quick firing gun</option>
+<option value="3" {{selected:gun0.gun_type:3}}>3 · Anti-air gun</option>
+<option value="4" {{selected:gun0.gun_type:4}}>4 · Dual purpose gun</option>
+<option value="5" {{selected:gun0.gun_type:5}}>5 · Auto rapid fire gun</option>
+<option value="6" {{selected:gun0.gun_type:6}}>6 · Machine gun</option></select></label>
+<label>{{label:gun0.mount_type}}<select name="gun0.mount_type">
+<option value="0" {{selected:gun0.mount_type:0}}>0 · Broadside</option>
+<option value="1" {{selected:gun0.mount_type:1}}>1 · Coles/Ericsson turret</option>
+<option value="2" {{selected:gun0.mount_type:2}}>2 · Open barbette</option>
+<option value="3" {{selected:gun0.mount_type:3}}>3 · Turret on barbette</option>
+<option value="4" {{selected:gun0.mount_type:4}}>4 · Deck and hoist</option>
+<option value="5" {{selected:gun0.mount_type:5}}>5 · Deck mount</option>
+<option value="6" {{selected:gun0.mount_type:6}}>6 · Casemate</option></select></label>
+<label>{{label:gun0.mounts}}<input type="number" step="any" value="{{value:gun0.mounts}}" name="gun0.mounts"></label>
+</div>
+<h2>Group 1</h2>
+<div class="grid">
+<label>{{label:gun0.layout_g1}}<select name="gun0.layout_g1">
+<option value="0" {{selected:gun0.layout_g1:0}}>0 · Centreline - distributed</option>
+<option value="1" {{selected:gun0.layout_g1:1}}>1 · Centreline - ends (fore &gt;= aft)</option>
+<option value="2" {{selected:gun0.layout_g1:2}}>2 · Centreline - ends (aft &gt;= fore)</option>
+<option value="3" {{selected:gun0.layout_g1:3}}>3 · Centreline - fore deck forward</option>
+<option value="4" {{selected:gun0.layout_g1:4}}>4 · Centreline - fore deck</option>
+<option value="5" {{selected:gun0.layout_g1:5}}>5 · Centreline - fore deck aft</option>
+<option value="6" {{selected:gun0.layout_g1:6}}>6 · Centreline - aft deck forward</option>
+<option value="7" {{selected:gun0.layout_g1:7}}>7 · Centreline - aft deck</option>
+<option value="8" {{selected:gun0.layout_g1:8}}>8 · Centreline - aft deck aft</option>
+<option value="9" {{selected:gun0.layout_g1:9}}>9 · Sides - distributed</option>
+<option value="10" {{selected:gun0.layout_g1:10}}>10 · Sides - ends (fore &gt;= aft)</option>
+<option value="11" {{selected:gun0.layout_g1:11}}>11 · Sides - ends (aft &gt;= fore)</option>
+<option value="12" {{selected:gun0.layout_g1:12}}>12 · Sides - fore deck forward</option>
+<option value="13" {{selected:gun0.layout_g1:13}}>13 · Sides - fore deck</option>
+<option value="14" {{selected:gun0.layout_g1:14}}>14 · Sides - fore deck aft</option>
+<option value="15" {{selected:gun0.layout_g1:15}}>15 · Sides - aft deck forward</option>
+<option value="16" {{selected:gun0.layout_g1:16}}>16 · Sides - aft deck</option>
+<option value="17" {{selected:gun0.layout_g1:17}}>17 · Sides - aft deck aft</option>
+<option value="18" {{selected:gun0.layout_g1:18}}>18 · None</option></select></label>
+<label>{{label:gun0.guns_in_mount_g1}}<select name="gun0.guns_in_mount_g1">
+<option value="0" {{selected:gun0.guns_in_mount_g1:0}}>0 · Single mount (1)</option>
+<option value="1" {{selected:gun0.guns_in_mount_g1:1}}>1 · 2 row twin mount (2)</option>
+<option value="2" {{selected:gun0.guns_in_mount_g1:2}}>2 · 4 row quad mount (4)</option>
+<option value="3" {{selected:gun0.guns_in_mount_g1:3}}>3 · Twin mount (2)</option>
+<option value="4" {{selected:gun0.guns_in_mount_g1:4}}>4 · 2-gun mount (2)</option>
+<option value="5" {{selected:gun0.guns_in_mount_g1:5}}>5 · 2 row quad mount (4)</option>
+<option value="6" {{selected:gun0.guns_in_mount_g1:6}}>6 · Triple mount (3)</option>
+<option value="7" {{selected:gun0.guns_in_mount_g1:7}}>7 · 3-gun mount (3)</option>
+<option value="8" {{selected:gun0.guns_in_mount_g1:8}}>8 · 2 row sextuple mount (6)</option>
+<option value="9" {{selected:gun0.guns_in_mount_g1:9}}>9 · Quad mount (4)</option>
+<option value="10" {{selected:gun0.guns_in_mount_g1:10}}>10 · 4-gun mount (4)</option>
+<option value="11" {{selected:gun0.guns_in_mount_g1:11}}>11 · 2 row octuple mount (8)</option>
+<option value="12" {{selected:gun0.guns_in_mount_g1:12}}>12 · Quintuple mount (5)</option>
+<option value="13" {{selected:gun0.guns_in_mount_g1:13}}>13 · 5-gun mount (5)</option>
+<option value="14" {{selected:gun0.guns_in_mount_g1:14}}>14 · 2 row decuple mount (10)</option></select></label>
+<label>{{label:gun0.mount_super_g1}}<input type="number" step="any" value="{{value:gun0.mount_super_g1}}" name="gun0.mount_super_g1"></label>
+<label>{{label:gun0.mount_sub_g1}}<input type="number" step="any" value="{{value:gun0.mount_sub_g1}}" name="gun0.mount_sub_g1"></label>
+<label>{{label:gun0.weight_adj_g1}}<input type="number" step="any" value="{{value:gun0.weight_adj_g1}}" name="gun0.weight_adj_g1"></label>
+</div>
+<h2>Group 2</h2>
+<div class="grid">
+<label>{{label:gun0.layout_g2}}<select name="gun0.layout_g2">
+<option value="0" {{selected:gun0.layout_g2:0}}>0 · Centreline - distributed</option>
+<option value="1" {{selected:gun0.layout_g2:1}}>1 · Centreline - ends (fore &gt;= aft)</option>
+<option value="2" {{selected:gun0.layout_g2:2}}>2 · Centreline - ends (aft &gt;= fore)</option>
+<option value="3" {{selected:gun0.layout_g2:3}}>3 · Centreline - fore deck forward</option>
+<option value="4" {{selected:gun0.layout_g2:4}}>4 · Centreline - fore deck</option>
+<option value="5" {{selected:gun0.layout_g2:5}}>5 · Centreline - fore deck aft</option>
+<option value="6" {{selected:gun0.layout_g2:6}}>6 · Centreline - aft deck forward</option>
+<option value="7" {{selected:gun0.layout_g2:7}}>7 · Centreline - aft deck</option>
+<option value="8" {{selected:gun0.layout_g2:8}}>8 · Centreline - aft deck aft</option>
+<option value="9" {{selected:gun0.layout_g2:9}}>9 · Sides - distributed</option>
+<option value="10" {{selected:gun0.layout_g2:10}}>10 · Sides - ends (fore &gt;= aft)</option>
+<option value="11" {{selected:gun0.layout_g2:11}}>11 · Sides - ends (aft &gt;= fore)</option>
+<option value="12" {{selected:gun0.layout_g2:12}}>12 · Sides - fore deck forward</option>
+<option value="13" {{selected:gun0.layout_g2:13}}>13 · Sides - fore deck</option>
+<option value="14" {{selected:gun0.layout_g2:14}}>14 · Sides - fore deck aft</option>
+<option value="15" {{selected:gun0.layout_g2:15}}>15 · Sides - aft deck forward</option>
+<option value="16" {{selected:gun0.layout_g2:16}}>16 · Sides - aft deck</option>
+<option value="17" {{selected:gun0.layout_g2:17}}>17 · Sides - aft deck aft</option>
+<option value="18" {{selected:gun0.layout_g2:18}}>18 · None</option></select></label>
+<label>{{label:gun0.guns_in_mount_g2}}<select name="gun0.guns_in_mount_g2">
+<option value="0" {{selected:gun0.guns_in_mount_g2:0}}>0 · Single mount (1)</option>
+<option value="1" {{selected:gun0.guns_in_mount_g2:1}}>1 · 2 row twin mount (2)</option>
+<option value="2" {{selected:gun0.guns_in_mount_g2:2}}>2 · 4 row quad mount (4)</option>
+<option value="3" {{selected:gun0.guns_in_mount_g2:3}}>3 · Twin mount (2)</option>
+<option value="4" {{selected:gun0.guns_in_mount_g2:4}}>4 · 2-gun mount (2)</option>
+<option value="5" {{selected:gun0.guns_in_mount_g2:5}}>5 · 2 row quad mount (4)</option>
+<option value="6" {{selected:gun0.guns_in_mount_g2:6}}>6 · Triple mount (3)</option>
+<option value="7" {{selected:gun0.guns_in_mount_g2:7}}>7 · 3-gun mount (3)</option>
+<option value="8" {{selected:gun0.guns_in_mount_g2:8}}>8 · 2 row sextuple mount (6)</option>
+<option value="9" {{selected:gun0.guns_in_mount_g2:9}}>9 · Quad mount (4)</option>
+<option value="10" {{selected:gun0.guns_in_mount_g2:10}}>10 · 4-gun mount (4)</option>
+<option value="11" {{selected:gun0.guns_in_mount_g2:11}}>11 · 2 row octuple mount (8)</option>
+<option value="12" {{selected:gun0.guns_in_mount_g2:12}}>12 · Quintuple mount (5)</option>
+<option value="13" {{selected:gun0.guns_in_mount_g2:13}}>13 · 5-gun mount (5)</option>
+<option value="14" {{selected:gun0.guns_in_mount_g2:14}}>14 · 2 row decuple mount (10)</option></select></label>
+<label>{{label:gun0.mount_super_g2}}<input type="number" step="any" value="{{value:gun0.mount_super_g2}}" name="gun0.mount_super_g2"></label>
+<label>{{label:gun0.mount_deck_g2}}<input type="number" step="any" value="{{value:gun0.mount_deck_g2}}" name="gun0.mount_deck_g2"></label>
+<label>{{label:gun0.mount_sub_g2}}<input type="number" step="any" value="{{value:gun0.mount_sub_g2}}" name="gun0.mount_sub_g2"></label>
+<label>{{label:gun0.weight_adj_g2}}<input type="number" step="any" value="{{value:gun0.weight_adj_g2}}" name="gun0.weight_adj_g2"></label>
+</div>
+<h2>Mount armour (in)</h2>
+<div class="grid">
+<label>{{label:gun0.arm_face}}<input type="number" step="any" value="{{value:gun0.arm_face}}" name="gun0.arm_face"></label>
+<label>{{label:gun0.arm_back}}<input type="number" step="any" value="{{value:gun0.arm_back}}" name="gun0.arm_back"></label>
+<label>{{label:gun0.arm_bottom}}<input type="number" step="any" value="{{value:gun0.arm_bottom}}" name="gun0.arm_bottom"></label>
+<label class="check"><input type="hidden" name="gun0.super_super_chk" value="false"><input type="checkbox" name="gun0.super_super_chk" value="true" {{checked:gun0.super_super_chk}}> Super-superfiring</label>
+<label class="check"><input type="hidden" name="gun0.sub_sub_chk" value="false"><input type="checkbox" name="gun0.sub_sub_chk" value="true" {{checked:gun0.sub_sub_chk}}> Lower casemates</label>
+</div>
+</details>
+<details class="battery-section" id="gun1">
+<summary>Battery 2</summary>
+<h2>Guns</h2>
+<div class="grid">
+<label>{{label:gun1.barrels}}<input type="number" step="any" value="{{value:gun1.barrels}}" name="gun1.barrels"></label>
+<label>{{label:gun1.calibre}}<input type="number" step="any" value="{{value:gun1.calibre}}" name="gun1.calibre"></label>
+<label>{{label:gun1.cal_length}}<input type="number" step="any" value="{{value:gun1.cal_length}}" name="gun1.cal_length"></label>
+<label>{{label:gun1.date_gun}}<input type="number" step="any" value="{{value:gun1.date_gun}}" name="gun1.date_gun"></label>
+<label>{{label:gun1.magazine}}<input type="number" step="any" value="{{value:gun1.magazine}}" name="gun1.magazine"></label>
+<label>{{label:gun1.gun_type}}<select name="gun1.gun_type">
+<option value="0" {{selected:gun1.gun_type:0}}>0 · Muzzle loading gun</option>
+<option value="1" {{selected:gun1.gun_type:1}}>1 · Breech loading gun</option>
+<option value="2" {{selected:gun1.gun_type:2}}>2 · Quick firing gun</option>
+<option value="3" {{selected:gun1.gun_type:3}}>3 · Anti-air gun</option>
+<option value="4" {{selected:gun1.gun_type:4}}>4 · Dual purpose gun</option>
+<option value="5" {{selected:gun1.gun_type:5}}>5 · Auto rapid fire gun</option>
+<option value="6" {{selected:gun1.gun_type:6}}>6 · Machine gun</option></select></label>
+<label>{{label:gun1.mount_type}}<select name="gun1.mount_type">
+<option value="0" {{selected:gun1.mount_type:0}}>0 · Broadside</option>
+<option value="1" {{selected:gun1.mount_type:1}}>1 · Coles/Ericsson turret</option>
+<option value="2" {{selected:gun1.mount_type:2}}>2 · Open barbette</option>
+<option value="3" {{selected:gun1.mount_type:3}}>3 · Turret on barbette</option>
+<option value="4" {{selected:gun1.mount_type:4}}>4 · Deck and hoist</option>
+<option value="5" {{selected:gun1.mount_type:5}}>5 · Deck mount</option>
+<option value="6" {{selected:gun1.mount_type:6}}>6 · Casemate</option></select></label>
+<label>{{label:gun1.mounts}}<input type="number" step="any" value="{{value:gun1.mounts}}" name="gun1.mounts"></label>
+</div>
+<h2>Group 1</h2>
+<div class="grid">
+<label>{{label:gun1.layout_g1}}<select name="gun1.layout_g1">
+<option value="0" {{selected:gun1.layout_g1:0}}>0 · Centreline - distributed</option>
+<option value="1" {{selected:gun1.layout_g1:1}}>1 · Centreline - ends (fore &gt;= aft)</option>
+<option value="2" {{selected:gun1.layout_g1:2}}>2 · Centreline - ends (aft &gt;= fore)</option>
+<option value="3" {{selected:gun1.layout_g1:3}}>3 · Centreline - fore deck forward</option>
+<option value="4" {{selected:gun1.layout_g1:4}}>4 · Centreline - fore deck</option>
+<option value="5" {{selected:gun1.layout_g1:5}}>5 · Centreline - fore deck aft</option>
+<option value="6" {{selected:gun1.layout_g1:6}}>6 · Centreline - aft deck forward</option>
+<option value="7" {{selected:gun1.layout_g1:7}}>7 · Centreline - aft deck</option>
+<option value="8" {{selected:gun1.layout_g1:8}}>8 · Centreline - aft deck aft</option>
+<option value="9" {{selected:gun1.layout_g1:9}}>9 · Sides - distributed</option>
+<option value="10" {{selected:gun1.layout_g1:10}}>10 · Sides - ends (fore &gt;= aft)</option>
+<option value="11" {{selected:gun1.layout_g1:11}}>11 · Sides - ends (aft &gt;= fore)</option>
+<option value="12" {{selected:gun1.layout_g1:12}}>12 · Sides - fore deck forward</option>
+<option value="13" {{selected:gun1.layout_g1:13}}>13 · Sides - fore deck</option>
+<option value="14" {{selected:gun1.layout_g1:14}}>14 · Sides - fore deck aft</option>
+<option value="15" {{selected:gun1.layout_g1:15}}>15 · Sides - aft deck forward</option>
+<option value="16" {{selected:gun1.layout_g1:16}}>16 · Sides - aft deck</option>
+<option value="17" {{selected:gun1.layout_g1:17}}>17 · Sides - aft deck aft</option>
+<option value="18" {{selected:gun1.layout_g1:18}}>18 · None</option></select></label>
+<label>{{label:gun1.guns_in_mount_g1}}<select name="gun1.guns_in_mount_g1">
+<option value="0" {{selected:gun1.guns_in_mount_g1:0}}>0 · Single mount (1)</option>
+<option value="1" {{selected:gun1.guns_in_mount_g1:1}}>1 · 2 row twin mount (2)</option>
+<option value="2" {{selected:gun1.guns_in_mount_g1:2}}>2 · 4 row quad mount (4)</option>
+<option value="3" {{selected:gun1.guns_in_mount_g1:3}}>3 · Twin mount (2)</option>
+<option value="4" {{selected:gun1.guns_in_mount_g1:4}}>4 · 2-gun mount (2)</option>
+<option value="5" {{selected:gun1.guns_in_mount_g1:5}}>5 · 2 row quad mount (4)</option>
+<option value="6" {{selected:gun1.guns_in_mount_g1:6}}>6 · Triple mount (3)</option>
+<option value="7" {{selected:gun1.guns_in_mount_g1:7}}>7 · 3-gun mount (3)</option>
+<option value="8" {{selected:gun1.guns_in_mount_g1:8}}>8 · 2 row sextuple mount (6)</option>
+<option value="9" {{selected:gun1.guns_in_mount_g1:9}}>9 · Quad mount (4)</option>
+<option value="10" {{selected:gun1.guns_in_mount_g1:10}}>10 · 4-gun mount (4)</option>
+<option value="11" {{selected:gun1.guns_in_mount_g1:11}}>11 · 2 row octuple mount (8)</option>
+<option value="12" {{selected:gun1.guns_in_mount_g1:12}}>12 · Quintuple mount (5)</option>
+<option value="13" {{selected:gun1.guns_in_mount_g1:13}}>13 · 5-gun mount (5)</option>
+<option value="14" {{selected:gun1.guns_in_mount_g1:14}}>14 · 2 row decuple mount (10)</option></select></label>
+<label>{{label:gun1.mount_super_g1}}<input type="number" step="any" value="{{value:gun1.mount_super_g1}}" name="gun1.mount_super_g1"></label>
+<label>{{label:gun1.mount_sub_g1}}<input type="number" step="any" value="{{value:gun1.mount_sub_g1}}" name="gun1.mount_sub_g1"></label>
+<label>{{label:gun1.weight_adj_g1}}<input type="number" step="any" value="{{value:gun1.weight_adj_g1}}" name="gun1.weight_adj_g1"></label>
+</div>
+<h2>Group 2</h2>
+<div class="grid">
+<label>{{label:gun1.layout_g2}}<select name="gun1.layout_g2">
+<option value="0" {{selected:gun1.layout_g2:0}}>0 · Centreline - distributed</option>
+<option value="1" {{selected:gun1.layout_g2:1}}>1 · Centreline - ends (fore &gt;= aft)</option>
+<option value="2" {{selected:gun1.layout_g2:2}}>2 · Centreline - ends (aft &gt;= fore)</option>
+<option value="3" {{selected:gun1.layout_g2:3}}>3 · Centreline - fore deck forward</option>
+<option value="4" {{selected:gun1.layout_g2:4}}>4 · Centreline - fore deck</option>
+<option value="5" {{selected:gun1.layout_g2:5}}>5 · Centreline - fore deck aft</option>
+<option value="6" {{selected:gun1.layout_g2:6}}>6 · Centreline - aft deck forward</option>
+<option value="7" {{selected:gun1.layout_g2:7}}>7 · Centreline - aft deck</option>
+<option value="8" {{selected:gun1.layout_g2:8}}>8 · Centreline - aft deck aft</option>
+<option value="9" {{selected:gun1.layout_g2:9}}>9 · Sides - distributed</option>
+<option value="10" {{selected:gun1.layout_g2:10}}>10 · Sides - ends (fore &gt;= aft)</option>
+<option value="11" {{selected:gun1.layout_g2:11}}>11 · Sides - ends (aft &gt;= fore)</option>
+<option value="12" {{selected:gun1.layout_g2:12}}>12 · Sides - fore deck forward</option>
+<option value="13" {{selected:gun1.layout_g2:13}}>13 · Sides - fore deck</option>
+<option value="14" {{selected:gun1.layout_g2:14}}>14 · Sides - fore deck aft</option>
+<option value="15" {{selected:gun1.layout_g2:15}}>15 · Sides - aft deck forward</option>
+<option value="16" {{selected:gun1.layout_g2:16}}>16 · Sides - aft deck</option>
+<option value="17" {{selected:gun1.layout_g2:17}}>17 · Sides - aft deck aft</option>
+<option value="18" {{selected:gun1.layout_g2:18}}>18 · None</option></select></label>
+<label>{{label:gun1.guns_in_mount_g2}}<select name="gun1.guns_in_mount_g2">
+<option value="0" {{selected:gun1.guns_in_mount_g2:0}}>0 · Single mount (1)</option>
+<option value="1" {{selected:gun1.guns_in_mount_g2:1}}>1 · 2 row twin mount (2)</option>
+<option value="2" {{selected:gun1.guns_in_mount_g2:2}}>2 · 4 row quad mount (4)</option>
+<option value="3" {{selected:gun1.guns_in_mount_g2:3}}>3 · Twin mount (2)</option>
+<option value="4" {{selected:gun1.guns_in_mount_g2:4}}>4 · 2-gun mount (2)</option>
+<option value="5" {{selected:gun1.guns_in_mount_g2:5}}>5 · 2 row quad mount (4)</option>
+<option value="6" {{selected:gun1.guns_in_mount_g2:6}}>6 · Triple mount (3)</option>
+<option value="7" {{selected:gun1.guns_in_mount_g2:7}}>7 · 3-gun mount (3)</option>
+<option value="8" {{selected:gun1.guns_in_mount_g2:8}}>8 · 2 row sextuple mount (6)</option>
+<option value="9" {{selected:gun1.guns_in_mount_g2:9}}>9 · Quad mount (4)</option>
+<option value="10" {{selected:gun1.guns_in_mount_g2:10}}>10 · 4-gun mount (4)</option>
+<option value="11" {{selected:gun1.guns_in_mount_g2:11}}>11 · 2 row octuple mount (8)</option>
+<option value="12" {{selected:gun1.guns_in_mount_g2:12}}>12 · Quintuple mount (5)</option>
+<option value="13" {{selected:gun1.guns_in_mount_g2:13}}>13 · 5-gun mount (5)</option>
+<option value="14" {{selected:gun1.guns_in_mount_g2:14}}>14 · 2 row decuple mount (10)</option></select></label>
+<label>{{label:gun1.mount_super_g2}}<input type="number" step="any" value="{{value:gun1.mount_super_g2}}" name="gun1.mount_super_g2"></label>
+<label>{{label:gun1.mount_deck_g2}}<input type="number" step="any" value="{{value:gun1.mount_deck_g2}}" name="gun1.mount_deck_g2"></label>
+<label>{{label:gun1.mount_sub_g2}}<input type="number" step="any" value="{{value:gun1.mount_sub_g2}}" name="gun1.mount_sub_g2"></label>
+<label>{{label:gun1.weight_adj_g2}}<input type="number" step="any" value="{{value:gun1.weight_adj_g2}}" name="gun1.weight_adj_g2"></label>
+</div>
+<h2>Mount armour (in)</h2>
+<div class="grid">
+<label>{{label:gun1.arm_face}}<input type="number" step="any" value="{{value:gun1.arm_face}}" name="gun1.arm_face"></label>
+<label>{{label:gun1.arm_back}}<input type="number" step="any" value="{{value:gun1.arm_back}}" name="gun1.arm_back"></label>
+<label>{{label:gun1.arm_bottom}}<input type="number" step="any" value="{{value:gun1.arm_bottom}}" name="gun1.arm_bottom"></label>
+<label class="check"><input type="hidden" name="gun1.super_super_chk" value="false"><input type="checkbox" name="gun1.super_super_chk" value="true" {{checked:gun1.super_super_chk}}> Super-superfiring</label>
+<label class="check"><input type="hidden" name="gun1.sub_sub_chk" value="false"><input type="checkbox" name="gun1.sub_sub_chk" value="true" {{checked:gun1.sub_sub_chk}}> Lower casemates</label>
+</div>
+</details>
+<details class="battery-section" id="gun2">
+<summary>Battery 3</summary>
+<h2>Guns</h2>
+<div class="grid">
+<label>{{label:gun2.barrels}}<input type="number" step="any" value="{{value:gun2.barrels}}" name="gun2.barrels"></label>
+<label>{{label:gun2.calibre}}<input type="number" step="any" value="{{value:gun2.calibre}}" name="gun2.calibre"></label>
+<label>{{label:gun2.cal_length}}<input type="number" step="any" value="{{value:gun2.cal_length}}" name="gun2.cal_length"></label>
+<label>{{label:gun2.date_gun}}<input type="number" step="any" value="{{value:gun2.date_gun}}" name="gun2.date_gun"></label>
+<label>{{label:gun2.magazine}}<input type="number" step="any" value="{{value:gun2.magazine}}" name="gun2.magazine"></label>
+<label>{{label:gun2.gun_type}}<select name="gun2.gun_type">
+<option value="0" {{selected:gun2.gun_type:0}}>0 · Muzzle loading gun</option>
+<option value="1" {{selected:gun2.gun_type:1}}>1 · Breech loading gun</option>
+<option value="2" {{selected:gun2.gun_type:2}}>2 · Quick firing gun</option>
+<option value="3" {{selected:gun2.gun_type:3}}>3 · Anti-air gun</option>
+<option value="4" {{selected:gun2.gun_type:4}}>4 · Dual purpose gun</option>
+<option value="5" {{selected:gun2.gun_type:5}}>5 · Auto rapid fire gun</option>
+<option value="6" {{selected:gun2.gun_type:6}}>6 · Machine gun</option></select></label>
+<label>{{label:gun2.mount_type}}<select name="gun2.mount_type">
+<option value="0" {{selected:gun2.mount_type:0}}>0 · Broadside</option>
+<option value="1" {{selected:gun2.mount_type:1}}>1 · Coles/Ericsson turret</option>
+<option value="2" {{selected:gun2.mount_type:2}}>2 · Open barbette</option>
+<option value="3" {{selected:gun2.mount_type:3}}>3 · Turret on barbette</option>
+<option value="4" {{selected:gun2.mount_type:4}}>4 · Deck and hoist</option>
+<option value="5" {{selected:gun2.mount_type:5}}>5 · Deck mount</option>
+<option value="6" {{selected:gun2.mount_type:6}}>6 · Casemate</option></select></label>
+<label>{{label:gun2.mounts}}<input type="number" step="any" value="{{value:gun2.mounts}}" name="gun2.mounts"></label>
+</div>
+<h2>Group 1</h2>
+<div class="grid">
+<label>{{label:gun2.layout_g1}}<select name="gun2.layout_g1">
+<option value="0" {{selected:gun2.layout_g1:0}}>0 · Centreline - distributed</option>
+<option value="1" {{selected:gun2.layout_g1:1}}>1 · Centreline - ends (fore &gt;= aft)</option>
+<option value="2" {{selected:gun2.layout_g1:2}}>2 · Centreline - ends (aft &gt;= fore)</option>
+<option value="3" {{selected:gun2.layout_g1:3}}>3 · Centreline - fore deck forward</option>
+<option value="4" {{selected:gun2.layout_g1:4}}>4 · Centreline - fore deck</option>
+<option value="5" {{selected:gun2.layout_g1:5}}>5 · Centreline - fore deck aft</option>
+<option value="6" {{selected:gun2.layout_g1:6}}>6 · Centreline - aft deck forward</option>
+<option value="7" {{selected:gun2.layout_g1:7}}>7 · Centreline - aft deck</option>
+<option value="8" {{selected:gun2.layout_g1:8}}>8 · Centreline - aft deck aft</option>
+<option value="9" {{selected:gun2.layout_g1:9}}>9 · Sides - distributed</option>
+<option value="10" {{selected:gun2.layout_g1:10}}>10 · Sides - ends (fore &gt;= aft)</option>
+<option value="11" {{selected:gun2.layout_g1:11}}>11 · Sides - ends (aft &gt;= fore)</option>
+<option value="12" {{selected:gun2.layout_g1:12}}>12 · Sides - fore deck forward</option>
+<option value="13" {{selected:gun2.layout_g1:13}}>13 · Sides - fore deck</option>
+<option value="14" {{selected:gun2.layout_g1:14}}>14 · Sides - fore deck aft</option>
+<option value="15" {{selected:gun2.layout_g1:15}}>15 · Sides - aft deck forward</option>
+<option value="16" {{selected:gun2.layout_g1:16}}>16 · Sides - aft deck</option>
+<option value="17" {{selected:gun2.layout_g1:17}}>17 · Sides - aft deck aft</option>
+<option value="18" {{selected:gun2.layout_g1:18}}>18 · None</option></select></label>
+<label>{{label:gun2.guns_in_mount_g1}}<select name="gun2.guns_in_mount_g1">
+<option value="0" {{selected:gun2.guns_in_mount_g1:0}}>0 · Single mount (1)</option>
+<option value="1" {{selected:gun2.guns_in_mount_g1:1}}>1 · 2 row twin mount (2)</option>
+<option value="2" {{selected:gun2.guns_in_mount_g1:2}}>2 · 4 row quad mount (4)</option>
+<option value="3" {{selected:gun2.guns_in_mount_g1:3}}>3 · Twin mount (2)</option>
+<option value="4" {{selected:gun2.guns_in_mount_g1:4}}>4 · 2-gun mount (2)</option>
+<option value="5" {{selected:gun2.guns_in_mount_g1:5}}>5 · 2 row quad mount (4)</option>
+<option value="6" {{selected:gun2.guns_in_mount_g1:6}}>6 · Triple mount (3)</option>
+<option value="7" {{selected:gun2.guns_in_mount_g1:7}}>7 · 3-gun mount (3)</option>
+<option value="8" {{selected:gun2.guns_in_mount_g1:8}}>8 · 2 row sextuple mount (6)</option>
+<option value="9" {{selected:gun2.guns_in_mount_g1:9}}>9 · Quad mount (4)</option>
+<option value="10" {{selected:gun2.guns_in_mount_g1:10}}>10 · 4-gun mount (4)</option>
+<option value="11" {{selected:gun2.guns_in_mount_g1:11}}>11 · 2 row octuple mount (8)</option>
+<option value="12" {{selected:gun2.guns_in_mount_g1:12}}>12 · Quintuple mount (5)</option>
+<option value="13" {{selected:gun2.guns_in_mount_g1:13}}>13 · 5-gun mount (5)</option>
+<option value="14" {{selected:gun2.guns_in_mount_g1:14}}>14 · 2 row decuple mount (10)</option></select></label>
+<label>{{label:gun2.mount_super_g1}}<input type="number" step="any" value="{{value:gun2.mount_super_g1}}" name="gun2.mount_super_g1"></label>
+<label>{{label:gun2.mount_sub_g1}}<input type="number" step="any" value="{{value:gun2.mount_sub_g1}}" name="gun2.mount_sub_g1"></label>
+<label>{{label:gun2.weight_adj_g1}}<input type="number" step="any" value="{{value:gun2.weight_adj_g1}}" name="gun2.weight_adj_g1"></label>
+</div>
+<h2>Group 2</h2>
+<div class="grid">
+<label>{{label:gun2.layout_g2}}<select name="gun2.layout_g2">
+<option value="0" {{selected:gun2.layout_g2:0}}>0 · Centreline - distributed</option>
+<option value="1" {{selected:gun2.layout_g2:1}}>1 · Centreline - ends (fore &gt;= aft)</option>
+<option value="2" {{selected:gun2.layout_g2:2}}>2 · Centreline - ends (aft &gt;= fore)</option>
+<option value="3" {{selected:gun2.layout_g2:3}}>3 · Centreline - fore deck forward</option>
+<option value="4" {{selected:gun2.layout_g2:4}}>4 · Centreline - fore deck</option>
+<option value="5" {{selected:gun2.layout_g2:5}}>5 · Centreline - fore deck aft</option>
+<option value="6" {{selected:gun2.layout_g2:6}}>6 · Centreline - aft deck forward</option>
+<option value="7" {{selected:gun2.layout_g2:7}}>7 · Centreline - aft deck</option>
+<option value="8" {{selected:gun2.layout_g2:8}}>8 · Centreline - aft deck aft</option>
+<option value="9" {{selected:gun2.layout_g2:9}}>9 · Sides - distributed</option>
+<option value="10" {{selected:gun2.layout_g2:10}}>10 · Sides - ends (fore &gt;= aft)</option>
+<option value="11" {{selected:gun2.layout_g2:11}}>11 · Sides - ends (aft &gt;= fore)</option>
+<option value="12" {{selected:gun2.layout_g2:12}}>12 · Sides - fore deck forward</option>
+<option value="13" {{selected:gun2.layout_g2:13}}>13 · Sides - fore deck</option>
+<option value="14" {{selected:gun2.layout_g2:14}}>14 · Sides - fore deck aft</option>
+<option value="15" {{selected:gun2.layout_g2:15}}>15 · Sides - aft deck forward</option>
+<option value="16" {{selected:gun2.layout_g2:16}}>16 · Sides - aft deck</option>
+<option value="17" {{selected:gun2.layout_g2:17}}>17 · Sides - aft deck aft</option>
+<option value="18" {{selected:gun2.layout_g2:18}}>18 · None</option></select></label>
+<label>{{label:gun2.guns_in_mount_g2}}<select name="gun2.guns_in_mount_g2">
+<option value="0" {{selected:gun2.guns_in_mount_g2:0}}>0 · Single mount (1)</option>
+<option value="1" {{selected:gun2.guns_in_mount_g2:1}}>1 · 2 row twin mount (2)</option>
+<option value="2" {{selected:gun2.guns_in_mount_g2:2}}>2 · 4 row quad mount (4)</option>
+<option value="3" {{selected:gun2.guns_in_mount_g2:3}}>3 · Twin mount (2)</option>
+<option value="4" {{selected:gun2.guns_in_mount_g2:4}}>4 · 2-gun mount (2)</option>
+<option value="5" {{selected:gun2.guns_in_mount_g2:5}}>5 · 2 row quad mount (4)</option>
+<option value="6" {{selected:gun2.guns_in_mount_g2:6}}>6 · Triple mount (3)</option>
+<option value="7" {{selected:gun2.guns_in_mount_g2:7}}>7 · 3-gun mount (3)</option>
+<option value="8" {{selected:gun2.guns_in_mount_g2:8}}>8 · 2 row sextuple mount (6)</option>
+<option value="9" {{selected:gun2.guns_in_mount_g2:9}}>9 · Quad mount (4)</option>
+<option value="10" {{selected:gun2.guns_in_mount_g2:10}}>10 · 4-gun mount (4)</option>
+<option value="11" {{selected:gun2.guns_in_mount_g2:11}}>11 · 2 row octuple mount (8)</option>
+<option value="12" {{selected:gun2.guns_in_mount_g2:12}}>12 · Quintuple mount (5)</option>
+<option value="13" {{selected:gun2.guns_in_mount_g2:13}}>13 · 5-gun mount (5)</option>
+<option value="14" {{selected:gun2.guns_in_mount_g2:14}}>14 · 2 row decuple mount (10)</option></select></label>
+<label>{{label:gun2.mount_super_g2}}<input type="number" step="any" value="{{value:gun2.mount_super_g2}}" name="gun2.mount_super_g2"></label>
+<label>{{label:gun2.mount_deck_g2}}<input type="number" step="any" value="{{value:gun2.mount_deck_g2}}" name="gun2.mount_deck_g2"></label>
+<label>{{label:gun2.mount_sub_g2}}<input type="number" step="any" value="{{value:gun2.mount_sub_g2}}" name="gun2.mount_sub_g2"></label>
+<label>{{label:gun2.weight_adj_g2}}<input type="number" step="any" value="{{value:gun2.weight_adj_g2}}" name="gun2.weight_adj_g2"></label>
+</div>
+<h2>Mount armour (in)</h2>
+<div class="grid">
+<label>{{label:gun2.arm_face}}<input type="number" step="any" value="{{value:gun2.arm_face}}" name="gun2.arm_face"></label>
+<label>{{label:gun2.arm_back}}<input type="number" step="any" value="{{value:gun2.arm_back}}" name="gun2.arm_back"></label>
+<label>{{label:gun2.arm_bottom}}<input type="number" step="any" value="{{value:gun2.arm_bottom}}" name="gun2.arm_bottom"></label>
+<label class="check"><input type="hidden" name="gun2.super_super_chk" value="false"><input type="checkbox" name="gun2.super_super_chk" value="true" {{checked:gun2.super_super_chk}}> Super-superfiring</label>
+<label class="check"><input type="hidden" name="gun2.sub_sub_chk" value="false"><input type="checkbox" name="gun2.sub_sub_chk" value="true" {{checked:gun2.sub_sub_chk}}> Lower casemates</label>
+</div>
+</details>
+<details class="battery-section" id="gun3">
+<summary>Battery 4</summary>
+<h2>Guns</h2>
+<div class="grid">
+<label>{{label:gun3.barrels}}<input type="number" step="any" value="{{value:gun3.barrels}}" name="gun3.barrels"></label>
+<label>{{label:gun3.calibre}}<input type="number" step="any" value="{{value:gun3.calibre}}" name="gun3.calibre"></label>
+<label>{{label:gun3.cal_length}}<input type="number" step="any" value="{{value:gun3.cal_length}}" name="gun3.cal_length"></label>
+<label>{{label:gun3.date_gun}}<input type="number" step="any" value="{{value:gun3.date_gun}}" name="gun3.date_gun"></label>
+<label>{{label:gun3.magazine}}<input type="number" step="any" value="{{value:gun3.magazine}}" name="gun3.magazine"></label>
+<label>{{label:gun3.gun_type}}<select name="gun3.gun_type">
+<option value="0" {{selected:gun3.gun_type:0}}>0 · Muzzle loading gun</option>
+<option value="1" {{selected:gun3.gun_type:1}}>1 · Breech loading gun</option>
+<option value="2" {{selected:gun3.gun_type:2}}>2 · Quick firing gun</option>
+<option value="3" {{selected:gun3.gun_type:3}}>3 · Anti-air gun</option>
+<option value="4" {{selected:gun3.gun_type:4}}>4 · Dual purpose gun</option>
+<option value="5" {{selected:gun3.gun_type:5}}>5 · Auto rapid fire gun</option>
+<option value="6" {{selected:gun3.gun_type:6}}>6 · Machine gun</option></select></label>
+<label>{{label:gun3.mount_type}}<select name="gun3.mount_type">
+<option value="0" {{selected:gun3.mount_type:0}}>0 · Broadside</option>
+<option value="1" {{selected:gun3.mount_type:1}}>1 · Coles/Ericsson turret</option>
+<option value="2" {{selected:gun3.mount_type:2}}>2 · Open barbette</option>
+<option value="3" {{selected:gun3.mount_type:3}}>3 · Turret on barbette</option>
+<option value="4" {{selected:gun3.mount_type:4}}>4 · Deck and hoist</option>
+<option value="5" {{selected:gun3.mount_type:5}}>5 · Deck mount</option>
+<option value="6" {{selected:gun3.mount_type:6}}>6 · Casemate</option></select></label>
+<label>{{label:gun3.mounts}}<input type="number" step="any" value="{{value:gun3.mounts}}" name="gun3.mounts"></label>
+</div>
+<h2>Group 1</h2>
+<div class="grid">
+<label>{{label:gun3.layout_g1}}<select name="gun3.layout_g1">
+<option value="0" {{selected:gun3.layout_g1:0}}>0 · Centreline - distributed</option>
+<option value="1" {{selected:gun3.layout_g1:1}}>1 · Centreline - ends (fore &gt;= aft)</option>
+<option value="2" {{selected:gun3.layout_g1:2}}>2 · Centreline - ends (aft &gt;= fore)</option>
+<option value="3" {{selected:gun3.layout_g1:3}}>3 · Centreline - fore deck forward</option>
+<option value="4" {{selected:gun3.layout_g1:4}}>4 · Centreline - fore deck</option>
+<option value="5" {{selected:gun3.layout_g1:5}}>5 · Centreline - fore deck aft</option>
+<option value="6" {{selected:gun3.layout_g1:6}}>6 · Centreline - aft deck forward</option>
+<option value="7" {{selected:gun3.layout_g1:7}}>7 · Centreline - aft deck</option>
+<option value="8" {{selected:gun3.layout_g1:8}}>8 · Centreline - aft deck aft</option>
+<option value="9" {{selected:gun3.layout_g1:9}}>9 · Sides - distributed</option>
+<option value="10" {{selected:gun3.layout_g1:10}}>10 · Sides - ends (fore &gt;= aft)</option>
+<option value="11" {{selected:gun3.layout_g1:11}}>11 · Sides - ends (aft &gt;= fore)</option>
+<option value="12" {{selected:gun3.layout_g1:12}}>12 · Sides - fore deck forward</option>
+<option value="13" {{selected:gun3.layout_g1:13}}>13 · Sides - fore deck</option>
+<option value="14" {{selected:gun3.layout_g1:14}}>14 · Sides - fore deck aft</option>
+<option value="15" {{selected:gun3.layout_g1:15}}>15 · Sides - aft deck forward</option>
+<option value="16" {{selected:gun3.layout_g1:16}}>16 · Sides - aft deck</option>
+<option value="17" {{selected:gun3.layout_g1:17}}>17 · Sides - aft deck aft</option>
+<option value="18" {{selected:gun3.layout_g1:18}}>18 · None</option></select></label>
+<label>{{label:gun3.guns_in_mount_g1}}<select name="gun3.guns_in_mount_g1">
+<option value="0" {{selected:gun3.guns_in_mount_g1:0}}>0 · Single mount (1)</option>
+<option value="1" {{selected:gun3.guns_in_mount_g1:1}}>1 · 2 row twin mount (2)</option>
+<option value="2" {{selected:gun3.guns_in_mount_g1:2}}>2 · 4 row quad mount (4)</option>
+<option value="3" {{selected:gun3.guns_in_mount_g1:3}}>3 · Twin mount (2)</option>
+<option value="4" {{selected:gun3.guns_in_mount_g1:4}}>4 · 2-gun mount (2)</option>
+<option value="5" {{selected:gun3.guns_in_mount_g1:5}}>5 · 2 row quad mount (4)</option>
+<option value="6" {{selected:gun3.guns_in_mount_g1:6}}>6 · Triple mount (3)</option>
+<option value="7" {{selected:gun3.guns_in_mount_g1:7}}>7 · 3-gun mount (3)</option>
+<option value="8" {{selected:gun3.guns_in_mount_g1:8}}>8 · 2 row sextuple mount (6)</option>
+<option value="9" {{selected:gun3.guns_in_mount_g1:9}}>9 · Quad mount (4)</option>
+<option value="10" {{selected:gun3.guns_in_mount_g1:10}}>10 · 4-gun mount (4)</option>
+<option value="11" {{selected:gun3.guns_in_mount_g1:11}}>11 · 2 row octuple mount (8)</option>
+<option value="12" {{selected:gun3.guns_in_mount_g1:12}}>12 · Quintuple mount (5)</option>
+<option value="13" {{selected:gun3.guns_in_mount_g1:13}}>13 · 5-gun mount (5)</option>
+<option value="14" {{selected:gun3.guns_in_mount_g1:14}}>14 · 2 row decuple mount (10)</option></select></label>
+<label>{{label:gun3.mount_super_g1}}<input type="number" step="any" value="{{value:gun3.mount_super_g1}}" name="gun3.mount_super_g1"></label>
+<label>{{label:gun3.mount_sub_g1}}<input type="number" step="any" value="{{value:gun3.mount_sub_g1}}" name="gun3.mount_sub_g1"></label>
+<label>{{label:gun3.weight_adj_g1}}<input type="number" step="any" value="{{value:gun3.weight_adj_g1}}" name="gun3.weight_adj_g1"></label>
+</div>
+<h2>Group 2</h2>
+<div class="grid">
+<label>{{label:gun3.layout_g2}}<select name="gun3.layout_g2">
+<option value="0" {{selected:gun3.layout_g2:0}}>0 · Centreline - distributed</option>
+<option value="1" {{selected:gun3.layout_g2:1}}>1 · Centreline - ends (fore &gt;= aft)</option>
+<option value="2" {{selected:gun3.layout_g2:2}}>2 · Centreline - ends (aft &gt;= fore)</option>
+<option value="3" {{selected:gun3.layout_g2:3}}>3 · Centreline - fore deck forward</option>
+<option value="4" {{selected:gun3.layout_g2:4}}>4 · Centreline - fore deck</option>
+<option value="5" {{selected:gun3.layout_g2:5}}>5 · Centreline - fore deck aft</option>
+<option value="6" {{selected:gun3.layout_g2:6}}>6 · Centreline - aft deck forward</option>
+<option value="7" {{selected:gun3.layout_g2:7}}>7 · Centreline - aft deck</option>
+<option value="8" {{selected:gun3.layout_g2:8}}>8 · Centreline - aft deck aft</option>
+<option value="9" {{selected:gun3.layout_g2:9}}>9 · Sides - distributed</option>
+<option value="10" {{selected:gun3.layout_g2:10}}>10 · Sides - ends (fore &gt;= aft)</option>
+<option value="11" {{selected:gun3.layout_g2:11}}>11 · Sides - ends (aft &gt;= fore)</option>
+<option value="12" {{selected:gun3.layout_g2:12}}>12 · Sides - fore deck forward</option>
+<option value="13" {{selected:gun3.layout_g2:13}}>13 · Sides - fore deck</option>
+<option value="14" {{selected:gun3.layout_g2:14}}>14 · Sides - fore deck aft</option>
+<option value="15" {{selected:gun3.layout_g2:15}}>15 · Sides - aft deck forward</option>
+<option value="16" {{selected:gun3.layout_g2:16}}>16 · Sides - aft deck</option>
+<option value="17" {{selected:gun3.layout_g2:17}}>17 · Sides - aft deck aft</option>
+<option value="18" {{selected:gun3.layout_g2:18}}>18 · None</option></select></label>
+<label>{{label:gun3.guns_in_mount_g2}}<select name="gun3.guns_in_mount_g2">
+<option value="0" {{selected:gun3.guns_in_mount_g2:0}}>0 · Single mount (1)</option>
+<option value="1" {{selected:gun3.guns_in_mount_g2:1}}>1 · 2 row twin mount (2)</option>
+<option value="2" {{selected:gun3.guns_in_mount_g2:2}}>2 · 4 row quad mount (4)</option>
+<option value="3" {{selected:gun3.guns_in_mount_g2:3}}>3 · Twin mount (2)</option>
+<option value="4" {{selected:gun3.guns_in_mount_g2:4}}>4 · 2-gun mount (2)</option>
+<option value="5" {{selected:gun3.guns_in_mount_g2:5}}>5 · 2 row quad mount (4)</option>
+<option value="6" {{selected:gun3.guns_in_mount_g2:6}}>6 · Triple mount (3)</option>
+<option value="7" {{selected:gun3.guns_in_mount_g2:7}}>7 · 3-gun mount (3)</option>
+<option value="8" {{selected:gun3.guns_in_mount_g2:8}}>8 · 2 row sextuple mount (6)</option>
+<option value="9" {{selected:gun3.guns_in_mount_g2:9}}>9 · Quad mount (4)</option>
+<option value="10" {{selected:gun3.guns_in_mount_g2:10}}>10 · 4-gun mount (4)</option>
+<option value="11" {{selected:gun3.guns_in_mount_g2:11}}>11 · 2 row octuple mount (8)</option>
+<option value="12" {{selected:gun3.guns_in_mount_g2:12}}>12 · Quintuple mount (5)</option>
+<option value="13" {{selected:gun3.guns_in_mount_g2:13}}>13 · 5-gun mount (5)</option>
+<option value="14" {{selected:gun3.guns_in_mount_g2:14}}>14 · 2 row decuple mount (10)</option></select></label>
+<label>{{label:gun3.mount_super_g2}}<input type="number" step="any" value="{{value:gun3.mount_super_g2}}" name="gun3.mount_super_g2"></label>
+<label>{{label:gun3.mount_deck_g2}}<input type="number" step="any" value="{{value:gun3.mount_deck_g2}}" name="gun3.mount_deck_g2"></label>
+<label>{{label:gun3.mount_sub_g2}}<input type="number" step="any" value="{{value:gun3.mount_sub_g2}}" name="gun3.mount_sub_g2"></label>
+<label>{{label:gun3.weight_adj_g2}}<input type="number" step="any" value="{{value:gun3.weight_adj_g2}}" name="gun3.weight_adj_g2"></label>
+</div>
+<h2>Mount armour (in)</h2>
+<div class="grid">
+<label>{{label:gun3.arm_face}}<input type="number" step="any" value="{{value:gun3.arm_face}}" name="gun3.arm_face"></label>
+<label>{{label:gun3.arm_back}}<input type="number" step="any" value="{{value:gun3.arm_back}}" name="gun3.arm_back"></label>
+<label>{{label:gun3.arm_bottom}}<input type="number" step="any" value="{{value:gun3.arm_bottom}}" name="gun3.arm_bottom"></label>
+<label class="check"><input type="hidden" name="gun3.super_super_chk" value="false"><input type="checkbox" name="gun3.super_super_chk" value="true" {{checked:gun3.super_super_chk}}> Super-superfiring</label>
+<label class="check"><input type="hidden" name="gun3.sub_sub_chk" value="false"><input type="checkbox" name="gun3.sub_sub_chk" value="true" {{checked:gun3.sub_sub_chk}}> Lower casemates</label>
+</div>
+</details>
+<details class="battery-section" id="gun4">
+<summary>Battery 5</summary>
+<h2>Guns</h2>
+<div class="grid">
+<label>{{label:gun4.barrels}}<input type="number" step="any" value="{{value:gun4.barrels}}" name="gun4.barrels"></label>
+<label>{{label:gun4.calibre}}<input type="number" step="any" value="{{value:gun4.calibre}}" name="gun4.calibre"></label>
+<label>{{label:gun4.cal_length}}<input type="number" step="any" value="{{value:gun4.cal_length}}" name="gun4.cal_length"></label>
+<label>{{label:gun4.date_gun}}<input type="number" step="any" value="{{value:gun4.date_gun}}" name="gun4.date_gun"></label>
+<label>{{label:gun4.magazine}}<input type="number" step="any" value="{{value:gun4.magazine}}" name="gun4.magazine"></label>
+<label>{{label:gun4.gun_type}}<select name="gun4.gun_type">
+<option value="0" {{selected:gun4.gun_type:0}}>0 · Muzzle loading gun</option>
+<option value="1" {{selected:gun4.gun_type:1}}>1 · Breech loading gun</option>
+<option value="2" {{selected:gun4.gun_type:2}}>2 · Quick firing gun</option>
+<option value="3" {{selected:gun4.gun_type:3}}>3 · Anti-air gun</option>
+<option value="4" {{selected:gun4.gun_type:4}}>4 · Dual purpose gun</option>
+<option value="5" {{selected:gun4.gun_type:5}}>5 · Auto rapid fire gun</option>
+<option value="6" {{selected:gun4.gun_type:6}}>6 · Machine gun</option></select></label>
+<label>{{label:gun4.mount_type}}<select name="gun4.mount_type">
+<option value="0" {{selected:gun4.mount_type:0}}>0 · Broadside</option>
+<option value="1" {{selected:gun4.mount_type:1}}>1 · Coles/Ericsson turret</option>
+<option value="2" {{selected:gun4.mount_type:2}}>2 · Open barbette</option>
+<option value="3" {{selected:gun4.mount_type:3}}>3 · Turret on barbette</option>
+<option value="4" {{selected:gun4.mount_type:4}}>4 · Deck and hoist</option>
+<option value="5" {{selected:gun4.mount_type:5}}>5 · Deck mount</option>
+<option value="6" {{selected:gun4.mount_type:6}}>6 · Casemate</option></select></label>
+<label>{{label:gun4.mounts}}<input type="number" step="any" value="{{value:gun4.mounts}}" name="gun4.mounts"></label>
+</div>
+<h2>Group 1</h2>
+<div class="grid">
+<label>{{label:gun4.layout_g1}}<select name="gun4.layout_g1">
+<option value="0" {{selected:gun4.layout_g1:0}}>0 · Centreline - distributed</option>
+<option value="1" {{selected:gun4.layout_g1:1}}>1 · Centreline - ends (fore &gt;= aft)</option>
+<option value="2" {{selected:gun4.layout_g1:2}}>2 · Centreline - ends (aft &gt;= fore)</option>
+<option value="3" {{selected:gun4.layout_g1:3}}>3 · Centreline - fore deck forward</option>
+<option value="4" {{selected:gun4.layout_g1:4}}>4 · Centreline - fore deck</option>
+<option value="5" {{selected:gun4.layout_g1:5}}>5 · Centreline - fore deck aft</option>
+<option value="6" {{selected:gun4.layout_g1:6}}>6 · Centreline - aft deck forward</option>
+<option value="7" {{selected:gun4.layout_g1:7}}>7 · Centreline - aft deck</option>
+<option value="8" {{selected:gun4.layout_g1:8}}>8 · Centreline - aft deck aft</option>
+<option value="9" {{selected:gun4.layout_g1:9}}>9 · Sides - distributed</option>
+<option value="10" {{selected:gun4.layout_g1:10}}>10 · Sides - ends (fore &gt;= aft)</option>
+<option value="11" {{selected:gun4.layout_g1:11}}>11 · Sides - ends (aft &gt;= fore)</option>
+<option value="12" {{selected:gun4.layout_g1:12}}>12 · Sides - fore deck forward</option>
+<option value="13" {{selected:gun4.layout_g1:13}}>13 · Sides - fore deck</option>
+<option value="14" {{selected:gun4.layout_g1:14}}>14 · Sides - fore deck aft</option>
+<option value="15" {{selected:gun4.layout_g1:15}}>15 · Sides - aft deck forward</option>
+<option value="16" {{selected:gun4.layout_g1:16}}>16 · Sides - aft deck</option>
+<option value="17" {{selected:gun4.layout_g1:17}}>17 · Sides - aft deck aft</option>
+<option value="18" {{selected:gun4.layout_g1:18}}>18 · None</option></select></label>
+<label>{{label:gun4.guns_in_mount_g1}}<select name="gun4.guns_in_mount_g1">
+<option value="0" {{selected:gun4.guns_in_mount_g1:0}}>0 · Single mount (1)</option>
+<option value="1" {{selected:gun4.guns_in_mount_g1:1}}>1 · 2 row twin mount (2)</option>
+<option value="2" {{selected:gun4.guns_in_mount_g1:2}}>2 · 4 row quad mount (4)</option>
+<option value="3" {{selected:gun4.guns_in_mount_g1:3}}>3 · Twin mount (2)</option>
+<option value="4" {{selected:gun4.guns_in_mount_g1:4}}>4 · 2-gun mount (2)</option>
+<option value="5" {{selected:gun4.guns_in_mount_g1:5}}>5 · 2 row quad mount (4)</option>
+<option value="6" {{selected:gun4.guns_in_mount_g1:6}}>6 · Triple mount (3)</option>
+<option value="7" {{selected:gun4.guns_in_mount_g1:7}}>7 · 3-gun mount (3)</option>
+<option value="8" {{selected:gun4.guns_in_mount_g1:8}}>8 · 2 row sextuple mount (6)</option>
+<option value="9" {{selected:gun4.guns_in_mount_g1:9}}>9 · Quad mount (4)</option>
+<option value="10" {{selected:gun4.guns_in_mount_g1:10}}>10 · 4-gun mount (4)</option>
+<option value="11" {{selected:gun4.guns_in_mount_g1:11}}>11 · 2 row octuple mount (8)</option>
+<option value="12" {{selected:gun4.guns_in_mount_g1:12}}>12 · Quintuple mount (5)</option>
+<option value="13" {{selected:gun4.guns_in_mount_g1:13}}>13 · 5-gun mount (5)</option>
+<option value="14" {{selected:gun4.guns_in_mount_g1:14}}>14 · 2 row decuple mount (10)</option></select></label>
+<label>{{label:gun4.mount_super_g1}}<input type="number" step="any" value="{{value:gun4.mount_super_g1}}" name="gun4.mount_super_g1"></label>
+<label>{{label:gun4.mount_sub_g1}}<input type="number" step="any" value="{{value:gun4.mount_sub_g1}}" name="gun4.mount_sub_g1"></label>
+<label>{{label:gun4.weight_adj_g1}}<input type="number" step="any" value="{{value:gun4.weight_adj_g1}}" name="gun4.weight_adj_g1"></label>
+</div>
+<h2>Group 2</h2>
+<div class="grid">
+<label>{{label:gun4.layout_g2}}<select name="gun4.layout_g2">
+<option value="0" {{selected:gun4.layout_g2:0}}>0 · Centreline - distributed</option>
+<option value="1" {{selected:gun4.layout_g2:1}}>1 · Centreline - ends (fore &gt;= aft)</option>
+<option value="2" {{selected:gun4.layout_g2:2}}>2 · Centreline - ends (aft &gt;= fore)</option>
+<option value="3" {{selected:gun4.layout_g2:3}}>3 · Centreline - fore deck forward</option>
+<option value="4" {{selected:gun4.layout_g2:4}}>4 · Centreline - fore deck</option>
+<option value="5" {{selected:gun4.layout_g2:5}}>5 · Centreline - fore deck aft</option>
+<option value="6" {{selected:gun4.layout_g2:6}}>6 · Centreline - aft deck forward</option>
+<option value="7" {{selected:gun4.layout_g2:7}}>7 · Centreline - aft deck</option>
+<option value="8" {{selected:gun4.layout_g2:8}}>8 · Centreline - aft deck aft</option>
+<option value="9" {{selected:gun4.layout_g2:9}}>9 · Sides - distributed</option>
+<option value="10" {{selected:gun4.layout_g2:10}}>10 · Sides - ends (fore &gt;= aft)</option>
+<option value="11" {{selected:gun4.layout_g2:11}}>11 · Sides - ends (aft &gt;= fore)</option>
+<option value="12" {{selected:gun4.layout_g2:12}}>12 · Sides - fore deck forward</option>
+<option value="13" {{selected:gun4.layout_g2:13}}>13 · Sides - fore deck</option>
+<option value="14" {{selected:gun4.layout_g2:14}}>14 · Sides - fore deck aft</option>
+<option value="15" {{selected:gun4.layout_g2:15}}>15 · Sides - aft deck forward</option>
+<option value="16" {{selected:gun4.layout_g2:16}}>16 · Sides - aft deck</option>
+<option value="17" {{selected:gun4.layout_g2:17}}>17 · Sides - aft deck aft</option>
+<option value="18" {{selected:gun4.layout_g2:18}}>18 · None</option></select></label>
+<label>{{label:gun4.guns_in_mount_g2}}<select name="gun4.guns_in_mount_g2">
+<option value="0" {{selected:gun4.guns_in_mount_g2:0}}>0 · Single mount (1)</option>
+<option value="1" {{selected:gun4.guns_in_mount_g2:1}}>1 · 2 row twin mount (2)</option>
+<option value="2" {{selected:gun4.guns_in_mount_g2:2}}>2 · 4 row quad mount (4)</option>
+<option value="3" {{selected:gun4.guns_in_mount_g2:3}}>3 · Twin mount (2)</option>
+<option value="4" {{selected:gun4.guns_in_mount_g2:4}}>4 · 2-gun mount (2)</option>
+<option value="5" {{selected:gun4.guns_in_mount_g2:5}}>5 · 2 row quad mount (4)</option>
+<option value="6" {{selected:gun4.guns_in_mount_g2:6}}>6 · Triple mount (3)</option>
+<option value="7" {{selected:gun4.guns_in_mount_g2:7}}>7 · 3-gun mount (3)</option>
+<option value="8" {{selected:gun4.guns_in_mount_g2:8}}>8 · 2 row sextuple mount (6)</option>
+<option value="9" {{selected:gun4.guns_in_mount_g2:9}}>9 · Quad mount (4)</option>
+<option value="10" {{selected:gun4.guns_in_mount_g2:10}}>10 · 4-gun mount (4)</option>
+<option value="11" {{selected:gun4.guns_in_mount_g2:11}}>11 · 2 row octuple mount (8)</option>
+<option value="12" {{selected:gun4.guns_in_mount_g2:12}}>12 · Quintuple mount (5)</option>
+<option value="13" {{selected:gun4.guns_in_mount_g2:13}}>13 · 5-gun mount (5)</option>
+<option value="14" {{selected:gun4.guns_in_mount_g2:14}}>14 · 2 row decuple mount (10)</option></select></label>
+<label>{{label:gun4.mount_super_g2}}<input type="number" step="any" value="{{value:gun4.mount_super_g2}}" name="gun4.mount_super_g2"></label>
+<label>{{label:gun4.mount_deck_g2}}<input type="number" step="any" value="{{value:gun4.mount_deck_g2}}" name="gun4.mount_deck_g2"></label>
+<label>{{label:gun4.mount_sub_g2}}<input type="number" step="any" value="{{value:gun4.mount_sub_g2}}" name="gun4.mount_sub_g2"></label>
+<label>{{label:gun4.weight_adj_g2}}<input type="number" step="any" value="{{value:gun4.weight_adj_g2}}" name="gun4.weight_adj_g2"></label>
+</div>
+<h2>Mount armour (in)</h2>
+<div class="grid">
+<label>{{label:gun4.arm_face}}<input type="number" step="any" value="{{value:gun4.arm_face}}" name="gun4.arm_face"></label>
+<label>{{label:gun4.arm_back}}<input type="number" step="any" value="{{value:gun4.arm_back}}" name="gun4.arm_back"></label>
+<label>{{label:gun4.arm_bottom}}<input type="number" step="any" value="{{value:gun4.arm_bottom}}" name="gun4.arm_bottom"></label>
+<label class="check"><input type="hidden" name="gun4.super_super_chk" value="false"><input type="checkbox" name="gun4.super_super_chk" value="true" {{checked:gun4.super_super_chk}}> Super-superfiring</label>
+<label class="check"><input type="hidden" name="gun4.sub_sub_chk" value="false"><input type="checkbox" name="gun4.sub_sub_chk" value="true" {{checked:gun4.sub_sub_chk}}> Lower casemates</label>
+</div>
+</details>
+</details>
+<details class="editor-section" id="weapons">
+<summary>Weapons &amp; Systems</summary>
+<fieldset>
+<legend>Torpedo set 1</legend>
+<div class="grid">
+<label>{{label:weap0.kind}}<select name="weap0.kind">
+<option value="torpedo" {{selected:weap0.kind:torpedo}}>Torpedo</option>
+<option value="mine" {{selected:weap0.kind:mine}}>Mine</option>
+<option value="dc" {{selected:weap0.kind:dc}}>Depth charge</option></select></label>
+<label>{{label:weap0.number}}<input type="number" step="any" value="{{value:weap0.number}}" name="weap0.number"></label>
+<label>{{label:weap0.loads}}<input type="number" step="any" value="{{value:weap0.loads}}" name="weap0.loads"></label>
+<label>{{label:weap0.size}}<input type="number" step="any" value="{{value:weap0.size}}" name="weap0.size"></label>
+<label>{{label:weap0.length}}<input type="number" step="any" value="{{value:weap0.length}}" name="weap0.length"></label>
+<label>{{label:weap0.location}}<select name="weap0.location">{{options:weap0.location}}</select></label>
+</div>
+</fieldset>
+<fieldset>
+<legend>Torpedo set 2</legend>
+<div class="grid">
+<label>{{label:weap1.kind}}<select name="weap1.kind">
+<option value="torpedo" {{selected:weap1.kind:torpedo}}>Torpedo</option>
+<option value="mine" {{selected:weap1.kind:mine}}>Mine</option>
+<option value="dc" {{selected:weap1.kind:dc}}>Depth charge</option></select></label>
+<label>{{label:weap1.number}}<input type="number" step="any" value="{{value:weap1.number}}" name="weap1.number"></label>
+<label>{{label:weap1.loads}}<input type="number" step="any" value="{{value:weap1.loads}}" name="weap1.loads"></label>
+<label>{{label:weap1.size}}<input type="number" step="any" value="{{value:weap1.size}}" name="weap1.size"></label>
+<label>{{label:weap1.length}}<input type="number" step="any" value="{{value:weap1.length}}" name="weap1.length"></label>
+<label>{{label:weap1.location}}<select name="weap1.location">{{options:weap1.location}}</select></label>
+</div>
+</fieldset>
+<fieldset>
+<legend>Mines</legend>
+<div class="grid">
+<label>{{label:weap2.kind}}<select name="weap2.kind">
+<option value="torpedo" {{selected:weap2.kind:torpedo}}>Torpedo</option>
+<option value="mine" {{selected:weap2.kind:mine}}>Mine</option>
+<option value="dc" {{selected:weap2.kind:dc}}>Depth charge</option></select></label>
+<label>{{label:weap2.number}}<input type="number" step="any" value="{{value:weap2.number}}" name="weap2.number"></label>
+<label>{{label:weap2.loads}}<input type="number" step="any" value="{{value:weap2.loads}}" name="weap2.loads"></label>
+<label>{{label:weap2.size}}<input type="number" step="any" value="{{value:weap2.size}}" name="weap2.size"></label>
+<label>{{label:weap2.length}}<input type="number" step="any" value="{{value:weap2.length}}" name="weap2.length"></label>
+<label>{{label:weap2.location}}<select name="weap2.location">{{options:weap2.location}}</select></label>
+</div>
+</fieldset>
+<fieldset>
+<legend>DC / AS mortars 1</legend>
+<div class="grid">
+<label>{{label:weap3.kind}}<select name="weap3.kind">
+<option value="torpedo" {{selected:weap3.kind:torpedo}}>Torpedo</option>
+<option value="mine" {{selected:weap3.kind:mine}}>Mine</option>
+<option value="dc" {{selected:weap3.kind:dc}}>Depth charge</option></select></label>
+<label>{{label:weap3.number}}<input type="number" step="any" value="{{value:weap3.number}}" name="weap3.number"></label>
+<label>{{label:weap3.loads}}<input type="number" step="any" value="{{value:weap3.loads}}" name="weap3.loads"></label>
+<label>{{label:weap3.size}}<input type="number" step="any" value="{{value:weap3.size}}" name="weap3.size"></label>
+<label>{{label:weap3.length}}<input type="number" step="any" value="{{value:weap3.length}}" name="weap3.length"></label>
+<label>{{label:weap3.location}}<select name="weap3.location">{{options:weap3.location}}</select></label>
+</div>
+</fieldset>
+<fieldset>
+<legend>DC / AS mortars 2</legend>
+<div class="grid">
+<label>{{label:weap4.kind}}<select name="weap4.kind">
+<option value="torpedo" {{selected:weap4.kind:torpedo}}>Torpedo</option>
+<option value="mine" {{selected:weap4.kind:mine}}>Mine</option>
+<option value="dc" {{selected:weap4.kind:dc}}>Depth charge</option></select></label>
+<label>{{label:weap4.number}}<input type="number" step="any" value="{{value:weap4.number}}" name="weap4.number"></label>
+<label>{{label:weap4.loads}}<input type="number" step="any" value="{{value:weap4.loads}}" name="weap4.loads"></label>
+<label>{{label:weap4.size}}<input type="number" step="any" value="{{value:weap4.size}}" name="weap4.size"></label>
+<label>{{label:weap4.length}}<input type="number" step="any" value="{{value:weap4.length}}" name="weap4.length"></label>
+<label>{{label:weap4.location}}<select name="weap4.location">{{options:weap4.location}}</select></label>
+</div>
+</fieldset>
+<h2>Electrical &amp; Combat Systems (Dimensionless Ideal-Type &amp; Mix-and-Match)</h2>
+<div class="grid">
+<label>{{label:systems.doctrine}}<select name="systems.doctrine">
+<option value="adaptive_auto" {{selected:systems.doctrine:adaptive_auto}}>Adaptive Auto (Dimensionless Match)</option>
+<option value="automation_all_electric" {{selected:systems.doctrine:automation_all_electric}}>Type I · Automated Radar &amp; All-Electric</option>
+<option value="all_weather_seakeeping" {{selected:systems.doctrine:all_weather_seakeeping}}>Type II · All-Weather Seakeeping &amp; Balanced ASW</option>
+<option value="long_range_optical_strike" {{selected:systems.doctrine:long_range_optical_strike}}>Type III · Long-Range Optical &amp; Heavy-Ordnance Strike</option>
+<option value="stereoscopic_subdivided" {{selected:systems.doctrine:stereoscopic_subdivided}}>Type IV · Stereoscopic Precision &amp; Subdivided Plant</option>
+<option value="custom" {{selected:systems.doctrine:custom}}>Custom Mix-and-Match</option></select></label>
+<label>{{label:systems.tactical_echelon}}<select name="systems.tactical_echelon">
+<option value="auto" {{selected:systems.tactical_echelon:auto}}>Auto (Dimensionless Echelon Match)</option>
+<option value="battle_line_main_body" {{selected:systems.tactical_echelon:battle_line_main_body}}>Echelon I · Main Body &amp; Line of Battle (主力决战本队)</option>
+<option value="fast_wing_vanguard" {{selected:systems.tactical_echelon:fast_wing_vanguard}}>Echelon II · Fast Wing &amp; Vanguard (快速翼与前卫游击队)</option>
+<option value="outer_scouting_screen" {{selected:systems.tactical_echelon:outer_scouting_screen}}>Echelon III · Scouting Line &amp; Outer Screen (外层侦察与搜索幕)</option>
+<option value="inner_fleet_screen" {{selected:systems.tactical_echelon:inner_fleet_screen}}>Echelon IV · Fleet Screen &amp; Inner Escort (舰队内层护卫幕)</option>
+<option value="flotilla_assault_line" {{selected:systems.tactical_echelon:flotilla_assault_line}}>Echelon V · Torpedo Flotillas &amp; Assault Line (水雷突击支队)</option></select></label>
+<label>{{label:systems.combat_modality}}<select name="systems.combat_modality">
+<option value="auto" {{selected:systems.combat_modality:auto}}>Auto (Dimensionless Modality Match)</option>
+<option value="heavy_artillery_citadel" {{selected:systems.combat_modality:heavy_artillery_citadel}}>Modality A · Heavy Artillery &amp; Armoured Citadel (重炮装甲堡垒)</option>
+<option value="rapid_fire_surface_gunnery" {{selected:systems.combat_modality:rapid_fire_surface_gunnery}}>Modality B · Rapid-Fire Surface Gunnery (高射速水面火炮)</option>
+<option value="aviation_deck_projection" {{selected:systems.combat_modality:aviation_deck_projection}}>Modality C · Aviation Flight Deck Projection (航空甲板立体投射)</option>
+<option value="massed_torpedo_strike" {{selected:systems.combat_modality:massed_torpedo_strike}}>Modality D · Massed Torpedo Strike (重雷击水面突击)</option>
+<option value="screen_escort_defense" {{selected:systems.combat_modality:screen_escort_defense}}>Modality E · AA &amp; ASW Screen Escort Defense (防空反潜多维护卫)</option></select></label>
+<label>{{label:systems.mobility_regime}}<select name="systems.mobility_regime">
+<option value="auto" {{selected:systems.mobility_regime:auto}}>Auto (Dimensionless Hydrodynamic Match)</option>
+<option value="heavy_displacement_block" {{selected:systems.mobility_regime:heavy_displacement_block}}>Regime 1 · Heavy Displacement Block Form (丰满排水量稳性体制)</option>
+<option value="trans_froude_fast_capital" {{selected:systems.mobility_regime:trans_froude_fast_capital}}>Regime 2 · Trans-Froude Fast Capital Hull (跨弗劳德高速主力体制)</option>
+<option value="slender_wave_cutting" {{selected:systems.mobility_regime:slender_wave_cutting}}>Regime 3 · Slender Wave-Cutting Seakeeping (细长破浪远洋巡航体制)</option>
+<option value="super_critical_high_fn" {{selected:systems.mobility_regime:super_critical_high_fn}}>Regime 4 · Super-Critical High-Fn &amp; Semi-Planing (超临界半滑行体制)</option></select></label>
+<label>{{label:systems.main_director}}<select name="systems.main_director">
+<option value="auto" {{selected:systems.main_director:auto}}>Auto (Dimensionless Match)</option>
+<option value="open_sights" {{selected:systems.main_director:open_sights}}>Open Sights &amp; Local Turret Hoods (Base 0m)</option>
+<option value="central_tower" {{selected:systems.main_director:central_tower}}>Central Sighting Tower + 2.7m Coincidence</option>
+<option value="weatherproof_dct" {{selected:systems.main_director:weatherproof_dct}}>Weatherproof Director Tower + 4.6m/9m Coincidence</option>
+<option value="armoured_stereoscopic_10m" {{selected:systems.main_director:armoured_stereoscopic_10m}}>Armoured Rotating Dome + 10.5m Stereoscopic</option>
+<option value="duplex_optical_tower_15m" {{selected:systems.main_director:duplex_optical_tower_15m}}>Elevated Duplex Tower + 15.5m Long-Baseline Optical</option>
+<option value="gyrostabilized_radar_blind_fire" {{selected:systems.main_director:gyrostabilized_radar_blind_fire}}>Gyrostabilized Director + Centimetric Blind-Fire Radar</option></select></label>
+<label>{{label:systems.aa_director}}<select name="systems.aa_director">
+<option value="auto" {{selected:systems.aa_director:auto}}>Auto (Dimensionless Match)</option>
+<option value="none" {{selected:systems.aa_director:none}}>None / Local Optical Ring Sights</option>
+<option value="high_angle_tachymetric" {{selected:systems.aa_director:high_angle_tachymetric}}>High-Angle Tachymetric Control Director</option>
+<option value="tri_axial_stabilized_sphere" {{selected:systems.aa_director:tri_axial_stabilized_sphere}}>Tri-Axially Stabilized Spherical Director</option>
+<option value="optical_lead_computing" {{selected:systems.aa_director:optical_lead_computing}}>Optical High-Angle Lead-Computing Director</option>
+<option value="dual_purpose_radar_director" {{selected:systems.aa_director:dual_purpose_radar_director}}>Dual-Purpose Gyrostabilized Radar Director</option></select></label>
+<label>{{label:systems.ballistic_computer}}<select name="systems.ballistic_computer">
+<option value="auto" {{selected:systems.ballistic_computer:auto}}>Auto (Dimensionless Match)</option>
+<option value="manual_tables" {{selected:systems.ballistic_computer:manual_tables}}>Manual Firing Tables &amp; Rate Slide Rules (Order 1)</option>
+<option value="mechanical_rate_clock" {{selected:systems.ballistic_computer:mechanical_rate_clock}}>Mechanical Range Clock &amp; Disc Integrator (Order 2)</option>
+<option value="electro_mechanical_table" {{selected:systems.ballistic_computer:electro_mechanical_table}}>Electro-Mechanical Plotting &amp; Fire-Control Table (Order 4)</option>
+<option value="high_velocity_analog" {{selected:systems.ballistic_computer:high_velocity_analog}}>High-Velocity Analog Ballistic Computer (Order 4)</option>
+<option value="multi_axis_triangulator" {{selected:systems.ballistic_computer:multi_axis_triangulator}}>Multi-Axis Target Triangulation &amp; Ballistic Table (Order 4)</option>
+<option value="gyro_cam_rangekeeper" {{selected:systems.ballistic_computer:gyro_cam_rangekeeper}}>3D-Cam Gyro-Coupled Mechanical Rangekeeper (Order 5)</option></select></label>
+<label>{{label:systems.radar_suite}}<select name="systems.radar_suite">
+<option value="auto" {{selected:systems.radar_suite:auto}}>Auto (Dimensionless Match)</option>
+<option value="none" {{selected:systems.radar_suite:none}}>None (Optical &amp; Wireless Telegraphy Only)</option>
+<option value="decimetric_surface_fc" {{selected:systems.radar_suite:decimetric_surface_fc}}>Decimetric Ranging Radar + Passive Warning</option>
+<option value="metric_search_magnetron" {{selected:systems.radar_suite:metric_search_magnetron}}>Metric Air/Surface Search + Cavity Magnetron</option>
+<option value="centimetric_fc_direction_finder" {{selected:systems.radar_suite:centimetric_fc_direction_finder}}>Centimetric Fire-Control Radar + HF/DF Finder</option>
+<option value="dual_band_blind_fire_cic" {{selected:systems.radar_suite:dual_band_blind_fire_cic}}>Dual-Band Search + Centimetric Blind-Fire + Full CIC</option></select></label>
+<label>{{label:systems.sonar_suite}}<select name="systems.sonar_suite">
+<option value="auto" {{selected:systems.sonar_suite:auto}}>Auto (Dimensionless Match)</option>
+<option value="none" {{selected:systems.sonar_suite:none}}>None</option>
+<option value="passive_hydrophones" {{selected:systems.sonar_suite:passive_hydrophones}}>Hull Passive Hydrophone Listening Array</option>
+<option value="active_quartz_dome" {{selected:systems.sonar_suite:active_quartz_dome}}>Retractable Active Piezoelectric Quartz Dome</option>
+<option value="multi_element_passive_array" {{selected:systems.sonar_suite:multi_element_passive_array}}>Multi-Element Balcony Passive Array + Active Pulse</option>
+<option value="high_power_search_sonar" {{selected:systems.sonar_suite:high_power_search_sonar}}>High-Power Magnetostrictive Searchlight Sonar</option></select></label>
+<label>{{label:systems.electrical_plant}}<select name="systems.electrical_plant">
+<option value="auto" {{selected:systems.electrical_plant:auto}}>Auto (Dimensionless Match)</option>
+<option value="compact_steam" {{selected:systems.electrical_plant:compact_steam}}>Compact Steam Dynamos (10–15% Reserve)</option>
+<option value="balanced_turbo_diesel" {{selected:systems.electrical_plant:balanced_turbo_diesel}}>Balanced Steam Turbo &amp; Emergency Diesel (25–30% Reserve)</option>
+<option value="subdivided_heavy_diesel" {{selected:systems.electrical_plant:subdivided_heavy_diesel}}>Multi-Compartment Heavy Diesel/Turbo (30–35% Reserve)</option>
+<option value="high_margin_ac_grid" {{selected:systems.electrical_plant:high_margin_ac_grid}}>High-Margin 450V AC All-Electric Grid (40–50% Reserve)</option></select></label>
+</div>
+<h2>Hull Subdivision &amp; TDS Architecture (Dimensionless &amp; Mix-and-Match)</h2>
+<div class="grid">
+<label>{{label:systems.transverse_subdivision}}<select name="systems.transverse_subdivision">
+<option value="auto" {{selected:systems.transverse_subdivision:auto}}>Auto (Dimensionless Subdivision Match)</option>
+<option value="single_file_transverse" {{selected:systems.transverse_subdivision:single_file_transverse}}>Single-File Without Centerline (单列通舱无中线壁)</option>
+<option value="twin_file_centerline" {{selected:systems.transverse_subdivision:twin_file_centerline}}>Twin-File Centerline Watertight Bulkhead (双列中线密闭隔壁)</option>
+<option value="triple_file_center_and_wings" {{selected:systems.transverse_subdivision:triple_file_center_and_wings}}>Triple-File Centerline &amp; Wings (三列中线机炉舱+双侧翼舱)</option>
+<option value="quad_file_multi_longitudinal" {{selected:systems.transverse_subdivision:quad_file_multi_longitudinal}}>Quad-File Multi-Longitudinal Cellular (四列多重纵隔舱蜂窝网络)</option></select></label>
+<label>{{label:systems.tds_architecture}}<select name="systems.tds_architecture">
+<option value="auto" {{selected:systems.tds_architecture:auto}}>Auto (Dimensionless TDS Match)</option>
+<option value="unarmoured_double_bottom" {{selected:systems.tds_architecture:unarmoured_double_bottom}}>Type 0 · Unarmoured Double Bottom (无装甲双层底)</option>
+<option value="coal_bunker_wing_bulkhead" {{selected:systems.tds_architecture:coal_bunker_wing_bulkhead}}>Type 1 · Coal Bunker Wing Bulkhead (储煤翼舱吸能)</option>
+<option value="external_blister_bulge" {{selected:systems.tds_architecture:external_blister_bulge}}>Type 2 · External Blister Bulge (外挂防雷突出部)</option>
+<option value="multi_layer_liquid_void" {{selected:systems.tds_architecture:multi_layer_liquid_void}}>Type 3 · Multi-Layer Liquid / Void (多层空液交替)</option>
+<option value="pugliese_cylindrical_absorber" {{selected:systems.tds_architecture:pugliese_cylindrical_absorber}}>Type 4 · Pugliese Collapsible Cylinder (普列塞吸能圆筒)</option>
+<option value="compound_ebonite_deep_tds" {{selected:systems.tds_architecture:compound_ebonite_deep_tds}}>Type 5 · Deep Ébonite Foam Compound (大纵深闭孔硬橡胶泡沫复合)</option></select></label>
+<label>{{label:systems.machinery_arrangement}}<select name="systems.machinery_arrangement">
+<option value="auto" {{selected:systems.machinery_arrangement:auto}}>Auto (Dimensionless Machinery Match)</option>
+<option value="grouped_boiler_forward" {{selected:systems.machinery_arrangement:grouped_boiler_forward}}>Arrangement 1 · Grouped Boilers Forward (集中式前炉后机 B-E)</option>
+<option value="grouped_engine_forward" {{selected:systems.machinery_arrangement:grouped_engine_forward}}>Arrangement 2 · Grouped Engines Forward (逆向集中式前机后炉 E-B)</option>
+<option value="sandwich_engine_boiler_engine" {{selected:systems.machinery_arrangement:sandwich_engine_boiler_engine}}>Arrangement 3 · Sandwich Engine-Boiler-Engine (夹心式 E-B-E)</option>
+<option value="unit_alternating_machinery" {{selected:systems.machinery_arrangement:unit_alternating_machinery}}>Arrangement 4 · Unit Alternating System (交替单元式 B-E-B-E)</option>
+<option value="compact_echelon_sural" {{selected:systems.machinery_arrangement:compact_echelon_sural}}>Arrangement 5 · Compact Echelon / Sural (梯队穿插增压紧凑型)</option>
+<option value="turbo_electric_distributed" {{selected:systems.machinery_arrangement:turbo_electric_distributed}}>Arrangement 6 · Turbo-Electric Distributed (涡轮电力分布式)</option></select></label>
+<label>{{label:systems.belt_tds_junction}}<select name="systems.belt_tds_junction">
+<option value="auto" {{selected:systems.belt_tds_junction:auto}}>Auto (Dimensionless Belt-TDS Match)</option>
+<option value="integral_tapered_holding_bulkhead" {{selected:systems.belt_tds_junction:integral_tapered_holding_bulkhead}}>Joint 1 · Integral Tapered Holding Bulkhead (连续削薄下延闭合)</option>
+<option value="turtleback_slope_knee_joint" {{selected:systems.belt_tds_junction:turtleback_slope_knee_joint}}>Joint 2 · Turtleback Slope Knee Joint (穹甲坡脚汇合节点)</option>
+<option value="spaced_absorber_shelf_joint" {{selected:systems.belt_tds_junction:spaced_absorber_shelf_joint}}>Joint 3 · Spaced Strake &amp; Absorber Shelf (防雷圆筒内倾搁板过渡)</option>
+<option value="stepped_shelf_citadel" {{selected:systems.belt_tds_junction:stepped_shelf_citadel}}>Joint 4 · Stepped Horizontal Shelf Citadel (阶梯装甲盒平台转接)</option>
+<option value="direct_skin_double_bottom" {{selected:systems.belt_tds_junction:direct_skin_double_bottom}}>Joint 5 · Direct Hull Skin to Double Bottom (平滑闭合双层底)</option></select></label>
+<label>{{label:systems.horizontal_protection}}<select name="systems.horizontal_protection">
+<option value="auto" {{selected:systems.horizontal_protection:auto}}>Auto (Dimensionless Deck Protection Match)</option>
+<option value="protected_turtleback_carapace" {{selected:systems.horizontal_protection:protected_turtleback_carapace}}>Deck 1 · Protected Turtleback Carapace (弧形穹甲防护壳 · 无主带)</option>
+<option value="low_turtleback_sloped_citadel" {{selected:systems.horizontal_protection:low_turtleback_sloped_citadel}}>Deck 2 · Low Turtleback Sloped Citadel (低置内倾穹甲 + 双层侧带)</option>
+<option value="multi_layer_bomb_decapping_sandwich" {{selected:systems.horizontal_protection:multi_layer_bomb_decapping_sandwich}}>Deck 3 · Multi-Layer Bomb-Decapping Sandwich (被帽剥离 + 主甲板 + 防破片三层)</option>
+<option value="monolithic_citadel_box_deck" {{selected:systems.horizontal_protection:monolithic_citadel_box_deck}}>Deck 4 · Monolithic Citadel Box Deck (高置单层承力厚甲板装甲盒)</option>
+<option value="armoured_flight_deck_hangar_box" {{selected:systems.horizontal_protection:armoured_flight_deck_hangar_box}}>Deck 5 · Armoured Flight Deck &amp; Hangar Box (航母装甲飞行甲板/封闭机库盒)</option>
+<option value="light_splinter_weather_deck" {{selected:systems.horizontal_protection:light_splinter_weather_deck}}>Deck 6 · Light Splinter Weather Deck (轻型单层防破片甲板)</option></select></label>
+</div>
+<h2>Miscellaneous weights (tons)</h2>
+<div class="grid">
+<label>{{label:misc.vital}}<input type="number" step="any" value="{{value:misc.vital}}" name="misc.vital"></label>
+<label>{{label:misc.hull}}<input type="number" step="any" value="{{value:misc.hull}}" name="misc.hull"></label>
+<label>{{label:misc.deck}}<input type="number" step="any" value="{{value:misc.deck}}" name="misc.deck"></label>
+<label>{{label:misc.above}}<input type="number" step="any" value="{{value:misc.above}}" name="misc.above"></label>
+<label>{{label:misc.void}}<input type="number" step="any" value="{{value:misc.void}}" name="misc.void"></label>
+</div>
+</details>
+<details class="editor-section" id="engine">
+<summary>Machinery</summary>
+<h2>Performance</h2>
+<div class="grid">
+<label>{{label:engine.speed_max}}<input type="number" step="any" value="{{value:engine.speed_max}}" name="engine.speed_max"></label>
+<label>{{label:engine.speed_cruise}}<input type="number" step="any" value="{{value:engine.speed_cruise}}" name="engine.speed_cruise"></label>
+<label>{{label:engine.range}}<input type="number" step="any" value="{{value:engine.range}}" name="engine.range"></label>
+<label>{{label:engine.pct_coal}}<input type="number" step="any" value="{{value:engine.pct_coal}}" name="engine.pct_coal"></label>
+<label>{{label:engine.screws}}<input type="number" step="any" value="{{value:engine.screws}}" name="engine.screws"></label>
+<label>{{label:perf.steadiness}}<input type="number" step="any" value="{{value:perf.steadiness}}" name="perf.steadiness"></label>
+</div>
+<h2>Fuel</h2>
+<div class="grid">
+<label class="check"><input type="hidden" name="engine.fuel0" value="false"><input type="checkbox" name="engine.fuel0" value="true" {{checked:engine.fuel0}}> Coal fired boilers</label>
+<label class="check"><input type="hidden" name="engine.fuel1" value="false"><input type="checkbox" name="engine.fuel1" value="true" {{checked:engine.fuel1}}> Oil fired boilers</label>
+<label class="check"><input type="hidden" name="engine.fuel2" value="false"><input type="checkbox" name="engine.fuel2" value="true" {{checked:engine.fuel2}}> Diesel motors</label>
+<label class="check"><input type="hidden" name="engine.fuel3" value="false"><input type="checkbox" name="engine.fuel3" value="true" {{checked:engine.fuel3}}> Petrol motors</label>
+<label class="check"><input type="hidden" name="engine.fuel4" value="false"><input type="checkbox" name="engine.fuel4" value="true" {{checked:engine.fuel4}}> Batteries</label>
+</div>
+<h2>Engines</h2>
+<div class="grid">
+<label class="check"><input type="hidden" name="engine.engine0" value="false"><input type="checkbox" name="engine.engine0" value="true" {{checked:engine.engine0}}> Simple reciprocating</label>
+<label class="check"><input type="hidden" name="engine.engine1" value="false"><input type="checkbox" name="engine.engine1" value="true" {{checked:engine.engine1}}> Complex reciprocating</label>
+<label class="check"><input type="hidden" name="engine.engine2" value="false"><input type="checkbox" name="engine.engine2" value="true" {{checked:engine.engine2}}> Steam turbines</label>
+</div>
+<h2>Drive</h2>
+<div class="grid">
+<label class="check"><input type="hidden" name="engine.drive0" value="false"><input type="checkbox" name="engine.drive0" value="true" {{checked:engine.drive0}}> Direct</label>
+<label class="check"><input type="hidden" name="engine.drive1" value="false"><input type="checkbox" name="engine.drive1" value="true" {{checked:engine.drive1}}> Geared</label>
+<label class="check"><input type="hidden" name="engine.drive2" value="false"><input type="checkbox" name="engine.drive2" value="true" {{checked:engine.drive2}}> Electric</label>
+<label class="check"><input type="hidden" name="engine.drive3" value="false"><input type="checkbox" name="engine.drive3" value="true" {{checked:engine.drive3}}> Hydraulic</label>
+</div>
+<h2>Resistance model</h2>
+<div class="grid">
+<label>{{label:engine.resistance_model}}<select name="engine.resistance_model">
+<option value="original" {{selected:engine.resistance_model:original}}>Original SpringSharp</option>
+<option value="holtrop" {{selected:engine.resistance_model:holtrop}}>Holtrop-Mennen</option></select></label>
+<label>{{label:engine.power_factor}}<input type="number" step="any" value="{{value:engine.power_factor}}" name="engine.power_factor"></label>
+<label>{{label:engine.original_power_factor}}<input type="number" step="any" value="{{value:engine.original_power_factor}}" name="engine.original_power_factor"></label>
+<label>{{label:engine.blend_weight}}<input type="number" step="any" value="{{value:engine.blend_weight}}" name="engine.blend_weight"></label>
+<label>{{label:engine.machinery_weight_factor}}<input type="number" step="any" value="{{value:engine.machinery_weight_factor}}" name="engine.machinery_weight_factor"></label>
+<label>{{label:engine.holtrop_viscous_factor}}<input type="number" step="any" value="{{value:engine.holtrop_viscous_factor}}" name="engine.holtrop_viscous_factor"></label>
+<label>{{label:engine.holtrop_wave_factor}}<input type="number" step="any" value="{{value:engine.holtrop_wave_factor}}" name="engine.holtrop_wave_factor"></label>
+<label>{{label:engine.holtrop_correlation_factor}}<input type="number" step="any" value="{{value:engine.holtrop_correlation_factor}}" name="engine.holtrop_correlation_factor"></label>
+</div>
+<h2>Internal-space overrides (0 = auto)</h2>
+<div class="grid">
+<label>{{label:spaces.crew_volume_per_person}}<input type="number" step="any" value="{{value:spaces.crew_volume_per_person}}" name="spaces.crew_volume_per_person"></label>
+<label>{{label:spaces.machinery_volume_per_kw}}<input type="number" step="any" value="{{value:spaces.machinery_volume_per_kw}}" name="spaces.machinery_volume_per_kw"></label>
+<label>{{label:spaces.stores_volume_per_ton}}<input type="number" step="any" value="{{value:spaces.stores_volume_per_ton}}" name="spaces.stores_volume_per_ton"></label>
+</div>
+</details>
+<details class="editor-section" id="superstructure"><summary>Superstructure</summary>
+<button name="action" value="superstructure_reset">Reset layout</button>
+<p class="hint">Auto layout with relative corrections or fixed geometry. Dimensions and positions are fractions of hull length, measured from the bow. Locked fields replace automatic results. Funnel corrections apply to the whole group. Aft corrections apply only to Low distributed / Fore–aft split.</p>
+<div class="grid">
+<label>Ideal type<select name="superstructure.archetype"><option value="auto" {{selected:superstructure.archetype:auto}}>Auto</option><option value="low" {{selected:superstructure.archetype:low}}>Low distributed</option><option value="compact" {{selected:superstructure.archetype:compact}}>Compact central</option><option value="split" {{selected:superstructure.archetype:split}}>Fore / aft split</option><option value="tower" {{selected:superstructure.archetype:tower}}>Concentrated tower</option><option value="aft_citadel" {{selected:superstructure.archetype:aft_citadel}}>Aft-shifted citadel</option><option value="flotilla" {{selected:superstructure.archetype:flotilla}}>Flotilla streamlined</option><option value="island" {{selected:superstructure.archetype:island}}>Side island</option></select></label>
+<label>Mast<select name="superstructure.mast"><option value="auto" {{selected:superstructure.mast:auto}}>Auto</option><option value="pole" {{selected:superstructure.mast:pole}}>Pole</option><option value="tripod" {{selected:superstructure.mast:tripod}}>Tripod</option><option value="lattice" {{selected:superstructure.mast:lattice}}>Lattice</option><option value="pagoda" {{selected:superstructure.mast:pagoda}}>Pagoda</option><option value="integrated" {{selected:superstructure.mast:integrated}}>Integrated tower</option></select></label>
+<label>{{label:superstructure.funnel_count}}<input name="superstructure.funnel_count" type="number" min="0" max="4" step="1" value="{{value:superstructure.funnel_count}}"></label>
+<label>{{label:superstructure.funnel_spacing}}<input name="superstructure.funnel_spacing" type="number" min="0" max="0.2" step="0.005" value="{{value:superstructure.funnel_spacing}}"></label>
+</div>
+<fieldset><legend>Bridge</legend><label class="check"><input type="hidden" name="superstructure.bridge.locked" value="false"><input type="checkbox" name="superstructure.bridge.locked" value="true" {{checked:superstructure.bridge.locked}}>Lock geometry</label><div class="grid"><label>{{label:superstructure.bridge.shift}}<input name="superstructure.bridge.shift" type="number" min="-0.5" max="0.5" step="0.005" value="{{value:superstructure.bridge.shift}}"></label>
+<label>{{label:superstructure.bridge.length_scale}}<input name="superstructure.bridge.length_scale" type="number" min="0.2" max="3" step="0.1" value="{{value:superstructure.bridge.length_scale}}"></label>
+<label>{{label:superstructure.bridge.height_scale}}<input name="superstructure.bridge.height_scale" type="number" min="0.2" max="3" step="0.1" value="{{value:superstructure.bridge.height_scale}}"></label>
+<label>{{label:superstructure.bridge.x}}<input name="superstructure.bridge.x" type="number" min="0" max="1" step="0.005" value="{{value:superstructure.bridge.x}}"></label>
+<label>{{label:superstructure.bridge.length}}<input name="superstructure.bridge.length" type="number" min="0.005" max="0.5" step="0.005" value="{{value:superstructure.bridge.length}}"></label>
+<label>{{label:superstructure.bridge.height}}<input name="superstructure.bridge.height" type="number" min="0.005" max="0.15" step="0.005" value="{{value:superstructure.bridge.height}}"></label>
+</div></fieldset>
+<fieldset><legend>Aft deckhouse</legend><label class="check"><input type="hidden" name="superstructure.aft.locked" value="false"><input type="checkbox" name="superstructure.aft.locked" value="true" {{checked:superstructure.aft.locked}}>Lock geometry</label><div class="grid"><label>{{label:superstructure.aft.shift}}<input name="superstructure.aft.shift" type="number" min="-0.5" max="0.5" step="0.005" value="{{value:superstructure.aft.shift}}"></label>
+<label>{{label:superstructure.aft.length_scale}}<input name="superstructure.aft.length_scale" type="number" min="0.2" max="3" step="0.1" value="{{value:superstructure.aft.length_scale}}"></label>
+<label>{{label:superstructure.aft.height_scale}}<input name="superstructure.aft.height_scale" type="number" min="0.2" max="3" step="0.1" value="{{value:superstructure.aft.height_scale}}"></label>
+<label>{{label:superstructure.aft.x}}<input name="superstructure.aft.x" type="number" min="0" max="1" step="0.005" value="{{value:superstructure.aft.x}}"></label>
+<label>{{label:superstructure.aft.length}}<input name="superstructure.aft.length" type="number" min="0.005" max="0.5" step="0.005" value="{{value:superstructure.aft.length}}"></label>
+<label>{{label:superstructure.aft.height}}<input name="superstructure.aft.height" type="number" min="0.005" max="0.15" step="0.005" value="{{value:superstructure.aft.height}}"></label>
+</div></fieldset>
+<fieldset><legend>Funnel group</legend><label class="check"><input type="hidden" name="superstructure.funnels.locked" value="false"><input type="checkbox" name="superstructure.funnels.locked" value="true" {{checked:superstructure.funnels.locked}}>Lock geometry</label><div class="grid"><label>{{label:superstructure.funnels.shift}}<input name="superstructure.funnels.shift" type="number" min="-0.5" max="0.5" step="0.005" value="{{value:superstructure.funnels.shift}}"></label>
+<label>{{label:superstructure.funnels.length_scale}}<input name="superstructure.funnels.length_scale" type="number" min="0.2" max="3" step="0.1" value="{{value:superstructure.funnels.length_scale}}"></label>
+<label>{{label:superstructure.funnels.height_scale}}<input name="superstructure.funnels.height_scale" type="number" min="0.2" max="3" step="0.1" value="{{value:superstructure.funnels.height_scale}}"></label>
+<label>{{label:superstructure.funnels.x}}<input name="superstructure.funnels.x" type="number" min="0" max="1" step="0.005" value="{{value:superstructure.funnels.x}}"></label>
+<label>{{label:superstructure.funnels.length}}<input name="superstructure.funnels.length" type="number" min="0.005" max="0.5" step="0.005" value="{{value:superstructure.funnels.length}}"></label>
+<label>{{label:superstructure.funnels.height}}<input name="superstructure.funnels.height" type="number" min="0.005" max="0.15" step="0.005" value="{{value:superstructure.funnels.height}}"></label>
+</div></fieldset>
+</details>

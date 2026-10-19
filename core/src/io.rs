@@ -14,6 +14,103 @@ pub fn serialize(ship: &ShipModel) -> String {
     let mut lines = vec!["SpringSharp Rust Save 1.0".to_string()];
     let mut push = |k: &str, v: String| lines.push(format!("{k}={v}"));
 
+    push(
+        "superstructure.archetype",
+        ship.superstructure.archetype.key().into(),
+    );
+    push(
+        "superstructure.funnel_count",
+        ship.superstructure.funnel_count.to_string(),
+    );
+    push(
+        "superstructure.funnel_spacing",
+        ship.superstructure.funnel_spacing.to_string(),
+    );
+    push(
+        "superstructure.bridge.locked",
+        ship.superstructure.bridge.locked.to_string(),
+    );
+    push(
+        "superstructure.bridge.shift",
+        ship.superstructure.bridge.shift.to_string(),
+    );
+    push(
+        "superstructure.bridge.length_scale",
+        ship.superstructure.bridge.length_scale.to_string(),
+    );
+    push(
+        "superstructure.bridge.height_scale",
+        ship.superstructure.bridge.height_scale.to_string(),
+    );
+    push(
+        "superstructure.bridge.x",
+        ship.superstructure.bridge.x.to_string(),
+    );
+    push(
+        "superstructure.bridge.length",
+        ship.superstructure.bridge.length.to_string(),
+    );
+    push(
+        "superstructure.bridge.height",
+        ship.superstructure.bridge.height.to_string(),
+    );
+    push(
+        "superstructure.aft.locked",
+        ship.superstructure.aft.locked.to_string(),
+    );
+    push(
+        "superstructure.aft.shift",
+        ship.superstructure.aft.shift.to_string(),
+    );
+    push(
+        "superstructure.aft.length_scale",
+        ship.superstructure.aft.length_scale.to_string(),
+    );
+    push(
+        "superstructure.aft.height_scale",
+        ship.superstructure.aft.height_scale.to_string(),
+    );
+    push(
+        "superstructure.aft.x",
+        ship.superstructure.aft.x.to_string(),
+    );
+    push(
+        "superstructure.aft.length",
+        ship.superstructure.aft.length.to_string(),
+    );
+    push(
+        "superstructure.aft.height",
+        ship.superstructure.aft.height.to_string(),
+    );
+    push(
+        "superstructure.funnels.locked",
+        ship.superstructure.funnels.locked.to_string(),
+    );
+    push(
+        "superstructure.funnels.shift",
+        ship.superstructure.funnels.shift.to_string(),
+    );
+    push(
+        "superstructure.funnels.length_scale",
+        ship.superstructure.funnels.length_scale.to_string(),
+    );
+    push(
+        "superstructure.funnels.height_scale",
+        ship.superstructure.funnels.height_scale.to_string(),
+    );
+    push(
+        "superstructure.funnels.x",
+        ship.superstructure.funnels.x.to_string(),
+    );
+    push(
+        "superstructure.funnels.length",
+        ship.superstructure.funnels.length.to_string(),
+    );
+    push(
+        "superstructure.funnels.height",
+        ship.superstructure.funnels.height.to_string(),
+    );
+    push("superstructure.mast", ship.superstructure.mast.key().into());
     push("meta.name", ship.name.clone());
     push("meta.country", ship.country.clone());
     push("meta.type", ship.ship_type.clone());
@@ -310,6 +407,14 @@ pub fn serialize(ship: &ShipModel) -> String {
         "systems.machinery_arrangement",
         ship.systems.machinery_arrangement.as_str().to_string(),
     );
+    push(
+        "systems.belt_tds_junction",
+        ship.systems.belt_tds_junction.as_str().to_string(),
+    );
+    push(
+        "systems.horizontal_protection",
+        ship.systems.horizontal_protection.as_str().to_string(),
+    );
     if let Some(kw) = ship.systems.custom_turbo_kw {
         push("systems.custom_turbo_kw", kw.to_string());
     }
@@ -470,6 +575,114 @@ fn set_value(ship: &mut ShipModel, key: &str, value: &str) -> Result<(), String>
     }
 
     let handled = match key {
+        "superstructure.mast" => {
+            ship.superstructure.mast =
+                crate::superstructure::MastStyle::parse(value).ok_or("Invalid mast style")?;
+            true
+        }
+        "superstructure.archetype" => {
+            ship.superstructure.archetype = crate::superstructure::Archetype::parse(value)
+                .ok_or("Invalid superstructure archetype")?;
+            true
+        }
+        "superstructure.funnel_count" => {
+            ship.superstructure.funnel_count =
+                check_range(parse_i32(value)? as f64, 0.0, 4.0, key)? as usize;
+            true
+        }
+        "superstructure.funnel_spacing" => {
+            ship.superstructure.funnel_spacing = check_range(parse_f64(value)?, 0.0, 0.2, key)?;
+            true
+        }
+        "superstructure.bridge.locked" => {
+            ship.superstructure.bridge.locked = parse_bool(value)?;
+            true
+        }
+        "superstructure.bridge.shift" => {
+            ship.superstructure.bridge.shift = check_range(parse_f64(value)?, -0.5, 0.5, key)?;
+            true
+        }
+        "superstructure.bridge.length_scale" => {
+            ship.superstructure.bridge.length_scale =
+                check_range(parse_f64(value)?, 0.2, 3.0, key)?;
+            true
+        }
+        "superstructure.bridge.height_scale" => {
+            ship.superstructure.bridge.height_scale =
+                check_range(parse_f64(value)?, 0.2, 3.0, key)?;
+            true
+        }
+        "superstructure.bridge.x" => {
+            ship.superstructure.bridge.x = check_range(parse_f64(value)?, 0.0, 1.0, key)?;
+            true
+        }
+        "superstructure.bridge.length" => {
+            ship.superstructure.bridge.length = check_range(parse_f64(value)?, 0.005, 0.5, key)?;
+            true
+        }
+        "superstructure.bridge.height" => {
+            ship.superstructure.bridge.height = check_range(parse_f64(value)?, 0.005, 0.15, key)?;
+            true
+        }
+        "superstructure.aft.locked" => {
+            ship.superstructure.aft.locked = parse_bool(value)?;
+            true
+        }
+        "superstructure.aft.shift" => {
+            ship.superstructure.aft.shift = check_range(parse_f64(value)?, -0.5, 0.5, key)?;
+            true
+        }
+        "superstructure.aft.length_scale" => {
+            ship.superstructure.aft.length_scale = check_range(parse_f64(value)?, 0.2, 3.0, key)?;
+            true
+        }
+        "superstructure.aft.height_scale" => {
+            ship.superstructure.aft.height_scale = check_range(parse_f64(value)?, 0.2, 3.0, key)?;
+            true
+        }
+        "superstructure.aft.x" => {
+            ship.superstructure.aft.x = check_range(parse_f64(value)?, 0.0, 1.0, key)?;
+            true
+        }
+        "superstructure.aft.length" => {
+            ship.superstructure.aft.length = check_range(parse_f64(value)?, 0.005, 0.5, key)?;
+            true
+        }
+        "superstructure.aft.height" => {
+            ship.superstructure.aft.height = check_range(parse_f64(value)?, 0.005, 0.15, key)?;
+            true
+        }
+        "superstructure.funnels.locked" => {
+            ship.superstructure.funnels.locked = parse_bool(value)?;
+            true
+        }
+        "superstructure.funnels.shift" => {
+            ship.superstructure.funnels.shift = check_range(parse_f64(value)?, -0.5, 0.5, key)?;
+            true
+        }
+        "superstructure.funnels.length_scale" => {
+            ship.superstructure.funnels.length_scale =
+                check_range(parse_f64(value)?, 0.2, 3.0, key)?;
+            true
+        }
+        "superstructure.funnels.height_scale" => {
+            ship.superstructure.funnels.height_scale =
+                check_range(parse_f64(value)?, 0.2, 3.0, key)?;
+            true
+        }
+        "superstructure.funnels.x" => {
+            ship.superstructure.funnels.x = check_range(parse_f64(value)?, 0.0, 1.0, key)?;
+            true
+        }
+        "superstructure.funnels.length" => {
+            ship.superstructure.funnels.length = check_range(parse_f64(value)?, 0.005, 0.5, key)?;
+            true
+        }
+        "superstructure.funnels.height" => {
+            ship.superstructure.funnels.height = check_range(parse_f64(value)?, 0.005, 0.15, key)?;
+            true
+        }
+
         "hull.length" => {
             ship.hull.length = check_range(parse_f64(value)?, 1.0, 2000.0, "hull.length")?;
             true
@@ -874,6 +1087,15 @@ fn set_value(ship: &mut ShipModel, key: &str, value: &str) -> Result<(), String>
         "systems.machinery_arrangement" => {
             ship.systems.machinery_arrangement =
                 crate::systems::MachineryArrangement::from_str_name(value);
+            true
+        }
+        "systems.belt_tds_junction" => {
+            ship.systems.belt_tds_junction = crate::systems::BeltTdsJunction::from_str_name(value);
+            true
+        }
+        "systems.horizontal_protection" => {
+            ship.systems.horizontal_protection =
+                crate::systems::HorizontalProtectionStyle::from_str_name(value);
             true
         }
         "systems.custom_turbo_kw" => {

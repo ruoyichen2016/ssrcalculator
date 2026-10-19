@@ -5,91 +5,24 @@
 //! ship-design inputs, a calibration page and a report/calculate page.
 
 use eframe::egui;
+use springsharp::presentation::fonts::TextLanguage;
+use springsharp::workbench::{Command, Workbench};
+use springsharp::DisplayName;
+use std::path::PathBuf;
 
-use springsharp::features::demo_ship;
-use springsharp::io::{load_from_file, save_to_file};
-use springsharp::model::{GunBattery, ResistanceModel, ShipModel, WeaponKind, WeaponMount};
-use springsharp::spaces::{
-    calculate_internal_spaces, suggest_compartment_placement, CompartmentPlacement,
-};
+use springsharp::model::{ResistanceModel, WeaponKind, WeaponMount};
+use springsharp::spaces::calculate_internal_spaces;
 use springsharp::systems::{
-    AaDirector, BallisticComputer, CombatModality, ElectricalPlantStyle, MainDirector,
-    MobilityRegime, RadarSuite, SonarSuite, StyleDoctrine, TacticalEchelon, TdsArchitecture,
-    TransverseSubdivision,
+    AaDirector, BallisticComputer, BeltTdsJunction, CombatModality, ElectricalPlantStyle,
+    HorizontalProtectionStyle, MainDirector, MobilityRegime, RadarSuite, SonarSuite, StyleDoctrine,
+    TacticalEchelon, TdsArchitecture, TransverseSubdivision,
 };
-use springsharp::{
-    compute_self_immunity_zone, get_preset, get_preset_benchmark, solve_displacement_scale,
-    PRESET_LIST,
+use springsharp::{compute_self_immunity_zone, get_preset_benchmark, PRESET_LIST};
+
+use springsharp::presentation::options::{
+    self as opts, BOW_TYPES as BOWS, GUNS_IN_MOUNT, GUN_TYPES, MOUNT_LAYOUTS as LAYOUTS,
+    MOUNT_TYPES, STERN_TYPES as STERNS,
 };
-
-const BOWS: &[&str] = &[
-    "Normal bow",
-    "Bulbous bow - straight",
-    "Bulbous bow - forward",
-    "Ram bow",
-];
-
-const STERNS: &[&str] = &["Cruiser stern", "Transom stern", "Round stern"];
-
-const GUN_TYPES: &[&str] = &[
-    "Muzzle loading gun",
-    "Breech loading gun",
-    "Quick firing gun",
-    "Anti-air gun",
-    "Dual purpose gun",
-    "Auto rapid fire gun",
-    "Machine gun",
-];
-
-const MOUNT_TYPES: &[&str] = &[
-    "Broadside",
-    "Coles/Ericsson turret",
-    "Open barbette",
-    "Turret on barbette",
-    "Deck and hoist",
-    "Deck mount",
-    "Casemate",
-];
-
-const GUNS_IN_MOUNT: &[&str] = &[
-    "Single mount (1)",
-    "2 row twin mount (2)",
-    "4 row quad mount (4)",
-    "Twin mount (2)",
-    "2-gun mount (2)",
-    "2 row quad mount (4)",
-    "Triple mount (3)",
-    "3-gun mount (3)",
-    "2 row sextuple mount (6)",
-    "Quad mount (4)",
-    "4-gun mount (4)",
-    "2 row octuple mount (8)",
-    "Quintuple mount (5)",
-    "5-gun mount (5)",
-    "2 row decuple mount (10)",
-];
-
-const LAYOUTS: &[&str] = &[
-    "Centreline - distributed",
-    "Centreline - ends (fore >= aft)",
-    "Centreline - ends (aft >= fore)",
-    "Centreline - fore deck forward",
-    "Centreline - fore deck",
-    "Centreline - fore deck aft",
-    "Centreline - aft deck forward",
-    "Centreline - aft deck",
-    "Centreline - aft deck aft",
-    "Sides - distributed",
-    "Sides - ends (fore >= aft)",
-    "Sides - ends (aft >= fore)",
-    "Sides - fore deck forward",
-    "Sides - fore deck",
-    "Sides - fore deck aft",
-    "Sides - aft deck forward",
-    "Sides - aft deck",
-    "Sides - aft deck aft",
-    "None",
-];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -106,28 +39,24 @@ enum Page {
 }
 
 pub struct SpringSharpApp {
-    ship: ShipModel,
+    workbench: Workbench,
     page: Page,
-    report: String,
-    save_path: String,
-    load_path: String,
+    current_path: Option<PathBuf>,
+    text_language: TextLanguage,
+    serif_titles: bool,
     status: String,
     regime_summary: String,
     selected_preset_index: Option<usize>,
     show_arcs: bool,
     target_cg: f64,
-    last_placement: Option<CompartmentPlacement>,
     target_displacement: f64,
     metric_units: bool,
-    baseline_ship: Option<ShipModel>,
     compare_preset_idx: Option<usize>,
 }
 
 impl SpringSharpApp {
     pub fn new() -> Self {
-        let mut ship = demo_ship();
-        ship.calculate();
-        let report = springsharp::features::generate_report(&ship);
+        let workbench = Workbench::default();
         let regime = springsharp::regime::run_loocv_regime();
         let mut regime_summary = format!(
             "regime (Holtrop + per-type factor): {:.2}%\noriginal + per-type factor:        {:.2}%\nHoltrop uncalibrated:              {:.2}%\n\nper ship type (nested LOOCV):\n",
@@ -139,149 +68,397 @@ impl SpringSharpApp {
             regime_summary.push_str(&format!("  {ty:<12} n={n:<2} {:.2}%\n", m * 100.0));
         }
         Self {
-            ship,
+            workbench,
             page: Page::Hull,
-            report,
-            save_path: "example.ssr".to_string(),
-            load_path: "example.ssr".to_string(),
+            current_path: None,
+            text_language: TextLanguage::Germanic,
+            serif_titles: false,
             status: "Demo design loaded".to_string(),
             regime_summary,
             selected_preset_index: None,
             show_arcs: false,
             target_cg: 0.45,
-            last_placement: None,
             target_displacement: 35000.0,
             metric_units: false,
-            baseline_ship: None,
             compare_preset_idx: None,
         }
     }
 
+    fn tr<'a>(&self, en: &'a str, zh: &'a str) -> &'a str {
+        crate::i18n::tr(self.text_language, en, zh)
+    }
+
+    fn execute(&mut self, command: Command<'_>) {
+        let replacing = matches!(
+            command,
+            Command::Demo | Command::Preset(_) | Command::Import(_)
+        );
+        self.status = match self.workbench.execute(command) {
+            Ok(message) => {
+                if replacing {
+                    self.current_path = None;
+                }
+                springsharp::command_message(message)
+            }
+            Err(error) => format!("Error: {error}"),
+        };
+    }
+
     fn recalculate(&mut self) {
-        self.ship.calculate();
-        self.report = springsharp::features::generate_report(&self.ship);
-        self.status = "Calculated".to_string();
+        self.execute(Command::Calculate);
+    }
+
+    fn open_design(&mut self) {
+        let dialog = rfd::FileDialog::new().add_filter("SpringSharp design", &["ssr"]);
+        if let Some(path) = dialog.pick_file() {
+            match std::fs::read_to_string(&path)
+                .map_err(|e| e.to_string())
+                .and_then(|text| self.workbench.execute(Command::Import(&text)))
+            {
+                Ok(event) => {
+                    self.status = springsharp::command_message(event);
+                    self.current_path = Some(path);
+                }
+                Err(error) => self.status = format!("Open failed: {error}"),
+            }
+        }
+    }
+
+    fn save_design(&mut self) {
+        let mut dialog = rfd::FileDialog::new().add_filter("SpringSharp design", &["ssr"]);
+        if let Some(path) = &self.current_path {
+            if let Some(parent) = path.parent() {
+                dialog = dialog.set_directory(parent);
+            }
+            if let Some(name) = path.file_name() {
+                dialog = dialog.set_file_name(name.to_string_lossy());
+            }
+        } else {
+            dialog = dialog.set_file_name("design.ssr");
+        }
+        if let Some(mut path) = dialog.save_file() {
+            if path.extension().is_none() {
+                path.set_extension("ssr");
+            }
+            let result = self.workbench.execute(Command::Calculate).and_then(|_| {
+                std::fs::write(&path, self.workbench.export_design()).map_err(|e| e.to_string())
+            });
+            match result {
+                Ok(()) => {
+                    self.status = format!("Saved {}", path.display());
+                    self.current_path = Some(path);
+                }
+                Err(error) => self.status = format!("Save failed: {error}"),
+            }
+        }
     }
 
     fn nav(&mut self, ui: &mut egui::Ui) {
-        ui.heading("SpringSharp Rust");
-        ui.separator();
-        for (page, name) in [
-            (Page::Hull, "Hull"),
-            (Page::Freeboard, "Freeboard"),
-            (Page::Armour, "Armour"),
-            (Page::Guns, "Guns"),
-            (Page::Weapons, "Weapons & Misc"),
-            (Page::Engine, "Engine"),
-            (Page::Blueprint, "Blueprint & Power"),
-            (Page::Spaces, "Spaces & Benchmarks"),
-            (Page::Calibration, "Calibration"),
-            (Page::Report, "Report"),
-        ] {
-            if ui.selectable_label(self.page == page, name).clicked() {
-                self.page = page;
+        use crate::theme;
+        let caption = |ui: &mut egui::Ui, t: &str| {
+            ui.add_space(10.0);
+            ui.label(
+                egui::RichText::new(t)
+                    .size(10.5)
+                    .strong()
+                    .color(theme::BRASS),
+            );
+            ui.add_space(2.0);
+        };
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("⚓").size(24.0).color(theme::BRASS));
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                ui.label(egui::RichText::new("SpringSharp").size(18.0).strong());
+                ui.label(
+                    egui::RichText::new(self.tr("Warship design workbench", "战舰总体设计工作台"))
+                        .small()
+                        .color(theme::MUTED),
+                );
+            });
+        });
+        ui.add_space(8.0);
+        let full = ui.available_width();
+        let calc = egui::Button::new(
+            egui::RichText::new(self.tr("⟳  Calculate", "⟳  计算指标"))
+                .strong()
+                .color(egui::Color32::WHITE),
+        )
+        .fill(egui::Color32::from_rgb(29, 91, 140))
+        .stroke(egui::Stroke::new(1.0, theme::ACCENT))
+        .corner_radius(egui::CornerRadius::same(9))
+        .min_size(egui::vec2(full, 32.0));
+        if ui.add(calc).clicked() {
+            self.recalculate();
+        }
+        ui.columns(2, |cols| {
+            let size = egui::vec2(cols[0].available_width(), 26.0);
+            if cols[0]
+                .add(egui::Button::new(self.tr("📂 Open…", "📂 打开…")).min_size(size))
+                .clicked()
+            {
+                self.open_design();
             }
+            if cols[1]
+                .add(egui::Button::new(self.tr("💾 Save…", "💾 保存…")).min_size(size))
+                .clicked()
+            {
+                self.save_design();
+            }
+        });
+
+        caption(ui, self.tr("DESIGN", "设计"));
+        for (page, icon, name) in [
+            (Page::Hull, "⛴", self.tr("Hull", "船体主尺度")),
+            (Page::Freeboard, "〰", self.tr("Freeboard", "干舷与型线")),
+            (Page::Armour, "🛡", self.tr("Armour", "装甲与防护")),
+            (Page::Guns, "🎯", self.tr("Guns", "舰炮武备")),
+            (
+                Page::Weapons,
+                "✴",
+                self.tr("Weapons & Misc", "副武器与杂项"),
+            ),
+            (Page::Engine, "⚙", self.tr("Engine", "动力推进")),
+        ] {
+            self.nav_item(ui, page, icon, name);
         }
-        ui.separator();
-        if ui.button("Calculate").clicked() {
-            self.recalculate();
+        caption(ui, self.tr("ANALYSIS", "分析与校核"));
+        for (page, icon, name) in [
+            (
+                Page::Blueprint,
+                "📐",
+                self.tr("Blueprint & Power", "总布置蓝图与功率"),
+            ),
+            (
+                Page::Spaces,
+                "▦",
+                self.tr("Spaces & Benchmarks", "舱室与规范校核"),
+            ),
+            (
+                Page::Calibration,
+                "📊",
+                self.tr("Calibration", "阻力与标定"),
+            ),
+            (Page::Report, "📄", self.tr("Report", "设计文本报告")),
+        ] {
+            self.nav_item(ui, page, icon, name);
         }
-        if ui.button("Load demo").clicked() {
-            self.ship = demo_ship();
-            self.selected_preset_index = None;
-            self.recalculate();
-            self.status = "Demo design loaded".to_string();
-        }
-        ui.separator();
-        ui.label("Historical Presets:");
+
+        caption(ui, self.tr("PRESETS", "历史名舰预设"));
         let current_preset_name = self
             .selected_preset_index
             .and_then(|idx| PRESET_LIST.get(idx))
             .map(|p| p.name)
-            .unwrap_or("Select preset...");
+            .unwrap_or(self.tr("Select preset...", "选择历史名舰预设..."));
         egui::ComboBox::from_id_salt("preset_picker")
             .selected_text(current_preset_name)
+            .width(ui.available_width())
             .show_ui(ui, |ui| {
                 for (idx, p) in PRESET_LIST.iter().enumerate() {
                     let is_sel = self.selected_preset_index == Some(idx);
                     if ui.selectable_label(is_sel, p.name).clicked() {
-                        if let Some(preset_ship) = get_preset(p.id) {
-                            self.ship = preset_ship;
-                            self.selected_preset_index = Some(idx);
-                            self.recalculate();
-                            self.status = format!("Loaded preset: {}", p.name);
-                        }
+                        self.execute(Command::Preset(p.id));
+                        self.selected_preset_index = Some(idx);
                     }
                 }
             });
-        ui.separator();
-        let unit_lbl = if self.metric_units {
-            "Units: Metric"
-        } else {
-            "Units: Imperial"
-        };
-        if ui.button(unit_lbl).clicked() {
-            self.metric_units = !self.metric_units;
+        if ui
+            .add(
+                egui::Button::new(self.tr("Load demo", "加载演示设计"))
+                    .min_size(egui::vec2(ui.available_width(), 24.0)),
+            )
+            .clicked()
+        {
+            self.execute(Command::Demo);
+            self.selected_preset_index = None;
         }
-        ui.separator();
-        ui.label(&self.status);
+
+        caption(ui, self.tr("DISPLAY", "显示与语言"));
+        let imp_lbl = self.tr("Imperial", "英制");
+        let met_lbl = self.tr("Metric", "公制");
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.metric_units, false, imp_lbl);
+            ui.selectable_value(&mut self.metric_units, true, met_lbl);
+        });
+        let prev_lang = self.text_language;
+        egui::ComboBox::from_id_salt("text_language")
+            .selected_text(self.text_language.label())
+            .width(ui.available_width())
+            .show_ui(ui, |ui| {
+                for language in TextLanguage::ALL {
+                    ui.selectable_value(&mut self.text_language, language, language.label());
+                }
+            });
+        if self.text_language != prev_lang {
+            crate::fonts::install(ui.ctx(), self.text_language);
+        }
+        let serif_lbl = self.tr("Serif titles", "衬线标题");
+        ui.checkbox(&mut self.serif_titles, serif_lbl);
+        ui.label(
+            egui::RichText::new(self.tr(
+                "Font group; interface labels use English.",
+                "字体族与界面语言设置（汉字模式启用中文界面）。",
+            ))
+            .small()
+            .color(theme::MUTED),
+        );
+
+        ui.add_space(10.0);
+        egui::Frame::new()
+            .fill(theme::alpha(theme::SURFACE_HI, 120))
+            .corner_radius(egui::CornerRadius::same(8))
+            .inner_margin(egui::Margin::same(8))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                let color = if self.status.contains("rror") || self.status.contains("failed") {
+                    theme::BAD
+                } else {
+                    theme::MUTED
+                };
+                ui.label(egui::RichText::new(&self.status).small().color(color));
+            });
+    }
+
+    fn nav_item(&mut self, ui: &mut egui::Ui, page: Page, icon: &str, name: &str) {
+        use crate::theme;
+        let selected = self.page == page;
+        let (rect, resp) =
+            ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.0), egui::Sense::click());
+        let painter = ui.painter();
+        if selected {
+            painter.rect_filled(
+                rect,
+                egui::CornerRadius::same(8),
+                theme::alpha(theme::ACCENT, 46),
+            );
+            let bar =
+                egui::Rect::from_min_size(rect.min + egui::vec2(0.0, 6.0), egui::vec2(3.0, 18.0));
+            painter.rect_filled(bar, egui::CornerRadius::same(2), theme::ACCENT);
+        } else if resp.hovered() {
+            painter.rect_filled(
+                rect,
+                egui::CornerRadius::same(8),
+                theme::alpha(theme::SURFACE_HI, 160),
+            );
+        }
+        let color = if selected {
+            egui::Color32::WHITE
+        } else {
+            theme::TEXT
+        };
+        painter.text(
+            rect.left_center() + egui::vec2(14.0, 0.0),
+            egui::Align2::LEFT_CENTER,
+            icon,
+            egui::FontId::proportional(14.0),
+            if selected {
+                theme::ACCENT
+            } else {
+                theme::MUTED
+            },
+        );
+        painter.text(
+            rect.left_center() + egui::vec2(38.0, 0.0),
+            egui::Align2::LEFT_CENTER,
+            name,
+            egui::FontId::proportional(14.0),
+            color,
+        );
+        if resp
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .clicked()
+        {
+            self.page = page;
+        }
     }
 
     fn page_hull(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Hull");
-        let h = &mut self.ship.hull;
-        drag_f64(ui, "Length WL (ft)", &mut h.length, 0.1, 1.0..=2000.0);
-        drag_f64(ui, "Beam (ft)", &mut h.beam, 0.1, 1.0..=300.0);
+        crate::theme::heading(ui, "Hull");
+        let h = &mut self.workbench.design.draft.hull;
         drag_f64(
             ui,
-            "Beam over bulges (ft)",
+            springsharp::presentation::fields::label("hull.length"),
+            &mut h.length,
+            0.1,
+            1.0..=2000.0,
+        );
+        drag_f64(
+            ui,
+            springsharp::presentation::fields::label("hull.beam"),
+            &mut h.beam,
+            0.1,
+            1.0..=300.0,
+        );
+        drag_f64(
+            ui,
+            springsharp::presentation::fields::label("hull.beam_bulges"),
             &mut h.beam_bulges,
             0.1,
             1.0..=300.0,
         );
-        drag_f64(ui, "Draught (ft)", &mut h.draught, 0.1, 0.1..=100.0);
-        drag_f64(ui, "Block coefficient", &mut h.block, 0.001, 0.2..=0.95);
-        drag_i32(ui, "Hull year", &mut h.date_hull);
-        drag_i32(ui, "Engine year", &mut h.date_engine);
+        drag_f64(
+            ui,
+            springsharp::presentation::fields::label("hull.draught"),
+            &mut h.draught,
+            0.1,
+            0.1..=100.0,
+        );
+        drag_f64(
+            ui,
+            springsharp::presentation::fields::label("hull.block"),
+            &mut h.block,
+            0.001,
+            0.2..=0.95,
+        );
+        drag_i32(
+            ui,
+            springsharp::presentation::fields::label("hull.date_hull"),
+            &mut h.date_hull,
+        );
+        drag_i32(
+            ui,
+            springsharp::presentation::fields::label("hull.date_engine"),
+            &mut h.date_engine,
+        );
         drag_f64(ui, "LCB (% L)", &mut h.lcb_percent, 0.01, -10.0..=10.0);
         drag_f64(
             ui,
-            "Midship coeff Cm",
+            springsharp::presentation::fields::label("hull.midship_coefficient"),
             &mut h.midship_coefficient,
             0.001,
             0.0..=0.99,
         );
         drag_f64(
             ui,
-            "Bulb area (sq ft)",
+            springsharp::presentation::fields::label("hull.bulb_area_sqft"),
             &mut h.bulb_area_sqft,
             1.0,
             0.0..=10_000.0,
         );
         drag_f64(
             ui,
-            "Bulb centre height (ft)",
+            springsharp::presentation::fields::label("hull.bulb_centre_height_ft"),
             &mut h.bulb_centre_height_ft,
             0.1,
             0.0..=100.0,
         );
         drag_f64(
             ui,
-            "Transom area (sq ft)",
+            springsharp::presentation::fields::label("hull.transom_area_sqft"),
             &mut h.transom_area_sqft,
             1.0,
             0.0..=10_000.0,
         );
         drag_f64(
             ui,
-            "Appendage area (sq ft)",
+            springsharp::presentation::fields::label("hull.appendage_area_sqft"),
             &mut h.appendage_area_sqft,
             1.0,
             0.0..=10_000.0,
         );
         drag_f64(
             ui,
-            "Stern shape Cstern",
+            springsharp::presentation::fields::label("hull.stern_shape"),
             &mut h.stern_shape,
             0.1,
             -25.0..=25.0,
@@ -289,8 +466,8 @@ impl SpringSharpApp {
     }
 
     fn page_freeboard(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Freeboard");
-        let f = &mut self.ship.free;
+        crate::theme::heading(ui, "Freeboard");
+        let f = &mut self.workbench.design.draft.free;
         drag_f64(
             ui,
             "Forecastle length fraction",
@@ -369,10 +546,16 @@ impl SpringSharpApp {
             -50.0..=100.0,
         );
         drag_f64(ui, "Bow overhang (ft)", &mut f.length_bow, 0.1, 0.0..=200.0);
-        drag_f64(ui, "Ram length (ft)", &mut f.length_ram, 0.1, 0.0..=200.0);
         drag_f64(
             ui,
-            "Stern overhang (ft)",
+            springsharp::presentation::fields::label("free.length_ram"),
+            &mut f.length_ram,
+            0.1,
+            0.0..=200.0,
+        );
+        drag_f64(
+            ui,
+            springsharp::presentation::fields::label("free.length_stern"),
             &mut f.length_stern,
             0.1,
             0.0..=200.0,
@@ -389,19 +572,25 @@ impl SpringSharpApp {
     }
 
     fn page_armour(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Armour");
-        let a = &mut self.ship.armour;
-        drag_f64(ui, "Main belt (in)", &mut a.belt_main, 0.1, 0.0..=40.0);
+        crate::theme::heading(ui, "Armour");
+        let a = &mut self.workbench.design.draft.armour;
         drag_f64(
             ui,
-            "Main belt length (ft)",
+            springsharp::presentation::fields::label("arm.belt_main"),
+            &mut a.belt_main,
+            0.1,
+            0.0..=40.0,
+        );
+        drag_f64(
+            ui,
+            springsharp::presentation::fields::label("arm.belt_main_length"),
             &mut a.belt_main_length,
             1.0,
             0.0..=2000.0,
         );
         drag_f64(
             ui,
-            "Main belt height (ft)",
+            springsharp::presentation::fields::label("arm.belt_main_height"),
             &mut a.belt_main_height,
             0.1,
             0.0..=100.0,
@@ -421,39 +610,51 @@ impl SpringSharpApp {
             0.1,
             0.0..=100.0,
         );
-        drag_f64(ui, "Upper belt (in)", &mut a.belt_upper, 0.1, 0.0..=40.0);
         drag_f64(
             ui,
-            "Upper belt length (ft)",
+            springsharp::presentation::fields::label("arm.belt_upper"),
+            &mut a.belt_upper,
+            0.1,
+            0.0..=40.0,
+        );
+        drag_f64(
+            ui,
+            springsharp::presentation::fields::label("arm.belt_upper_length"),
             &mut a.belt_upper_length,
             1.0,
             0.0..=2000.0,
         );
         drag_f64(
             ui,
-            "Upper belt height (ft)",
+            springsharp::presentation::fields::label("arm.belt_upper_height"),
             &mut a.belt_upper_height,
             0.1,
             0.0..=100.0,
         );
         drag_f64(
             ui,
-            "Belt incline (deg)",
+            springsharp::presentation::fields::label("arm.belts_incline"),
             &mut a.belts_incline,
             0.1,
             -45.0..=45.0,
         );
-        drag_f64(ui, "Bulkhead (in)", &mut a.bulkhead, 0.1, 0.0..=40.0);
         drag_f64(
             ui,
-            "Bulkhead length (ft)",
+            springsharp::presentation::fields::label("arm.bulkhead"),
+            &mut a.bulkhead,
+            0.1,
+            0.0..=40.0,
+        );
+        drag_f64(
+            ui,
+            springsharp::presentation::fields::label("arm.bulkhead_length"),
             &mut a.bulkhead_length,
             1.0,
             0.0..=2000.0,
         );
         drag_f64(
             ui,
-            "Bulkhead height (ft)",
+            springsharp::presentation::fields::label("arm.bulkhead_height"),
             &mut a.bulkhead_height,
             1.0,
             0.0..=100.0,
@@ -465,18 +666,29 @@ impl SpringSharpApp {
             1.0,
             0.0..=300.0,
         );
-        drag_i32(ui, "Bulkhead type", &mut a.bulkhead_type);
-        drag_f64(ui, "Bulge (in)", &mut a.bulge, 0.1, 0.0..=40.0);
+        combo_i32(
+            ui,
+            "Bulkhead type",
+            &mut a.bulkhead_type,
+            opts::BULKHEAD_TYPES,
+        );
         drag_f64(
             ui,
-            "Bulge length (ft)",
+            springsharp::presentation::fields::label("arm.bulge"),
+            &mut a.bulge,
+            0.1,
+            0.0..=40.0,
+        );
+        drag_f64(
+            ui,
+            springsharp::presentation::fields::label("arm.bulge_length"),
             &mut a.bulge_length,
             1.0,
             0.0..=2000.0,
         );
         drag_f64(
             ui,
-            "Bulge height (ft)",
+            springsharp::presentation::fields::label("arm.bulge_height"),
             &mut a.bulge_height,
             0.1,
             0.0..=100.0,
@@ -484,7 +696,12 @@ impl SpringSharpApp {
         drag_f64(ui, "Deck (in)", &mut a.deck, 0.1, 0.0..=40.0);
         drag_f64(ui, "Deck FC (in)", &mut a.deck_fc, 0.1, 0.0..=40.0);
         drag_f64(ui, "Deck QD (in)", &mut a.deck_qd, 0.1, 0.0..=40.0);
-        drag_i32(ui, "Deck coverage", &mut a.deck_coverage);
+        combo_i32(
+            ui,
+            "Deck coverage",
+            &mut a.deck_coverage,
+            opts::DECK_COVERAGE,
+        );
         drag_f64(
             ui,
             "Conning forward (in)",
@@ -496,8 +713,16 @@ impl SpringSharpApp {
     }
 
     fn page_guns(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Gun batteries");
-        for (i, g) in self.ship.guns.batteries.iter_mut().enumerate() {
+        crate::theme::heading(ui, "Gun batteries");
+        for (i, g) in self
+            .workbench
+            .design
+            .draft
+            .guns
+            .batteries
+            .iter_mut()
+            .enumerate()
+        {
             let title = match i {
                 0 => "Main battery",
                 1 => "2nd battery",
@@ -533,20 +758,72 @@ impl SpringSharpApp {
         }
     }
 
+    fn superstructure_controls(&mut self, ui: &mut egui::Ui) {
+        use springsharp::presentation::superstructure_text::{archetype_name, planning_notes};
+        use springsharp::superstructure::Archetype;
+        ui.collapsing("Superstructure", |ui| {
+            if ui.button("Reset layout").clicked() { self.workbench.design.draft.superstructure = Default::default(); }
+            let cfg = &mut self.workbench.design.draft.superstructure;
+            egui::ComboBox::from_id_salt("superstructure_type").selected_text(archetype_name(cfg.archetype)).show_ui(ui, |ui| {
+                for kind in Archetype::ALL { ui.selectable_value(&mut cfg.archetype, kind, archetype_name(kind)); }
+            });
+            egui::ComboBox::from_id_salt("mast_style").selected_text(springsharp::presentation::superstructure_text::mast_name(cfg.mast)).show_ui(ui, |ui| {
+                for style in springsharp::superstructure::MastStyle::ALL {ui.selectable_value(&mut cfg.mast,style,springsharp::presentation::superstructure_text::mast_name(style));}
+            });
+            ui.small("Positions / dimensions: fractions of hull length from bow. Geometry only; mass is not added.");
+            ui.horizontal(|ui| { ui.label("Funnels (0 = Auto)"); ui.add(egui::DragValue::new(&mut cfg.funnel_count).range(0..=4)); });
+            drag_f64(ui, "Funnel spacing (0 = Auto)", &mut cfg.funnel_spacing, 0.005, 0.0..=0.2);
+            for (name, correction) in [("Bridge", &mut cfg.bridge), ("Aft deckhouse", &mut cfg.aft), ("Funnel group", &mut cfg.funnels)] {
+                ui.push_id(name, |ui| { ui.collapsing(name, |ui| {
+                    ui.checkbox(&mut correction.locked, "Lock geometry");
+                    if correction.locked {
+                        drag_f64(ui, "Position", &mut correction.x, 0.005, 0.0..=1.0);
+                        drag_f64(ui, "Length", &mut correction.length, 0.005, 0.005..=0.5);
+                        drag_f64(ui, "Height", &mut correction.height, 0.005, 0.005..=0.15);
+                    } else {
+                        drag_f64(ui, "Relative shift", &mut correction.shift, 0.005, -0.5..=0.5);
+                        drag_f64(ui, "Length multiplier", &mut correction.length_scale, 0.1, 0.2..=3.0);
+                        drag_f64(ui, "Height multiplier", &mut correction.height_scale, 0.1, 0.2..=3.0);
+                    }
+                }); });
+            }
+            ui.small("Aft deckhouse: Low distributed / Fore–aft split only. Funnel lock fixes the group envelope.");
+            let result = self.workbench.design.result();
+            for note in planning_notes(&result.blueprint.superstructure) { ui.label(note); }
+        });
+    }
+
     fn page_engine(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Machinery");
-        let e = &mut self.ship.engine;
-        drag_f64(ui, "Max speed (kt)", &mut e.speed_max, 0.1, 0.0..=60.0);
+        self.superstructure_controls(ui);
+        crate::theme::heading(ui, "Machinery");
+        let e = &mut self.workbench.design.draft.engine;
         drag_f64(
             ui,
-            "Cruise speed (kt)",
+            springsharp::presentation::fields::label("engine.speed_max"),
+            &mut e.speed_max,
+            0.1,
+            0.0..=60.0,
+        );
+        drag_f64(
+            ui,
+            springsharp::presentation::fields::label("engine.speed_cruise"),
             &mut e.speed_cruise,
             0.1,
             0.0..=60.0,
         );
-        drag_f64(ui, "Range (nm)", &mut e.range, 10.0, 0.0..=100_000.0);
+        drag_f64(
+            ui,
+            springsharp::presentation::fields::label("engine.range"),
+            &mut e.range,
+            10.0,
+            0.0..=100_000.0,
+        );
         drag_f64(ui, "Percent coal", &mut e.pct_coal, 0.1, 0.0..=100.0);
-        drag_i32(ui, "Screws", &mut e.screws);
+        drag_i32(
+            ui,
+            springsharp::presentation::fields::label("engine.screws"),
+            &mut e.screws,
+        );
         drag_f64(
             ui,
             "Power calibration factor",
@@ -583,21 +860,21 @@ impl SpringSharpApp {
         });
         drag_f64(
             ui,
-            "Holtrop viscous factor",
+            springsharp::presentation::fields::label("engine.holtrop_viscous_factor"),
             &mut e.holtrop_viscous_factor,
             0.001,
             0.0..=5.0,
         );
         drag_f64(
             ui,
-            "Holtrop wave factor",
+            springsharp::presentation::fields::label("engine.holtrop_wave_factor"),
             &mut e.holtrop_wave_factor,
             0.001,
             0.0..=5.0,
         );
         drag_f64(
             ui,
-            "Holtrop correlation factor",
+            springsharp::presentation::fields::label("engine.holtrop_correlation_factor"),
             &mut e.holtrop_correlation_factor,
             0.001,
             0.0..=5.0,
@@ -671,14 +948,17 @@ impl SpringSharpApp {
     }
 
     fn page_calibration(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Calibration (modern regime model)");
+        crate::theme::heading(ui, "Calibration (modern regime model)");
         ui.label(
             "Default model: Holtrop-Mennen + per-ship-type calibration factor, \
              fitted to the public historical dataset.",
         );
         ui.separator();
-        ui.label(format!("Ship type: {}", self.ship.ship_type));
-        match springsharp::regime::regime_for_ship_type(&self.ship.ship_type) {
+        ui.label(format!(
+            "Ship type: {}",
+            self.workbench.design.draft.ship_type
+        ));
+        match springsharp::regime::regime_for_ship_type(&self.workbench.design.draft.ship_type) {
             Some(r) => {
                 ui.label(format!(
                     "Recommended: {}  factor {:.3}  (in-sample MAPE {:.1}%)",
@@ -687,17 +967,7 @@ impl SpringSharpApp {
                     r.train_mape * 100.0
                 ));
                 if ui.button("Apply regime model").clicked() {
-                    if let Some(applied) =
-                        springsharp::regime::apply_regime_calibration(&mut self.ship)
-                    {
-                        self.recalculate();
-                        self.status = format!(
-                            "Applied regime: {} factor {:.3}",
-                            applied.model_label, applied.factor
-                        );
-                    } else {
-                        self.status = "No regime entry for this ship type".to_string();
-                    }
+                    self.execute(Command::Regime);
                 }
             }
             None => {
@@ -719,7 +989,7 @@ impl SpringSharpApp {
         );
 
         ui.separator();
-        ui.heading("Target Displacement Solver");
+        crate::theme::heading(ui, "Target Displacement Solver");
         ui.label(
             "Scale hull dimensions (length, beam, draught) proportionally to meet an exact \
              target displacement (converges in 4-6 iterations).",
@@ -734,31 +1004,22 @@ impl SpringSharpApp {
                 100.0..=120000.0,
             );
             if ui.button("Solve & Scale Hull").clicked() {
-                let achieved = solve_displacement_scale(&mut self.ship, self.target_displacement);
-                self.recalculate();
-                self.status = format!(
-                    "Displacement scaled to {achieved:.0} t (target: {:.0} t). L={:.1} ft, B={:.1} ft, T={:.1} ft",
-                    self.target_displacement,
-                    self.ship.hull.length,
-                    self.ship.hull.beam,
-                    self.ship.hull.draught
-                );
+                self.execute(Command::Displacement(self.target_displacement));
             }
         });
 
         ui.separator();
-        ui.heading("Side-by-Side Ship Comparison");
+        crate::theme::heading(ui, "Side-by-Side Ship Comparison");
         ui.label(
             "Compare your current design against a pinned baseline or historical warship preset.",
         );
         ui.horizontal(|ui| {
             if ui.button("Pin current as baseline").clicked() {
-                self.baseline_ship = Some(self.ship.clone());
+                self.execute(Command::PinBaseline);
                 self.compare_preset_idx = None;
-                self.status = "Pinned current design as comparison baseline".to_string();
             }
             if ui.button("Clear comparison").clicked() {
-                self.baseline_ship = None;
+                self.execute(Command::ClearComparison);
                 self.compare_preset_idx = None;
             }
             let sel_text = self
@@ -772,79 +1033,93 @@ impl SpringSharpApp {
                     for (idx, p) in PRESET_LIST.iter().enumerate() {
                         let is_sel = self.compare_preset_idx == Some(idx);
                         if ui.selectable_label(is_sel, p.name).clicked() {
-                            if let Some(preset_ship) = get_preset(p.id) {
-                                self.baseline_ship = Some(preset_ship);
-                                self.compare_preset_idx = Some(idx);
-                            }
+                            self.execute(Command::ComparePreset(p.id));
+                            self.compare_preset_idx = Some(idx);
                         }
                     }
                 });
         });
 
-        if let Some(ref base) = self.baseline_ship {
+        let result = self.workbench.design.result();
+        if let Some(base) = self.workbench.baseline() {
             ui.add_space(6.0);
             egui::Grid::new("comparison_table")
                 .striped(true)
                 .spacing([24.0, 4.0])
                 .show(ui, |ui| {
                     ui.strong("Metric");
-                    ui.strong(format!("Current ({})", self.ship.name));
+                    ui.strong(format!("Current ({})", result.ship.name));
                     ui.strong(format!("Baseline ({})", base.name));
                     ui.strong("Delta (Δ)");
                     ui.strong("Rel. Diff (%)");
                     ui.end_row();
 
                     let rows = [
-                        ("Length WL (ft)", self.ship.hull.length, base.hull.length, 1),
-                        ("Beam (ft)", self.ship.hull.beam, base.hull.beam, 1),
-                        ("Draught (ft)", self.ship.hull.draught, base.hull.draught, 1),
+                        (
+                            "Length WL (ft)",
+                            result.ship.hull.length,
+                            base.hull.length,
+                            1,
+                        ),
+                        ("Beam (ft)", result.ship.hull.beam, base.hull.beam, 1),
+                        (
+                            "Draught (ft)",
+                            result.ship.hull.draught,
+                            base.hull.draught,
+                            1,
+                        ),
                         (
                             "Normal disp (t)",
-                            self.ship.hull.displacement,
+                            result.ship.hull.displacement,
                             base.hull.displacement,
                             0,
                         ),
                         (
                             "Full load disp (t)",
-                            self.ship.disp_max_load,
+                            result.ship.disp_max_load,
                             base.disp_max_load,
                             0,
                         ),
                         (
                             "Max speed (kt)",
-                            self.ship.engine.speed_max,
+                            result.ship.engine.speed_max,
                             base.engine.speed_max,
                             1,
                         ),
                         (
                             "Max power (hp)",
-                            self.ship.engine.hp_max,
+                            result.ship.engine.hp_max,
                             base.engine.hp_max,
                             0,
                         ),
-                        ("Range (nm)", self.ship.engine.range, base.engine.range, 0),
+                        ("Range (nm)", result.ship.engine.range, base.engine.range, 0),
                         (
                             "Main belt (in)",
-                            self.ship.armour.belt_main,
+                            result.ship.armour.belt_main,
                             base.armour.belt_main,
                             1,
                         ),
-                        ("Main deck (in)", self.ship.armour.deck, base.armour.deck, 1),
+                        (
+                            "Main deck (in)",
+                            result.ship.armour.deck,
+                            base.armour.deck,
+                            1,
+                        ),
                         (
                             "Main battery cal (in)",
-                            self.ship.guns.batteries[0].calibre,
+                            result.ship.guns.batteries[0].calibre,
                             base.guns.batteries[0].calibre,
                             1,
                         ),
                         (
                             "Broadside weight (lb)",
-                            self.ship.guns.broadside,
+                            result.ship.guns.broadside,
                             base.guns.broadside,
                             0,
                         ),
                         (
                             "Metacentre GM (ft)",
-                            self.ship.metacentre,
+                            result.ship.metacentre,
                             base.metacentre,
                             2,
                         ),
@@ -871,46 +1146,34 @@ impl SpringSharpApp {
     }
 
     fn page_report(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Report and files");
+        crate::theme::heading(ui, "Report and files");
         ui.horizontal(|ui| {
             if ui.button("Calculate and regenerate report").clicked() {
                 self.recalculate();
             }
             if ui.button("Load demo").clicked() {
-                self.ship = demo_ship();
-                self.recalculate();
+                self.execute(Command::Demo);
             }
         });
         ui.horizontal(|ui| {
-            ui.label("Save path:");
-            ui.text_edit_singleline(&mut self.save_path);
-            if ui.button("Save .ssr").clicked() {
-                match save_to_file(&self.ship, &self.save_path) {
-                    Ok(()) => self.status = format!("Saved {}", self.save_path),
-                    Err(e) => self.status = format!("Save error: {e}"),
-                }
+            if ui.button("Open .ssr…").clicked() {
+                self.open_design();
+            }
+            if ui.button("Save .ssr…").clicked() {
+                self.save_design();
             }
         });
-        ui.horizontal(|ui| {
-            ui.label("Load path:");
-            ui.text_edit_singleline(&mut self.load_path);
-            if ui.button("Load .ssr").clicked() {
-                let mut ship = ShipModel::new();
-                match load_from_file(&mut ship, &self.load_path) {
-                    Ok(()) => {
-                        self.ship = ship;
-                        self.recalculate();
-                        self.status = format!("Loaded {}", self.load_path);
-                    }
-                    Err(e) => self.status = format!("Load error: {e}"),
-                }
-            }
-        });
+        if let Some(path) = &self.current_path {
+            ui.label(path.display().to_string());
+        }
         ui.separator();
         ui.label(&self.status);
+        let result = self.workbench.design.result();
+        let report_text = springsharp::generate_report(&result.ship);
+        let mut report = report_text.as_str();
         egui::ScrollArea::vertical().show(ui, |ui| {
             ui.add(
-                egui::TextEdit::multiline(&mut self.report)
+                egui::TextEdit::multiline(&mut report)
                     .desired_width(f32::INFINITY)
                     .desired_rows(30),
             );
@@ -918,8 +1181,11 @@ impl SpringSharpApp {
     }
 
     fn page_weapons(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Torpedoes, Mines, Depth Charges & Miscellaneous Weights");
-        let w = &mut self.ship.weapons;
+        crate::theme::heading(
+            ui,
+            "Torpedoes, Mines, Depth Charges & Miscellaneous Weights",
+        );
+        let w = &mut self.workbench.design.draft.weapons;
         weapon_mount_ui(ui, "Torpedo set 1", "weap0", &mut w.torpedo1);
         weapon_mount_ui(ui, "Torpedo set 2", "weap1", &mut w.torpedo2);
         weapon_mount_ui(ui, "Mines", "weap2", &mut w.mine);
@@ -927,7 +1193,7 @@ impl SpringSharpApp {
         weapon_mount_ui(ui, "Depth charges / AS mortars 2", "weap4", &mut w.dc2);
 
         ui.separator();
-        ui.heading("Miscellaneous weights (tons)");
+        crate::theme::heading(ui, "Miscellaneous weights (tons)");
         drag_f64(
             ui,
             "Vital spaces (tons)",
@@ -965,14 +1231,18 @@ impl SpringSharpApp {
         );
 
         ui.separator();
-        ui.heading("Electrical Plant & Combat Systems (Dimensionless Ideal-Type & Mix-and-Match)");
-        let sys_eval = self.ship.systems.evaluate(&self.ship);
+        crate::theme::heading(
+            ui,
+            "Electrical Plant & Combat Systems (Dimensionless Ideal-Type & Mix-and-Match)",
+        );
+        let result = self.workbench.design.result();
+        let sys_eval = &result.systems;
 
         ui.horizontal(|ui| {
             ui.label(
                 egui::RichText::new(format!(
                     "● Fleet Tactical Role: {}",
-                    sys_eval.tactical_affinities.classification_summary
+                    springsharp::presentation::classification(&sys_eval.tactical_affinities)
                 ))
                 .color(egui::Color32::from_rgb(88, 166, 255))
                 .strong(),
@@ -996,7 +1266,7 @@ impl SpringSharpApp {
             ));
         });
         ui.label(
-            egui::RichText::new(&sys_eval.match_explanation)
+            egui::RichText::new(springsharp::presentation::match_explanation(sys_eval))
                 .small()
                 .color(egui::Color32::from_rgb(201, 209, 217)),
         );
@@ -1048,35 +1318,35 @@ impl SpringSharpApp {
             .show(ui, |ui| {
                 ui.label("Style Ideal Type:");
                 egui::ComboBox::from_id_salt("sys_doctrine")
-                    .selected_text(self.ship.systems.doctrine.display_name())
+                    .selected_text(self.workbench.design.draft.systems.doctrine.display_name())
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.ship.systems.doctrine,
+                            &mut self.workbench.design.draft.systems.doctrine,
                             StyleDoctrine::AdaptiveAuto,
                             StyleDoctrine::AdaptiveAuto.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.doctrine,
+                            &mut self.workbench.design.draft.systems.doctrine,
                             StyleDoctrine::AutomationAllElectric,
                             StyleDoctrine::AutomationAllElectric.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.doctrine,
+                            &mut self.workbench.design.draft.systems.doctrine,
                             StyleDoctrine::AllWeatherSeakeeping,
                             StyleDoctrine::AllWeatherSeakeeping.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.doctrine,
+                            &mut self.workbench.design.draft.systems.doctrine,
                             StyleDoctrine::LongRangeOpticalStrike,
                             StyleDoctrine::LongRangeOpticalStrike.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.doctrine,
+                            &mut self.workbench.design.draft.systems.doctrine,
                             StyleDoctrine::StereoscopicSubdivided,
                             StyleDoctrine::StereoscopicSubdivided.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.doctrine,
+                            &mut self.workbench.design.draft.systems.doctrine,
                             StyleDoctrine::Custom,
                             StyleDoctrine::Custom.display_name(),
                         );
@@ -1086,10 +1356,14 @@ impl SpringSharpApp {
                 ui.label("Tactical Echelon:");
                 egui::ComboBox::from_id_salt("sys_tactical_echelon")
                     .selected_text(
-                        if self.ship.systems.tactical_echelon == TacticalEchelon::Auto {
+                        if self.workbench.design.draft.systems.tactical_echelon
+                            == TacticalEchelon::Auto
+                        {
                             format!("Auto ({})", sys_eval.resolved_echelon.display_name())
                         } else {
-                            self.ship
+                            self.workbench
+                                .design
+                                .draft
                                 .systems
                                 .tactical_echelon
                                 .display_name()
@@ -1098,32 +1372,32 @@ impl SpringSharpApp {
                     )
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.ship.systems.tactical_echelon,
+                            &mut self.workbench.design.draft.systems.tactical_echelon,
                             TacticalEchelon::Auto,
                             TacticalEchelon::Auto.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.tactical_echelon,
+                            &mut self.workbench.design.draft.systems.tactical_echelon,
                             TacticalEchelon::BattleLineMainBody,
                             TacticalEchelon::BattleLineMainBody.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.tactical_echelon,
+                            &mut self.workbench.design.draft.systems.tactical_echelon,
                             TacticalEchelon::FastWingVanguard,
                             TacticalEchelon::FastWingVanguard.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.tactical_echelon,
+                            &mut self.workbench.design.draft.systems.tactical_echelon,
                             TacticalEchelon::OuterScoutingScreen,
                             TacticalEchelon::OuterScoutingScreen.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.tactical_echelon,
+                            &mut self.workbench.design.draft.systems.tactical_echelon,
                             TacticalEchelon::InnerFleetScreen,
                             TacticalEchelon::InnerFleetScreen.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.tactical_echelon,
+                            &mut self.workbench.design.draft.systems.tactical_echelon,
                             TacticalEchelon::FlotillaAssaultLine,
                             TacticalEchelon::FlotillaAssaultLine.display_name(),
                         );
@@ -1133,40 +1407,48 @@ impl SpringSharpApp {
                 ui.label("Combat Modality:");
                 egui::ComboBox::from_id_salt("sys_combat_modality")
                     .selected_text(
-                        if self.ship.systems.combat_modality == CombatModality::Auto {
+                        if self.workbench.design.draft.systems.combat_modality
+                            == CombatModality::Auto
+                        {
                             format!("Auto ({})", sys_eval.resolved_modality.display_name())
                         } else {
-                            self.ship.systems.combat_modality.display_name().to_string()
+                            self.workbench
+                                .design
+                                .draft
+                                .systems
+                                .combat_modality
+                                .display_name()
+                                .to_string()
                         },
                     )
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.ship.systems.combat_modality,
+                            &mut self.workbench.design.draft.systems.combat_modality,
                             CombatModality::Auto,
                             CombatModality::Auto.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.combat_modality,
+                            &mut self.workbench.design.draft.systems.combat_modality,
                             CombatModality::HeavyArtilleryCitadel,
                             CombatModality::HeavyArtilleryCitadel.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.combat_modality,
+                            &mut self.workbench.design.draft.systems.combat_modality,
                             CombatModality::RapidFireSurfaceGunnery,
                             CombatModality::RapidFireSurfaceGunnery.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.combat_modality,
+                            &mut self.workbench.design.draft.systems.combat_modality,
                             CombatModality::AviationDeckProjection,
                             CombatModality::AviationDeckProjection.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.combat_modality,
+                            &mut self.workbench.design.draft.systems.combat_modality,
                             CombatModality::MassedTorpedoStrike,
                             CombatModality::MassedTorpedoStrike.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.combat_modality,
+                            &mut self.workbench.design.draft.systems.combat_modality,
                             CombatModality::ScreenEscortDefense,
                             CombatModality::ScreenEscortDefense.display_name(),
                         );
@@ -1176,38 +1458,46 @@ impl SpringSharpApp {
                 ui.label("Mobility Regime:");
                 egui::ComboBox::from_id_salt("sys_mobility_regime")
                     .selected_text(
-                        if self.ship.systems.mobility_regime == MobilityRegime::Auto {
+                        if self.workbench.design.draft.systems.mobility_regime
+                            == MobilityRegime::Auto
+                        {
                             format!(
                                 "Auto ({})",
                                 sys_eval.resolved_mobility_regime.display_name()
                             )
                         } else {
-                            self.ship.systems.mobility_regime.display_name().to_string()
+                            self.workbench
+                                .design
+                                .draft
+                                .systems
+                                .mobility_regime
+                                .display_name()
+                                .to_string()
                         },
                     )
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.ship.systems.mobility_regime,
+                            &mut self.workbench.design.draft.systems.mobility_regime,
                             MobilityRegime::Auto,
                             MobilityRegime::Auto.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.mobility_regime,
+                            &mut self.workbench.design.draft.systems.mobility_regime,
                             MobilityRegime::HeavyDisplacementBlock,
                             MobilityRegime::HeavyDisplacementBlock.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.mobility_regime,
+                            &mut self.workbench.design.draft.systems.mobility_regime,
                             MobilityRegime::TransFroudeFastCapital,
                             MobilityRegime::TransFroudeFastCapital.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.mobility_regime,
+                            &mut self.workbench.design.draft.systems.mobility_regime,
                             MobilityRegime::SlenderWaveCutting,
                             MobilityRegime::SlenderWaveCutting.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.mobility_regime,
+                            &mut self.workbench.design.draft.systems.mobility_regime,
                             MobilityRegime::SuperCriticalHighFn,
                             MobilityRegime::SuperCriticalHighFn.display_name(),
                         );
@@ -1216,44 +1506,52 @@ impl SpringSharpApp {
 
                 ui.label("Main Battery Director:");
                 egui::ComboBox::from_id_salt("sys_main_dir")
-                    .selected_text(if self.ship.systems.main_director == MainDirector::Auto {
-                        format!("Auto ({})", sys_eval.resolved_main_director.display_name())
-                    } else {
-                        self.ship.systems.main_director.display_name().to_string()
-                    })
+                    .selected_text(
+                        if self.workbench.design.draft.systems.main_director == MainDirector::Auto {
+                            format!("Auto ({})", sys_eval.resolved_main_director.display_name())
+                        } else {
+                            self.workbench
+                                .design
+                                .draft
+                                .systems
+                                .main_director
+                                .display_name()
+                                .to_string()
+                        },
+                    )
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.ship.systems.main_director,
+                            &mut self.workbench.design.draft.systems.main_director,
                             MainDirector::Auto,
                             "Auto (Dimensionless Match)",
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.main_director,
+                            &mut self.workbench.design.draft.systems.main_director,
                             MainDirector::OpenSights,
                             MainDirector::OpenSights.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.main_director,
+                            &mut self.workbench.design.draft.systems.main_director,
                             MainDirector::CentralTower,
                             MainDirector::CentralTower.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.main_director,
+                            &mut self.workbench.design.draft.systems.main_director,
                             MainDirector::WeatherproofDct,
                             MainDirector::WeatherproofDct.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.main_director,
+                            &mut self.workbench.design.draft.systems.main_director,
                             MainDirector::ArmouredStereoscopic10m,
                             MainDirector::ArmouredStereoscopic10m.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.main_director,
+                            &mut self.workbench.design.draft.systems.main_director,
                             MainDirector::DuplexOpticalTower15m,
                             MainDirector::DuplexOpticalTower15m.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.main_director,
+                            &mut self.workbench.design.draft.systems.main_director,
                             MainDirector::GyrostabilizedRadarBlindFire,
                             MainDirector::GyrostabilizedRadarBlindFire.display_name(),
                         );
@@ -1262,39 +1560,47 @@ impl SpringSharpApp {
 
                 ui.label("AA / Secondary Director:");
                 egui::ComboBox::from_id_salt("sys_aa_dir")
-                    .selected_text(if self.ship.systems.aa_director == AaDirector::Auto {
-                        format!("Auto ({})", sys_eval.resolved_aa_director.display_name())
-                    } else {
-                        self.ship.systems.aa_director.display_name().to_string()
-                    })
+                    .selected_text(
+                        if self.workbench.design.draft.systems.aa_director == AaDirector::Auto {
+                            format!("Auto ({})", sys_eval.resolved_aa_director.display_name())
+                        } else {
+                            self.workbench
+                                .design
+                                .draft
+                                .systems
+                                .aa_director
+                                .display_name()
+                                .to_string()
+                        },
+                    )
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.ship.systems.aa_director,
+                            &mut self.workbench.design.draft.systems.aa_director,
                             AaDirector::Auto,
                             "Auto (Dimensionless Match)",
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.aa_director,
+                            &mut self.workbench.design.draft.systems.aa_director,
                             AaDirector::None,
                             AaDirector::None.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.aa_director,
+                            &mut self.workbench.design.draft.systems.aa_director,
                             AaDirector::HighAngleTachymetric,
                             AaDirector::HighAngleTachymetric.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.aa_director,
+                            &mut self.workbench.design.draft.systems.aa_director,
                             AaDirector::TriAxialStabilizedSphere,
                             AaDirector::TriAxialStabilizedSphere.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.aa_director,
+                            &mut self.workbench.design.draft.systems.aa_director,
                             AaDirector::OpticalLeadComputing,
                             AaDirector::OpticalLeadComputing.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.aa_director,
+                            &mut self.workbench.design.draft.systems.aa_director,
                             AaDirector::DualPurposeRadarDirector,
                             AaDirector::DualPurposeRadarDirector.display_name(),
                         );
@@ -1304,13 +1610,17 @@ impl SpringSharpApp {
                 ui.label("Ballistic Computer:");
                 egui::ComboBox::from_id_salt("sys_comp")
                     .selected_text(
-                        if self.ship.systems.ballistic_computer == BallisticComputer::Auto {
+                        if self.workbench.design.draft.systems.ballistic_computer
+                            == BallisticComputer::Auto
+                        {
                             format!(
                                 "Auto ({})",
                                 sys_eval.resolved_ballistic_computer.display_name()
                             )
                         } else {
-                            self.ship
+                            self.workbench
+                                .design
+                                .draft
                                 .systems
                                 .ballistic_computer
                                 .display_name()
@@ -1319,37 +1629,37 @@ impl SpringSharpApp {
                     )
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.ship.systems.ballistic_computer,
+                            &mut self.workbench.design.draft.systems.ballistic_computer,
                             BallisticComputer::Auto,
                             "Auto (Dimensionless Match)",
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.ballistic_computer,
+                            &mut self.workbench.design.draft.systems.ballistic_computer,
                             BallisticComputer::ManualTables,
                             BallisticComputer::ManualTables.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.ballistic_computer,
+                            &mut self.workbench.design.draft.systems.ballistic_computer,
                             BallisticComputer::MechanicalRateClock,
                             BallisticComputer::MechanicalRateClock.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.ballistic_computer,
+                            &mut self.workbench.design.draft.systems.ballistic_computer,
                             BallisticComputer::ElectroMechanicalTable,
                             BallisticComputer::ElectroMechanicalTable.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.ballistic_computer,
+                            &mut self.workbench.design.draft.systems.ballistic_computer,
                             BallisticComputer::HighVelocityAnalog,
                             BallisticComputer::HighVelocityAnalog.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.ballistic_computer,
+                            &mut self.workbench.design.draft.systems.ballistic_computer,
                             BallisticComputer::MultiAxisTriangulator,
                             BallisticComputer::MultiAxisTriangulator.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.ballistic_computer,
+                            &mut self.workbench.design.draft.systems.ballistic_computer,
                             BallisticComputer::GyroCamRangekeeper,
                             BallisticComputer::GyroCamRangekeeper.display_name(),
                         );
@@ -1358,39 +1668,47 @@ impl SpringSharpApp {
 
                 ui.label("Radar & EW Suite:");
                 egui::ComboBox::from_id_salt("sys_radar")
-                    .selected_text(if self.ship.systems.radar_suite == RadarSuite::Auto {
-                        format!("Auto ({})", sys_eval.resolved_radar_suite.display_name())
-                    } else {
-                        self.ship.systems.radar_suite.display_name().to_string()
-                    })
+                    .selected_text(
+                        if self.workbench.design.draft.systems.radar_suite == RadarSuite::Auto {
+                            format!("Auto ({})", sys_eval.resolved_radar_suite.display_name())
+                        } else {
+                            self.workbench
+                                .design
+                                .draft
+                                .systems
+                                .radar_suite
+                                .display_name()
+                                .to_string()
+                        },
+                    )
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.ship.systems.radar_suite,
+                            &mut self.workbench.design.draft.systems.radar_suite,
                             RadarSuite::Auto,
                             "Auto (Dimensionless Match)",
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.radar_suite,
+                            &mut self.workbench.design.draft.systems.radar_suite,
                             RadarSuite::None,
                             RadarSuite::None.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.radar_suite,
+                            &mut self.workbench.design.draft.systems.radar_suite,
                             RadarSuite::DecimetricSurfaceFc,
                             RadarSuite::DecimetricSurfaceFc.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.radar_suite,
+                            &mut self.workbench.design.draft.systems.radar_suite,
                             RadarSuite::MetricSearchMagnetron,
                             RadarSuite::MetricSearchMagnetron.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.radar_suite,
+                            &mut self.workbench.design.draft.systems.radar_suite,
                             RadarSuite::CentimetricFcDirectionFinder,
                             RadarSuite::CentimetricFcDirectionFinder.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.radar_suite,
+                            &mut self.workbench.design.draft.systems.radar_suite,
                             RadarSuite::DualBandBlindFireCic,
                             RadarSuite::DualBandBlindFireCic.display_name(),
                         );
@@ -1399,39 +1717,47 @@ impl SpringSharpApp {
 
                 ui.label("Subsurface Sonar Suite:");
                 egui::ComboBox::from_id_salt("sys_sonar")
-                    .selected_text(if self.ship.systems.sonar_suite == SonarSuite::Auto {
-                        format!("Auto ({})", sys_eval.resolved_sonar_suite.display_name())
-                    } else {
-                        self.ship.systems.sonar_suite.display_name().to_string()
-                    })
+                    .selected_text(
+                        if self.workbench.design.draft.systems.sonar_suite == SonarSuite::Auto {
+                            format!("Auto ({})", sys_eval.resolved_sonar_suite.display_name())
+                        } else {
+                            self.workbench
+                                .design
+                                .draft
+                                .systems
+                                .sonar_suite
+                                .display_name()
+                                .to_string()
+                        },
+                    )
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.ship.systems.sonar_suite,
+                            &mut self.workbench.design.draft.systems.sonar_suite,
                             SonarSuite::Auto,
                             "Auto (Dimensionless Match)",
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.sonar_suite,
+                            &mut self.workbench.design.draft.systems.sonar_suite,
                             SonarSuite::None,
                             SonarSuite::None.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.sonar_suite,
+                            &mut self.workbench.design.draft.systems.sonar_suite,
                             SonarSuite::PassiveHydrophones,
                             SonarSuite::PassiveHydrophones.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.sonar_suite,
+                            &mut self.workbench.design.draft.systems.sonar_suite,
                             SonarSuite::ActiveQuartzDome,
                             SonarSuite::ActiveQuartzDome.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.sonar_suite,
+                            &mut self.workbench.design.draft.systems.sonar_suite,
                             SonarSuite::MultiElementPassiveArray,
                             SonarSuite::MultiElementPassiveArray.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.sonar_suite,
+                            &mut self.workbench.design.draft.systems.sonar_suite,
                             SonarSuite::HighPowerSearchSonar,
                             SonarSuite::HighPowerSearchSonar.display_name(),
                         );
@@ -1441,13 +1767,17 @@ impl SpringSharpApp {
                 ui.label("Electrical Plant Style:");
                 egui::ComboBox::from_id_salt("sys_plant")
                     .selected_text(
-                        if self.ship.systems.electrical_plant == ElectricalPlantStyle::Auto {
+                        if self.workbench.design.draft.systems.electrical_plant
+                            == ElectricalPlantStyle::Auto
+                        {
                             format!(
                                 "Auto ({})",
                                 sys_eval.resolved_electrical_plant.display_name()
                             )
                         } else {
-                            self.ship
+                            self.workbench
+                                .design
+                                .draft
                                 .systems
                                 .electrical_plant
                                 .display_name()
@@ -1456,29 +1786,153 @@ impl SpringSharpApp {
                     )
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.ship.systems.electrical_plant,
+                            &mut self.workbench.design.draft.systems.electrical_plant,
                             ElectricalPlantStyle::Auto,
                             "Auto (Dimensionless Match)",
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.electrical_plant,
+                            &mut self.workbench.design.draft.systems.electrical_plant,
                             ElectricalPlantStyle::CompactSteam,
                             ElectricalPlantStyle::CompactSteam.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.electrical_plant,
+                            &mut self.workbench.design.draft.systems.electrical_plant,
                             ElectricalPlantStyle::BalancedTurboDiesel,
                             ElectricalPlantStyle::BalancedTurboDiesel.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.electrical_plant,
+                            &mut self.workbench.design.draft.systems.electrical_plant,
                             ElectricalPlantStyle::SubdividedHeavyDiesel,
                             ElectricalPlantStyle::SubdividedHeavyDiesel.display_name(),
                         );
                         ui.selectable_value(
-                            &mut self.ship.systems.electrical_plant,
+                            &mut self.workbench.design.draft.systems.electrical_plant,
                             ElectricalPlantStyle::HighMarginAcGrid,
                             ElectricalPlantStyle::HighMarginAcGrid.display_name(),
+                        );
+                    });
+                ui.end_row();
+
+                ui.label("Belt-TDS Joint");
+                egui::ComboBox::from_id_salt("sys_belt_tds_junction")
+                    .selected_text(
+                        if self.workbench.design.draft.systems.belt_tds_junction
+                            == BeltTdsJunction::Auto
+                        {
+                            format!(
+                                "Auto ({})",
+                                self.workbench
+                                    .design
+                                    .result()
+                                    .systems
+                                    .resolved_belt_tds_junction
+                                    .display_name()
+                            )
+                        } else {
+                            self.workbench
+                                .design
+                                .draft
+                                .systems
+                                .belt_tds_junction
+                                .display_name()
+                                .to_string()
+                        },
+                    )
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.belt_tds_junction,
+                            BeltTdsJunction::Auto,
+                            "Auto (Dimensionless Match)",
+                        );
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.belt_tds_junction,
+                            BeltTdsJunction::IntegralTaperedHoldingBulkhead,
+                            BeltTdsJunction::IntegralTaperedHoldingBulkhead.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.belt_tds_junction,
+                            BeltTdsJunction::TurtlebackSlopeKneeJoint,
+                            BeltTdsJunction::TurtlebackSlopeKneeJoint.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.belt_tds_junction,
+                            BeltTdsJunction::SpacedAbsorberShelfJoint,
+                            BeltTdsJunction::SpacedAbsorberShelfJoint.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.belt_tds_junction,
+                            BeltTdsJunction::SteppedShelfCitadel,
+                            BeltTdsJunction::SteppedShelfCitadel.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.belt_tds_junction,
+                            BeltTdsJunction::DirectSkinDoubleBottom,
+                            BeltTdsJunction::DirectSkinDoubleBottom.display_name(),
+                        );
+                    });
+                ui.end_row();
+
+                ui.label("Horizontal Protection");
+                egui::ComboBox::from_id_salt("sys_horizontal_protection")
+                    .selected_text(
+                        if self.workbench.design.draft.systems.horizontal_protection
+                            == HorizontalProtectionStyle::Auto
+                        {
+                            format!(
+                                "Auto ({})",
+                                self.workbench
+                                    .design
+                                    .result()
+                                    .systems
+                                    .resolved_horizontal_protection
+                                    .display_name()
+                            )
+                        } else {
+                            self.workbench
+                                .design
+                                .draft
+                                .systems
+                                .horizontal_protection
+                                .display_name()
+                                .to_string()
+                        },
+                    )
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.horizontal_protection,
+                            HorizontalProtectionStyle::Auto,
+                            "Auto (Dimensionless Match)",
+                        );
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.horizontal_protection,
+                            HorizontalProtectionStyle::ProtectedTurtlebackCarapace,
+                            HorizontalProtectionStyle::ProtectedTurtlebackCarapace.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.horizontal_protection,
+                            HorizontalProtectionStyle::LowTurtlebackSlopedCitadel,
+                            HorizontalProtectionStyle::LowTurtlebackSlopedCitadel.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.horizontal_protection,
+                            HorizontalProtectionStyle::MultiLayerBombDecappingSandwich,
+                            HorizontalProtectionStyle::MultiLayerBombDecappingSandwich
+                                .display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.horizontal_protection,
+                            HorizontalProtectionStyle::MonolithicCitadelBoxDeck,
+                            HorizontalProtectionStyle::MonolithicCitadelBoxDeck.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.horizontal_protection,
+                            HorizontalProtectionStyle::ArmouredFlightDeckHangarBox,
+                            HorizontalProtectionStyle::ArmouredFlightDeckHangarBox.display_name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.workbench.design.draft.systems.horizontal_protection,
+                            HorizontalProtectionStyle::LightSplinterWeatherDeck,
+                            HorizontalProtectionStyle::LightSplinterWeatherDeck.display_name(),
                         );
                     });
                 ui.end_row();
@@ -1486,26 +1940,26 @@ impl SpringSharpApp {
     }
 
     fn page_spaces(&mut self, ui: &mut egui::Ui) {
-        if let Some(bench) = get_preset_benchmark(&self.ship.name) {
+        let result = self.workbench.design.result();
+        let ship = &result.ship;
+        if let Some(bench) = get_preset_benchmark(&ship.name) {
             ui.heading(format!(
                 "Historical Subsystem Weight & Stability Benchmark ({})",
                 bench.name
             ));
             ui.label(format!("Source: {}", bench.source));
-            let sim_hull = self.ship.engine.hull_weight;
-            let sim_armour = self.ship.armour.weight
-                + self
-                    .ship
+            let sim_hull = ship.engine.hull_weight;
+            let sim_armour = ship.armour.weight
+                + ship
                     .guns
                     .batteries
                     .iter()
                     .map(|b| b.arm_weight)
                     .sum::<f64>();
-            let sim_mach = self.ship.engine.engine_weight;
-            let sim_arm =
-                self.ship.guns.borne_weight + self.ship.guns.magazine + self.ship.weapons.weight;
-            let sim_bunker = self.ship.engine.bunker;
-            let sim_gm = self.ship.metacentre;
+            let sim_mach = ship.engine.engine_weight;
+            let sim_arm = ship.guns.borne_weight + ship.guns.magazine + ship.weapons.weight;
+            let sim_bunker = ship.engine.bunker;
+            let sim_gm = ship.metacentre;
 
             egui::Grid::new("bench_grid")
                 .striped(true)
@@ -1539,7 +1993,7 @@ impl SpringSharpApp {
 
                     row(
                         "Normal displacement (t)",
-                        self.ship.hull.displacement,
+                        ship.hull.displacement,
                         bench.ref_displacement_t,
                         0,
                         false,
@@ -1578,8 +2032,8 @@ impl SpringSharpApp {
             ui.separator();
         }
 
-        ui.heading("Internal Space Volume Budget");
-        let sp = calculate_internal_spaces(&self.ship);
+        crate::theme::heading(ui, "Internal Space Volume Budget");
+        let sp = calculate_internal_spaces(ship);
         egui::Grid::new("space_grid")
             .striped(true)
             .spacing([24.0, 4.0])
@@ -1607,7 +2061,8 @@ impl SpringSharpApp {
             });
 
         ui.separator();
-        ui.heading("Multi-Deck General Arrangement Optimizer (GA)");
+        crate::theme::heading(ui, "Multi-Deck General Arrangement Optimizer (GA)");
+        let previous_target = self.target_cg;
         ui.horizontal(|ui| {
             drag_f64(
                 ui,
@@ -1616,14 +2071,15 @@ impl SpringSharpApp {
                 0.01,
                 0.20..=0.80,
             );
+            if self.target_cg != previous_target {
+                self.workbench.clear_placement();
+            }
             if ui.button("Run arrangement optimizer").clicked() {
-                let placement = suggest_compartment_placement(&self.ship, self.target_cg);
-                self.last_placement = Some(placement);
-                self.status = "Arrangement optimized".to_string();
+                self.execute(Command::Arrange(self.target_cg));
             }
         });
 
-        if let Some(p) = &self.last_placement {
+        if let Some(p) = self.workbench.placement() {
             ui.label(format!(
                 "Vertical CG: {:.3} (target {:.2}) · Longitudinal CG: {:.3} · Access edges: {} ({}) · Max escape path: {:.1} m · Scantling util: {:.2}",
                 p.cg_vertical,
@@ -1667,131 +2123,120 @@ impl SpringSharpApp {
     }
 
     fn dashboard_header(&mut self, ui: &mut egui::Ui) {
+        use crate::theme;
+        let result = self.workbench.design.result();
+        let ship = &result.ship;
         ui.horizontal(|ui| {
-            ui.heading(&self.ship.name);
-            ui.label(format!("· {} · {}", self.ship.country, self.ship.ship_type));
-            if self.ship.converged {
-                ui.colored_label(egui::Color32::from_rgb(95, 211, 141), "● Converged");
+            let title = egui::RichText::new(&ship.name).size(24.0).strong();
+            ui.label(if self.serif_titles {
+                title.family(egui::FontFamily::Name("serif".into()))
             } else {
-                ui.colored_label(
-                    egui::Color32::from_rgb(255, 181, 71),
-                    "▲ Weights not converged",
-                );
-            }
-        });
-        ui.horizontal(|ui| {
-            if self.metric_units {
-                ui.label(format!(
-                    "Disp: {:.0} t normal ({:.0} t full)",
-                    self.ship.hull.displacement * 1.01605,
-                    self.ship.disp_max_load * 1.01605
-                ));
-                ui.separator();
-                ui.label(format!(
-                    "Speed: {:.1} km/h ({:.1} kt)",
-                    self.ship.engine.speed_max * 1.852,
-                    self.ship.engine.speed_max
-                ));
-                ui.separator();
-                ui.label(format!("Power: {:.0} hp", self.ship.engine.hp_max));
-                ui.separator();
-                ui.label(format!(
-                    "Broadside: {:.0} kg",
-                    self.ship.guns.broadside * 0.453592
-                ));
-                ui.separator();
-                ui.label(format!("GM: {:.2} m", self.ship.metacentre * 0.3048));
-            } else {
-                ui.label(format!(
-                    "Disp: {:.0} t normal ({:.0} t full)",
-                    self.ship.hull.displacement, self.ship.disp_max_load
-                ));
-                ui.separator();
-                ui.label(format!("Speed: {:.1} kt", self.ship.engine.speed_max));
-                ui.separator();
-                ui.label(format!("Power: {:.0} hp", self.ship.engine.hp_max));
-                ui.separator();
-                ui.label(format!("Broadside: {:.0} lb", self.ship.guns.broadside));
-                ui.separator();
-                ui.label(format!("GM: {:.1} ft", self.ship.metacentre));
-            }
-        });
-
-        // Color weight distribution bar
-        let total = self.ship.hull.displacement.max(1.0);
-        let e = &self.ship.engine;
-        let g = &self.ship.guns;
-        let arm = &self.ship.armour;
-        let w = &self.ship.weapons;
-
-        let parts = [
-            ("Hull", e.hull_weight, egui::Color32::from_rgb(79, 143, 214)),
-            ("Armour", arm.weight, egui::Color32::from_rgb(155, 123, 234)),
-            (
-                "Machinery",
-                e.engine_weight,
-                egui::Color32::from_rgb(224, 134, 79),
-            ),
-            (
-                "Armament",
-                g.borne_weight + w.weight,
-                egui::Color32::from_rgb(224, 93, 111),
-            ),
-            (
-                "Magazine",
-                g.magazine,
-                egui::Color32::from_rgb(214, 181, 79),
-            ),
-            ("Bunker", e.bunker, egui::Color32::from_rgb(79, 199, 180)),
-        ];
-
-        let bar_height = 14.0;
-        let available_w = ui.available_width().max(300.0);
-        let (response, painter) =
-            ui.allocate_painter(egui::vec2(available_w, bar_height), egui::Sense::hover());
-        let rect = response.rect;
-        painter.rect_filled(rect, 3.0, egui::Color32::from_rgb(12, 27, 42));
-        let mut cur_x = rect.left();
-        for (_, wt, color) in parts {
-            if wt > 0.0 {
-                let frac = ((wt / total).clamp(0.0, 1.0)) as f32;
-                let w_px = (frac * rect.width()).max(1.0);
-                let slice = egui::Rect::from_min_max(
-                    egui::pos2(cur_x, rect.top()),
-                    egui::pos2((cur_x + w_px).min(rect.right()), rect.bottom()),
-                );
-                painter.rect_filled(slice, 0.0, color);
-                cur_x += w_px;
-                if cur_x >= rect.right() {
-                    break;
+                title
+            });
+            ui.label(
+                egui::RichText::new(format!("{} · {}", ship.country, ship.ship_type))
+                    .color(theme::MUTED),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ship.converged {
+                    theme::pill(ui, self.tr("● Converged", "● 重量已收敛"), theme::GOOD);
+                } else {
+                    theme::pill(
+                        ui,
+                        self.tr("▲ Weights not converged", "▲ 重量未收敛"),
+                        theme::WARN,
+                    );
                 }
-            }
-        }
-        ui.horizontal_wrapped(|ui| {
-            for (name, wt, color) in parts {
-                let pct = (wt / total * 100.0).clamp(0.0, 100.0);
-                ui.colored_label(color, format!("■ {name}: {:.0}t ({:.1}%)", wt, pct));
-            }
+            });
         });
-        ui.separator();
+        ui.add_space(6.0);
+
+        let m = self.metric_units;
+        let disp = if m {
+            format!("{:.0} t", ship.hull.displacement * 1.01605)
+        } else {
+            format!("{:.0} t", ship.hull.displacement)
+        };
+        let full = if m {
+            format!("{:.0} t", ship.disp_max_load * 1.01605)
+        } else {
+            format!("{:.0} t", ship.disp_max_load)
+        };
+        let speed = if m {
+            format!("{:.1} km/h", ship.engine.speed_max * 1.852)
+        } else {
+            format!("{:.1} kt", ship.engine.speed_max)
+        };
+        let broadside = if m {
+            format!("{:.0} kg", ship.guns.broadside * 0.453592)
+        } else {
+            format!("{:.0} lb", ship.guns.broadside)
+        };
+        let gm = if m {
+            format!("{:.2} m", ship.metacentre * 0.3048)
+        } else {
+            format!("{:.1} ft", ship.metacentre)
+        };
+        let stab = ship.stability_adj;
+        let stab_color = if stab >= 1.0 {
+            theme::GOOD
+        } else if stab >= 0.9 {
+            theme::WARN
+        } else {
+            theme::BAD
+        };
+        ui.horizontal_wrapped(|ui| {
+            theme::metric(ui, self.tr("Normal disp.", "标准排水量"), disp, theme::TEXT);
+            theme::metric(ui, self.tr("Full load", "满载排水量"), full, theme::TEXT);
+            theme::metric(ui, self.tr("Max speed", "最大航速"), speed, theme::ACCENT);
+            theme::metric(
+                ui,
+                self.tr("Power", "轴马力"),
+                format!("{:.0} hp", ship.engine.hp_max),
+                theme::ACCENT,
+            );
+            theme::metric(
+                ui,
+                self.tr("Broadside", "侧舷齐射量"),
+                broadside,
+                theme::W_ARMAMENT,
+            );
+            theme::metric(ui, self.tr("Metacentre", "初稳心高 (GM)"), gm, stab_color);
+            theme::metric(
+                ui,
+                self.tr("Stability", "稳性指数"),
+                format!("{stab:.2}"),
+                stab_color,
+            );
+            theme::metric(
+                ui,
+                self.tr("Seakeeping", "适航耐波性"),
+                format!("{:.2}", ship.seakeeping),
+                theme::TEXT,
+            );
+        });
+        ui.add_space(10.0);
+        weight_bar(ui, ship, m);
     }
 
     fn page_blueprint(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Vessel Blueprint Schematic");
+        let result = self.workbench.design.result();
+        let ship = &result.ship;
+        crate::theme::heading(ui, "Vessel Blueprint Schematic");
         ui.horizontal(|ui| {
             ui.checkbox(&mut self.show_arcs, "Show 290° Turret Firing Arcs");
             ui.separator();
             let dim_lbl = if self.metric_units {
                 format!(
                     "Dimensions: {:.1} m × {:.1} m × {:.1} m",
-                    self.ship.hull.length * 0.3048,
-                    self.ship.hull.beam * 0.3048,
-                    self.ship.hull.draught * 0.3048
+                    ship.hull.length * 0.3048,
+                    ship.hull.beam * 0.3048,
+                    ship.hull.draught * 0.3048
                 )
             } else {
                 format!(
                     "Dimensions: {:.0} ft × {:.0} ft × {:.1} ft",
-                    self.ship.hull.length, self.ship.hull.beam, self.ship.hull.draught
+                    ship.hull.length, ship.hull.beam, ship.hull.draught
                 )
             };
             ui.label(dim_lbl);
@@ -1807,21 +2252,16 @@ impl SpringSharpApp {
         // Background canvas
         painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(8, 19, 30));
 
-        let l = self.ship.hull.length.max(10.0) as f32;
-        let b = self.ship.hull.beam.max(5.0) as f32;
+        let l = ship.hull.length.max(10.0) as f32;
+        let b = ship.hull.beam.max(5.0) as f32;
         let pad_x = 50.0_f32;
         let draw_w = (rect.width() - pad_x * 2.0).max(100.0);
         let x0 = rect.left() + pad_x;
         let x1 = x0 + draw_w;
 
-        let fc = self.ship.free.fc_length.clamp(0.0, 1.0) as f32;
-        let fd = self
-            .ship
-            .free
-            .fd_length
-            .clamp(0.0, (1.0 - fc as f64).max(0.0)) as f32;
-        let qd = self
-            .ship
+        let fc = ship.free.fc_length.clamp(0.0, 1.0) as f32;
+        let fd = ship.free.fd_length.clamp(0.0, (1.0 - fc as f64).max(0.0)) as f32;
+        let qd = ship
             .free
             .qd_length
             .clamp(0.0, (1.0 - (fc + fd) as f64).max(0.0)) as f32;
@@ -1835,14 +2275,14 @@ impl SpringSharpApp {
         let fb_scale = 1.0_f32;
 
         // Profile Deck heights
-        let y_fc_for = y_wl - ((self.ship.free.free_fc_for as f32) * fb_scale).clamp(8.0, 36.0);
-        let y_fc_aft = y_wl - ((self.ship.free.free_fc_aft as f32) * fb_scale).clamp(8.0, 36.0);
-        let y_fd_for = y_wl - ((self.ship.free.free_fd_for as f32) * fb_scale).clamp(6.0, 30.0);
-        let y_fd_aft = y_wl - ((self.ship.free.free_fd_aft as f32) * fb_scale).clamp(6.0, 30.0);
-        let y_ad_for = y_wl - ((self.ship.free.free_ad_for as f32) * fb_scale).clamp(4.0, 26.0);
-        let y_ad_aft = y_wl - ((self.ship.free.free_ad_aft as f32) * fb_scale).clamp(4.0, 26.0);
-        let y_qd_for = y_wl - ((self.ship.free.free_qd_for as f32) * fb_scale).clamp(4.0, 26.0);
-        let y_qd_aft = y_wl - ((self.ship.free.free_qd_aft as f32) * fb_scale).clamp(4.0, 26.0);
+        let y_fc_for = y_wl - ((ship.free.free_fc_for as f32) * fb_scale).clamp(8.0, 36.0);
+        let y_fc_aft = y_wl - ((ship.free.free_fc_aft as f32) * fb_scale).clamp(8.0, 36.0);
+        let y_fd_for = y_wl - ((ship.free.free_fd_for as f32) * fb_scale).clamp(6.0, 30.0);
+        let y_fd_aft = y_wl - ((ship.free.free_fd_aft as f32) * fb_scale).clamp(6.0, 30.0);
+        let y_ad_for = y_wl - ((ship.free.free_ad_for as f32) * fb_scale).clamp(4.0, 26.0);
+        let y_ad_aft = y_wl - ((ship.free.free_ad_aft as f32) * fb_scale).clamp(4.0, 26.0);
+        let y_qd_for = y_wl - ((ship.free.free_qd_for as f32) * fb_scale).clamp(4.0, 26.0);
+        let y_qd_aft = y_wl - ((ship.free.free_qd_aft as f32) * fb_scale).clamp(4.0, 26.0);
 
         // Waterline
         painter.line_segment(
@@ -1879,39 +2319,16 @@ impl SpringSharpApp {
             egui::Stroke::new(1.5, egui::Color32::from_rgb(79, 179, 255)),
         ));
 
-        let sys_eval_bp = self.ship.systems.evaluate(&self.ship);
-        let is_carrier = sys_eval_bp.resolved_modality == CombatModality::AviationDeckProjection
-            || self.ship.ship_type.to_lowercase().contains("carrier")
-            || (self.ship.weapons.misc_weight_deck >= 250.0
-                && self.ship.guns.batteries[0].calibre <= 8.5);
+        let sys_eval_bp = &result.systems;
+        let layout = &result.blueprint;
+        let is_carrier = layout.is_carrier;
         let fd_y = y_fc_for - 12.0;
-
-        // Battery mount solver
-        let g1 = &self.ship.guns.batteries[0];
-        let g1_mounts =
-            solve_battery_mounts(g1, fc as f64, fd as f64, qd as f64, is_carrier, false);
-        let g2 = &self.ship.guns.batteries[1];
-        let g2_mounts = solve_battery_mounts(g2, fc as f64, fd as f64, qd as f64, is_carrier, true);
-
-        // Citadel calculation (vital spaces: fore magazine to aft magazine + machinery)
-        let mut cit_fore_x = 0.35_f64;
-        let mut cit_aft_x = 0.65_f64;
-        if !g1_mounts.is_empty() {
-            let mut min_x = 1.0_f64;
-            let mut max_x = 0.0_f64;
-            for m in &g1_mounts {
-                if m.x < min_x {
-                    min_x = m.x;
-                }
-                if m.x > max_x {
-                    max_x = m.x;
-                }
-            }
-            cit_fore_x = min_x;
-            cit_aft_x = max_x;
-        }
-        let cit_x0 = (cit_fore_x - 0.04).clamp(0.09, 0.38) as f32;
-        let cit_x1 = (cit_aft_x + 0.04).clamp(0.62, 0.91) as f32;
+        let g1 = &ship.guns.batteries[0];
+        let g2 = &ship.guns.batteries[1];
+        let g1_mounts = &layout.batteries[0];
+        let g2_mounts = &layout.batteries[1];
+        let cit_x0 = layout.citadel[0] as f32;
+        let cit_x1 = layout.citadel[1] as f32;
         let cit_center = (cit_x0 + cit_x1) * 0.5;
         let cit_px0 = x_at(cit_x0);
         let cit_px1 = x_at(cit_x1);
@@ -1936,72 +2353,55 @@ impl SpringSharpApp {
             egui::StrokeKind::Outside,
         );
 
-        // Superstructure bridge & funnels (dynamically placed between battery groups)
-        let (dir_x, base_deck_y) = if is_carrier {
-            let hangar_pts = vec![
-                egui::pos2(x0 + 6.0, fd_y),
-                egui::pos2(x1 - 6.0, fd_y),
-                egui::pos2(x1 - 15.0, y_qd_aft),
-                egui::pos2(x0 + 15.0, y_fc_for),
-            ];
-            painter.add(egui::Shape::convex_polygon(
-                hangar_pts,
-                egui::Color32::from_rgba_unmultiplied(95, 211, 141, 32),
-                egui::Stroke::new(1.2, egui::Color32::from_rgb(95, 211, 141)),
-            ));
+        // Shared concept geometry: both renderers project the same parts.
+        let super_deck_y = if is_carrier { y_fc_for - 8.0 } else { y_fd_for };
+        if is_carrier {
+            painter.rect_filled(
+                egui::Rect::from_min_max(
+                    egui::pos2(x0 + 4.0, super_deck_y),
+                    egui::pos2(x1 - 4.0, super_deck_y + 8.0),
+                ),
+                1.0,
+                egui::Color32::from_rgb(37, 77, 72),
+            );
+        }
+        for part in &layout.superstructure.parts {
+            let height = part.height as f32 * draw_w;
+            let color = if part.kind == springsharp::superstructure::PartKind::Funnel {
+                egui::Color32::from_rgb(104, 125, 145)
+            } else {
+                egui::Color32::from_rgb(138, 164, 191)
+            };
+            painter.rect_filled(
+                egui::Rect::from_min_max(
+                    egui::pos2(x_at(part.x as f32), super_deck_y - height),
+                    egui::pos2(x_at((part.x + part.length) as f32), super_deck_y),
+                ),
+                2.0,
+                color,
+            );
+        }
+        let dir_x = x_at(((layout.bridge[0] + layout.bridge[1]) * 0.5) as f32);
+        let base_deck_y = super_deck_y - layout.superstructure.parts[0].height as f32 * draw_w;
+
+        for line in &layout.superstructure.mast_lines {
             painter.line_segment(
-                [egui::pos2(x0 + 4.0, fd_y), egui::pos2(x1 - 4.0, fd_y)],
-                egui::Stroke::new(2.5, egui::Color32::from_rgb(95, 211, 141)),
+                [
+                    egui::pos2(
+                        x_at(line[0][0] as f32),
+                        super_deck_y - line[0][1] as f32 * draw_w,
+                    ),
+                    egui::pos2(
+                        x_at(line[1][0] as f32),
+                        super_deck_y - line[1][1] as f32 * draw_w,
+                    ),
+                ],
+                egui::Stroke::new(1.2, egui::Color32::LIGHT_GRAY),
             );
-            let isl_x0 = x0 + draw_w * 0.40;
-            let isl_w = draw_w * 0.16;
-            let isl_bridge = egui::Rect::from_min_max(
-                egui::pos2(isl_x0, fd_y - 12.0),
-                egui::pos2(isl_x0 + isl_w * 0.45, fd_y),
-            );
-            painter.rect_filled(isl_bridge, 1.5, egui::Color32::from_rgb(224, 134, 79));
-            let isl_funnel = egui::Rect::from_min_max(
-                egui::pos2(isl_x0 + isl_w * 0.50, fd_y - 16.0),
-                egui::pos2(isl_x0 + isl_w * 0.98, fd_y),
-            );
-            painter.rect_filled(isl_funnel, 1.5, egui::Color32::from_rgb(138, 164, 191));
-            (x0 + draw_w * 0.43, fd_y - 12.0)
-        } else {
-            let mut fore_max_x = 0.0_f32;
-            let mut aft_min_x = 1.0_f32;
-            for m in &g1_mounts {
-                let px = m.x as f32;
-                if m.fwd && px < 0.5 && px > fore_max_x {
-                    fore_max_x = px;
-                }
-                if !m.fwd && px > 0.5 && px < aft_min_x {
-                    aft_min_x = px;
-                }
-            }
-            let b_front = (x0 + draw_w * 0.35).max(x_at(fore_max_x) + 16.0);
-            let b_rear = b_front + 20.0;
-            let f_front = b_rear + 12.0;
-            let mut f_rear = (x0 + draw_w * 0.65).min(x_at(aft_min_x) - 16.0);
-            if f_rear < f_front + 14.0 {
-                f_rear = f_front + 14.0;
-            }
-
-            let bridge_rect = egui::Rect::from_min_max(
-                egui::pos2(b_front, y_fd_for - 16.0),
-                egui::pos2(b_rear, y_fd_for),
-            );
-            painter.rect_filled(bridge_rect, 2.0, egui::Color32::from_rgb(138, 164, 191));
-            let funnel_rect = egui::Rect::from_min_max(
-                egui::pos2(f_front, y_fd_for - 20.0),
-                egui::pos2(f_rear, y_fd_for),
-            );
-            painter.rect_filled(funnel_rect, 2.0, egui::Color32::from_rgb(110, 130, 150));
-            ((b_front + b_rear) * 0.5, y_fd_for - 16.0)
-        };
-
+        }
         // Fire-control director & radar
         let sys_eval = sys_eval_bp;
-        let dir_top_y = base_deck_y - 8.0;
+        let dir_top_y = super_deck_y - layout.superstructure.mast_tip[1] as f32 * draw_w;
         let rf_arm = (sys_eval.optical_baseline_m as f32 * 0.75).clamp(3.0, 12.0);
         painter.line_segment(
             [egui::pos2(dir_x, base_deck_y), egui::pos2(dir_x, dir_top_y)],
@@ -2040,11 +2440,10 @@ impl SpringSharpApp {
         }
 
         // Main belt armour anchored over citadel center
-        if self.ship.armour.belt_main > 0.0 && self.ship.armour.belt_main_length > 0.0 {
-            let bw =
-                (((self.ship.armour.belt_main_length as f32) / l) * draw_w).clamp(10.0, draw_w);
+        if ship.armour.belt_main > 0.0 && ship.armour.belt_main_length > 0.0 {
+            let bw = (((ship.armour.belt_main_length as f32) / l) * draw_w).clamp(10.0, draw_w);
             let bx = (x_at(cit_center) - bw * 0.5).clamp(x0 + 4.0, x1 - bw - 4.0);
-            let bh = ((self.ship.armour.belt_main_height as f32) * fb_scale).clamp(6.0, 18.0);
+            let bh = ((ship.armour.belt_main_height as f32) * fb_scale).clamp(6.0, 18.0);
             let by = y_wl - bh * 0.6;
             let belt_rect =
                 egui::Rect::from_min_max(egui::pos2(bx, by), egui::pos2(bx + bw, by + bh));
@@ -2061,12 +2460,11 @@ impl SpringSharpApp {
             );
 
             // Upper belt
-            if self.ship.armour.belt_upper > 0.0 && self.ship.armour.belt_upper_length > 0.0 {
-                let ub_w = (((self.ship.armour.belt_upper_length as f32) / l) * draw_w)
-                    .clamp(10.0, draw_w);
+            if ship.armour.belt_upper > 0.0 && ship.armour.belt_upper_length > 0.0 {
+                let ub_w =
+                    (((ship.armour.belt_upper_length as f32) / l) * draw_w).clamp(10.0, draw_w);
                 let ub_x = (x_at(cit_center) - ub_w * 0.5).clamp(x0 + 4.0, x1 - ub_w - 4.0);
-                let ub_h =
-                    ((self.ship.armour.belt_upper_height as f32) * fb_scale).clamp(4.0, 12.0);
+                let ub_h = ((ship.armour.belt_upper_height as f32) * fb_scale).clamp(4.0, 12.0);
                 let ub_y = by - ub_h;
                 let ub_rect =
                     egui::Rect::from_min_max(egui::pos2(ub_x, ub_y), egui::pos2(ub_x + ub_w, by));
@@ -2078,9 +2476,9 @@ impl SpringSharpApp {
             }
 
             // Ends belt
-            if self.ship.armour.belt_ends > 0.0 && self.ship.armour.belt_ends_length > 0.0 {
-                let eb_w = (((self.ship.armour.belt_ends_length as f32) / l) * draw_w * 0.5)
-                    .clamp(6.0, 60.0);
+            if ship.armour.belt_ends > 0.0 && ship.armour.belt_ends_length > 0.0 {
+                let eb_w =
+                    (((ship.armour.belt_ends_length as f32) / l) * draw_w * 0.5).clamp(6.0, 60.0);
                 let eb_h = bh * 0.75;
                 let eb_y = y_wl - eb_h * 0.5;
                 let ef_x0 = (bx - eb_w).max(x0 + 2.0);
@@ -2105,8 +2503,8 @@ impl SpringSharpApp {
         }
 
         // Deck armour coverage (Flat, Turtleback sloped, Double deck, Weather deck)
-        let d_cov = self.ship.armour.deck_coverage;
-        if self.ship.armour.deck > 0.0 {
+        let d_cov = ship.armour.deck_coverage;
+        if ship.armour.deck > 0.0 {
             let d_y = y_wl - 2.0;
             if d_cov == 0 || d_cov == 4 || d_cov == 5 || d_cov == 6 {
                 let line_y = if d_cov == 6 { y_wl - 12.0 } else { d_y };
@@ -2165,7 +2563,7 @@ impl SpringSharpApp {
         // Main Battery #1 (turrets vs casemates)
         let g1_cal = g1.calibre as f32;
         let t_rad = (g1_cal * 0.32).clamp(3.5, 7.2);
-        for m in &g1_mounts {
+        for m in g1_mounts {
             let p = m.x as f32;
             let tx = x_at(p);
             let base_deck = if is_carrier {
@@ -2237,7 +2635,7 @@ impl SpringSharpApp {
         if !g2_mounts.is_empty() && g2.calibre >= 2.5 {
             let g2_cal = g2.calibre as f32;
             let r2 = (g2_cal * 0.45).clamp(2.5, 4.5);
-            for m in &g2_mounts {
+            for m in g2_mounts {
                 if m.side == 1 {
                     continue;
                 }
@@ -2372,23 +2770,31 @@ impl SpringSharpApp {
                     egui::Color32::from_rgba_unmultiplied(255, 255, 255, 70),
                 ),
             );
-            let isl_x0 = x0 + draw_w * 0.40;
-            let isl_w = draw_w * 0.16;
-            let island_rect = egui::Rect::from_min_max(
-                egui::pos2(isl_x0, y_cl - hb * 0.95 + 1.0),
-                egui::pos2(isl_x0 + isl_w, y_cl - hb * 0.95 + 8.5),
-            );
-            painter.rect_filled(island_rect, 2.0, egui::Color32::from_rgb(224, 134, 79));
-            painter.rect_stroke(
-                island_rect,
+        }
+        for part in &layout.superstructure.parts {
+            let color = if part.kind == springsharp::superstructure::PartKind::Funnel {
+                egui::Color32::from_rgb(73, 93, 112)
+            } else {
+                egui::Color32::from_rgb(95, 116, 137)
+            };
+            painter.rect_filled(
+                egui::Rect::from_min_max(
+                    egui::pos2(
+                        x_at(part.x as f32),
+                        y_cl + (part.y - part.width / 2.0) as f32 * hb * 2.0,
+                    ),
+                    egui::pos2(
+                        x_at((part.x + part.length) as f32),
+                        y_cl + (part.y + part.width / 2.0) as f32 * hb * 2.0,
+                    ),
+                ),
                 2.0,
-                egui::Stroke::new(1.0, egui::Color32::WHITE),
-                egui::StrokeKind::Outside,
+                color,
             );
         }
 
         // Torpedo tubes in plan view
-        let torp_count = self.ship.weapons.torpedo1.number + self.ship.weapons.torpedo2.number;
+        let torp_count = ship.weapons.torpedo1.number + ship.weapons.torpedo2.number;
         if torp_count > 0 && !is_carrier {
             let t_positions = [x0 + draw_w * 0.54, x0 + draw_w * 0.63];
             for tx in t_positions {
@@ -2421,7 +2827,7 @@ impl SpringSharpApp {
         }
 
         // Plan turrets & casemates
-        for m in &g1_mounts {
+        for m in g1_mounts {
             let p = m.x as f32;
             let tx = x_at(p);
             let b_len = (g1_cal * 0.65).clamp(6.0, 11.0);
@@ -2520,7 +2926,7 @@ impl SpringSharpApp {
             let g2_cal = g2.calibre as f32;
             let r2 = (g2_cal * 0.45).clamp(2.5, 4.2);
             let b_len2 = (g2_cal * 0.85).clamp(4.0, 7.5);
-            for m in &g2_mounts {
+            for m in g2_mounts {
                 let p = m.x as f32;
                 let tx2 = x_at(p);
                 if m.is_casemate {
@@ -2624,72 +3030,252 @@ impl SpringSharpApp {
             egui::Stroke::new(1.0, egui::Color32::from_rgb(79, 179, 255)),
         );
 
-        // Belt armor on cross-section (with inclination)
-        let incline_deg = self.ship.armour.belts_incline as f32;
+        // Belt armor on cross-section (with dynamic underwater extension & taper)
+        let incline_deg = ship.armour.belts_incline as f32;
         let belt_dx = if incline_deg > 0.0 {
             (incline_deg * 0.45).min(9.0)
         } else {
             0.0
         };
-        painter.line_segment(
-            [
-                egui::pos2(xc - wb, mid_deck + 15.0),
-                egui::pos2(xc - wb + belt_dx, mid_wl + 18.0),
-            ],
-            egui::Stroke::new(3.5, egui::Color32::from_rgb(155, 123, 234)),
-        );
-        painter.line_segment(
-            [
-                egui::pos2(xc + wb, mid_deck + 15.0),
-                egui::pos2(xc + wb - belt_dx, mid_wl + 18.0),
-            ],
-            egui::Stroke::new(3.5, egui::Color32::from_rgb(155, 123, 234)),
-        );
+        let pi_sub = sys_eval.features.underwater_belt_submergence_ratio as f32;
+        let pi_taper = sys_eval.features.belt_lower_taper_ratio as f32;
+        let sub_span = mid_keel - mid_wl;
+        let y_sub = mid_wl + (sub_span * pi_sub).clamp(10.0, 42.0);
+        let main_w = (ship.armour.belt_main as f32 * 0.35).clamp(2.0, 6.5);
+        let lower_w = (main_w * pi_taper).clamp(1.5, main_w);
 
-        // Deck / Turtleback sloped armor on cross-section
-        if d_cov == 1 || d_cov == 2 {
+        if ship.armour.belt_main > 0.0 {
+            // Port belt
             painter.line_segment(
                 [
-                    egui::pos2(xc - wb + 16.0, mid_wl - 10.0),
-                    egui::pos2(xc + wb - 16.0, mid_wl - 10.0),
+                    egui::pos2(xc - wb, mid_deck + 15.0),
+                    egui::pos2(xc - wb + belt_dx * 0.5, mid_wl),
                 ],
-                egui::Stroke::new(2.0, egui::Color32::from_rgb(56, 239, 125)),
-            );
-            painter.line_segment(
-                [
-                    egui::pos2(xc - wb + 16.0, mid_wl - 10.0),
-                    egui::pos2(xc - wb + belt_dx, mid_wl + 18.0),
-                ],
-                egui::Stroke::new(2.0, egui::Color32::from_rgb(230, 162, 60)),
+                egui::Stroke::new(main_w, egui::Color32::from_rgb(155, 123, 234)),
             );
             painter.line_segment(
                 [
-                    egui::pos2(xc + wb - 16.0, mid_wl - 10.0),
-                    egui::pos2(xc + wb - belt_dx, mid_wl + 18.0),
+                    egui::pos2(xc - wb + belt_dx * 0.5, mid_wl),
+                    egui::pos2(xc - wb + belt_dx, y_sub),
                 ],
-                egui::Stroke::new(2.0, egui::Color32::from_rgb(230, 162, 60)),
+                egui::Stroke::new(lower_w, egui::Color32::from_rgb(180, 145, 245)),
             );
-        } else if d_cov == 3 {
+
+            // Starboard belt
             painter.line_segment(
-                [egui::pos2(xc - wb, mid_deck), egui::pos2(xc + wb, mid_deck)],
-                egui::Stroke::new(1.4, egui::Color32::from_rgb(56, 239, 125)),
+                [
+                    egui::pos2(xc + wb, mid_deck + 15.0),
+                    egui::pos2(xc + wb - belt_dx * 0.5, mid_wl),
+                ],
+                egui::Stroke::new(main_w, egui::Color32::from_rgb(155, 123, 234)),
             );
             painter.line_segment(
                 [
-                    egui::pos2(xc - wb, mid_wl - 10.0),
-                    egui::pos2(xc + wb, mid_wl - 10.0),
+                    egui::pos2(xc + wb - belt_dx * 0.5, mid_wl),
+                    egui::pos2(xc + wb - belt_dx, y_sub),
                 ],
-                egui::Stroke::new(2.2, egui::Color32::from_rgb(56, 239, 125)),
+                egui::Stroke::new(lower_w, egui::Color32::from_rgb(180, 145, 245)),
             );
-        } else {
-            let deck_line_y = if d_cov == 6 { mid_deck } else { mid_wl - 10.0 };
-            painter.line_segment(
-                [
-                    egui::pos2(xc - wb, deck_line_y),
-                    egui::pos2(xc + wb, deck_line_y),
-                ],
-                egui::Stroke::new(2.0, egui::Color32::from_rgb(56, 239, 125)),
-            );
+
+            // Joint closure to torpedo bulkhead based on resolved_belt_tds_junction
+            let junc = sys_eval.resolved_belt_tds_junction;
+            match junc {
+                BeltTdsJunction::IntegralTaperedHoldingBulkhead => {
+                    painter.line_segment(
+                        [
+                            egui::pos2(xc - wb + belt_dx, y_sub),
+                            egui::pos2(xc - wb + 18.0, mid_keel - 10.0),
+                        ],
+                        egui::Stroke::new(1.8, egui::Color32::from_rgb(155, 123, 234)),
+                    );
+                    painter.line_segment(
+                        [
+                            egui::pos2(xc + wb - belt_dx, y_sub),
+                            egui::pos2(xc + wb - 18.0, mid_keel - 10.0),
+                        ],
+                        egui::Stroke::new(1.8, egui::Color32::from_rgb(155, 123, 234)),
+                    );
+                }
+                BeltTdsJunction::TurtlebackSlopeKneeJoint => {
+                    painter.line_segment(
+                        [
+                            egui::pos2(xc - wb + belt_dx, y_sub),
+                            egui::pos2(xc - wb + belt_dx, mid_keel - 10.0),
+                        ],
+                        egui::Stroke::new(1.5, egui::Color32::from_rgb(224, 134, 79)),
+                    );
+                    painter.line_segment(
+                        [
+                            egui::pos2(xc + wb - belt_dx, y_sub),
+                            egui::pos2(xc + wb - belt_dx, mid_keel - 10.0),
+                        ],
+                        egui::Stroke::new(1.5, egui::Color32::from_rgb(224, 134, 79)),
+                    );
+                }
+                BeltTdsJunction::SpacedAbsorberShelfJoint => {
+                    painter.line_segment(
+                        [
+                            egui::pos2(xc - wb + belt_dx, y_sub),
+                            egui::pos2(xc - wb + 13.0, y_sub),
+                        ],
+                        egui::Stroke::new(1.6, egui::Color32::from_rgb(224, 134, 79)),
+                    );
+                    painter.line_segment(
+                        [
+                            egui::pos2(xc + wb - belt_dx, y_sub),
+                            egui::pos2(xc + wb - 13.0, y_sub),
+                        ],
+                        egui::Stroke::new(1.6, egui::Color32::from_rgb(224, 134, 79)),
+                    );
+                }
+                BeltTdsJunction::SteppedShelfCitadel => {
+                    painter.line_segment(
+                        [
+                            egui::pos2(xc - wb + belt_dx, y_sub),
+                            egui::pos2(xc - wb + 16.0, y_sub),
+                        ],
+                        egui::Stroke::new(1.6, egui::Color32::from_rgb(56, 239, 125)),
+                    );
+                    painter.line_segment(
+                        [
+                            egui::pos2(xc + wb - belt_dx, y_sub),
+                            egui::pos2(xc + wb - 16.0, y_sub),
+                        ],
+                        egui::Stroke::new(1.6, egui::Color32::from_rgb(56, 239, 125)),
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        // Horizontal / Deck Protection Topology on cross-section
+        match sys_eval.resolved_horizontal_protection {
+            HorizontalProtectionStyle::ProtectedTurtlebackCarapace => {
+                painter.line_segment(
+                    [egui::pos2(xc - wb, mid_deck), egui::pos2(xc + wb, mid_deck)],
+                    egui::Stroke::new(1.1, egui::Color32::from_rgb(56, 239, 125)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb + 18.0, mid_wl - 8.0),
+                        egui::pos2(xc + wb - 18.0, mid_wl - 8.0),
+                    ],
+                    egui::Stroke::new(2.2, egui::Color32::from_rgb(56, 239, 125)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb + 18.0, mid_wl - 8.0),
+                        egui::pos2(xc - wb, mid_wl + 14.0),
+                    ],
+                    egui::Stroke::new(2.2, egui::Color32::from_rgb(230, 162, 60)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc + wb - 18.0, mid_wl - 8.0),
+                        egui::pos2(xc + wb, mid_wl + 14.0),
+                    ],
+                    egui::Stroke::new(2.2, egui::Color32::from_rgb(230, 162, 60)),
+                );
+            }
+            HorizontalProtectionStyle::LowTurtlebackSlopedCitadel => {
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb, mid_deck + 12.0),
+                        egui::pos2(xc + wb, mid_deck + 12.0),
+                    ],
+                    egui::Stroke::new(1.3, egui::Color32::from_rgb(124, 227, 163)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb + 16.0, mid_wl - 10.0),
+                        egui::pos2(xc + wb - 16.0, mid_wl - 10.0),
+                    ],
+                    egui::Stroke::new(2.2, egui::Color32::from_rgb(56, 239, 125)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb + 16.0, mid_wl - 10.0),
+                        egui::pos2(xc - wb + belt_dx, y_sub),
+                    ],
+                    egui::Stroke::new(2.2, egui::Color32::from_rgb(230, 162, 60)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc + wb - 16.0, mid_wl - 10.0),
+                        egui::pos2(xc + wb - belt_dx, y_sub),
+                    ],
+                    egui::Stroke::new(2.2, egui::Color32::from_rgb(230, 162, 60)),
+                );
+            }
+            HorizontalProtectionStyle::MultiLayerBombDecappingSandwich => {
+                // 1. Bomb / cap-stripping weather deck
+                painter.line_segment(
+                    [egui::pos2(xc - wb, mid_deck), egui::pos2(xc + wb, mid_deck)],
+                    egui::Stroke::new(1.4, egui::Color32::from_rgb(124, 227, 163)),
+                );
+                // 2. Heavy main ballistic armored deck closing citadel top
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb, mid_deck + 15.0),
+                        egui::pos2(xc + wb, mid_deck + 15.0),
+                    ],
+                    egui::Stroke::new(2.8, egui::Color32::from_rgb(56, 239, 125)),
+                );
+                // 3. Lower splinter catcher deck above vitals
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb + 16.0, mid_wl - 5.0),
+                        egui::pos2(xc + wb - 16.0, mid_wl - 5.0),
+                    ],
+                    egui::Stroke::new(1.3, egui::Color32::from_rgb(60, 168, 107)),
+                );
+            }
+            HorizontalProtectionStyle::MonolithicCitadelBoxDeck => {
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb, mid_deck + 12.0),
+                        egui::pos2(xc + wb, mid_deck + 12.0),
+                    ],
+                    egui::Stroke::new(2.8, egui::Color32::from_rgb(56, 239, 125)),
+                );
+            }
+            HorizontalProtectionStyle::ArmouredFlightDeckHangarBox => {
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb - 6.0, mid_deck - 8.0),
+                        egui::pos2(xc + wb + 6.0, mid_deck - 8.0),
+                    ],
+                    egui::Stroke::new(2.6, egui::Color32::from_rgb(56, 239, 125)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb, mid_deck - 8.0),
+                        egui::pos2(xc - wb, mid_deck + 15.0),
+                    ],
+                    egui::Stroke::new(1.5, egui::Color32::from_rgb(79, 179, 255)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc + wb, mid_deck - 8.0),
+                        egui::pos2(xc + wb, mid_deck + 15.0),
+                    ],
+                    egui::Stroke::new(1.5, egui::Color32::from_rgb(79, 179, 255)),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(xc - wb, mid_deck + 15.0),
+                        egui::pos2(xc + wb, mid_deck + 15.0),
+                    ],
+                    egui::Stroke::new(1.8, egui::Color32::from_rgb(56, 239, 125)),
+                );
+            }
+            HorizontalProtectionStyle::LightSplinterWeatherDeck
+            | HorizontalProtectionStyle::Auto => {
+                painter.line_segment(
+                    [egui::pos2(xc - wb, mid_deck), egui::pos2(xc + wb, mid_deck)],
+                    egui::Stroke::new(1.3, egui::Color32::from_rgb(56, 239, 125)),
+                );
+            }
         }
 
         // TDS internal geometry
@@ -2906,44 +3492,71 @@ impl SpringSharpApp {
             egui::StrokeKind::Outside,
         );
 
+        let horiz_str = format!(
+            "Deck Protection: {}",
+            sys_eval.resolved_horizontal_protection.display_name()
+        );
         let sub_str = format!("Subdivision: {}", sub_arch.display_name());
         let tds_str = format!("TDS System: {}", tds_arch.display_name());
+        let junc_str = format!(
+            "Belt-TDS Joint: {}",
+            sys_eval.resolved_belt_tds_junction.display_name()
+        );
         let mach_str = format!(
             "Machinery: {}",
             sys_eval.resolved_machinery_arrangement.display_name()
         );
         let arm_str = format!(
-            "Armour: {:.1}\" Belt ({}° Incline) · Deck Mode {}",
-            self.ship.armour.belt_main, self.ship.armour.belts_incline, d_cov
+            "Belt: {:.1}\" ({:.0}°) · Deck: {:.1}\" (Deck/Belt Π {:.2}) · Sub {:.0}% · TDS {:.0}%",
+            ship.armour.belt_main,
+            ship.armour.belts_incline,
+            ship.armour.deck,
+            sys_eval.features.deck_belt_balance_ratio,
+            sys_eval.features.underwater_belt_submergence_ratio * 100.0,
+            sys_eval.features.tds_depth_ratio * 100.0
         );
 
         painter.text(
-            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 12.0),
+            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 6.0),
             egui::Align2::LEFT_TOP,
-            sub_str,
-            egui::FontId::monospace(10.5),
-            egui::Color32::from_rgb(95, 211, 141),
+            horiz_str,
+            egui::FontId::monospace(9.5),
+            egui::Color32::from_rgb(56, 239, 125),
         );
         painter.text(
-            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 32.0),
+            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 21.0),
+            egui::Align2::LEFT_TOP,
+            sub_str,
+            egui::FontId::monospace(9.5),
+            egui::Color32::from_rgb(124, 227, 163),
+        );
+        painter.text(
+            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 36.0),
             egui::Align2::LEFT_TOP,
             tds_str,
-            egui::FontId::monospace(10.5),
+            egui::FontId::monospace(9.5),
             egui::Color32::from_rgb(224, 134, 79),
         );
         painter.text(
-            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 52.0),
+            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 51.0),
+            egui::Align2::LEFT_TOP,
+            junc_str,
+            egui::FontId::monospace(9.5),
+            egui::Color32::from_rgb(180, 145, 245),
+        );
+        painter.text(
+            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 66.0),
             egui::Align2::LEFT_TOP,
             mach_str,
-            egui::FontId::monospace(10.5),
+            egui::FontId::monospace(9.5),
             egui::Color32::from_rgb(155, 123, 234),
         );
         painter.text(
-            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 72.0),
+            egui::pos2(card_rect.left() + 10.0, card_rect.top() + 81.0),
             egui::Align2::LEFT_TOP,
             arm_str,
-            egui::FontId::monospace(10.5),
-            egui::Color32::from_rgb(56, 239, 125),
+            egui::FontId::monospace(9.5),
+            egui::Color32::from_rgb(138, 164, 191),
         );
 
         // Section labels
@@ -2970,24 +3583,26 @@ impl SpringSharpApp {
         );
 
         ui.separator();
-        ui.heading("Speed & Power Curve");
+        crate::theme::heading(ui, "Speed & Power Curve");
         self.draw_speed_power_chart(ui, available_width);
         ui.separator();
-        ui.heading("Armor Penetration & Immunity Zone");
+        crate::theme::heading(ui, "Armor Penetration & Immunity Zone");
         self.draw_immunity_chart(ui, available_width);
     }
 
     fn draw_speed_power_chart(&self, ui: &mut egui::Ui, available_width: f32) {
+        let result = self.workbench.design.result();
+        let ship = &result.ship;
         let chart_h = 220.0_f32;
         let (response, painter) =
             ui.allocate_painter(egui::vec2(available_width, chart_h), egui::Sense::hover());
         let rect = response.rect;
         painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(8, 19, 30));
 
-        let v_top = (self.ship.engine.speed_max + 2.0).max(20.0).ceil();
+        let v_top = (ship.engine.speed_max + 2.0).max(20.0).ceil();
         let v_min = 10.0_f64;
-        let mut mod_engine = self.ship.engine.clone();
-        let mut orig_engine = self.ship.engine.clone();
+        let mut mod_engine = ship.engine.clone();
+        let mut orig_engine = ship.engine.clone();
         orig_engine.resistance_model = ResistanceModel::Original;
         orig_engine.power_factor = 1.0;
         orig_engine.original_power_factor = 1.0;
@@ -2997,8 +3612,8 @@ impl SpringSharpApp {
         let mut max_hp = 1000.0_f64;
         let mut v = v_min;
         while v <= v_top + 1e-6 {
-            let hp_mod = mod_engine.speed_hp_calc(v, &self.ship.hull);
-            let hp_orig = orig_engine.speed_hp_calc(v, &self.ship.hull);
+            let hp_mod = mod_engine.speed_hp_calc(v, &ship.hull);
+            let hp_orig = orig_engine.speed_hp_calc(v, &ship.hull);
             if hp_mod > max_hp {
                 max_hp = hp_mod;
             }
@@ -3096,7 +3711,9 @@ impl SpringSharpApp {
     }
 
     fn draw_immunity_chart(&self, ui: &mut egui::Ui, available_width: f32) {
-        let g1 = &self.ship.guns.batteries[0];
+        let result = self.workbench.design.result();
+        let ship = &result.ship;
+        let g1 = &ship.guns.batteries[0];
         if g1.calibre <= 0.0 || g1.barrels <= 0 {
             ui.label("No active main battery guns for exterior ballistics analysis.");
             return;
@@ -3104,9 +3721,9 @@ impl SpringSharpApp {
 
         let iz = compute_self_immunity_zone(
             g1,
-            self.ship.armour.belt_main,
-            self.ship.armour.belts_incline,
-            self.ship.armour.deck,
+            ship.armour.belt_main,
+            ship.armour.belts_incline,
+            ship.armour.deck,
         );
 
         if iz.curve.is_empty() {
@@ -3319,7 +3936,7 @@ impl SpringSharpApp {
         }
 
         // Salvo Hit Probability curve (green dashed with right axis ticks)
-        let sys_eval = self.ship.systems.evaluate(&self.ship);
+        let sys_eval = &result.systems;
         let max_prob = 35.0_f32;
         let y_prob = |p: f32| rect.top() + pad_t + (1.0 - (p / max_prob).clamp(0.0, 1.0)) * ph;
 
@@ -3367,45 +3984,137 @@ impl Default for SpringSharpApp {
 
 impl eframe::App for SpringSharpApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        egui::Panel::left("nav_panel").show(ui, |ui| self.nav(ui));
-        egui::CentralPanel::default().show(ui, |ui| {
-            self.dashboard_header(ui);
-            egui::ScrollArea::vertical().show(ui, |ui| match self.page {
-                Page::Hull => self.page_hull(ui),
-                Page::Freeboard => self.page_freeboard(ui),
-                Page::Armour => self.page_armour(ui),
-                Page::Guns => self.page_guns(ui),
-                Page::Weapons => self.page_weapons(ui),
-                Page::Engine => self.page_engine(ui),
-                Page::Blueprint => self.page_blueprint(ui),
-                Page::Spaces => self.page_spaces(ui),
-                Page::Calibration => self.page_calibration(ui),
-                Page::Report => self.page_report(ui),
+        use crate::theme;
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::new("app_language"), self.text_language));
+        self.workbench.sync_edits();
+        egui::Panel::left("nav_panel")
+            .resizable(true)
+            .default_size(236.0)
+            .min_size(210.0)
+            .frame(
+                egui::Frame::new()
+                    .fill(theme::PANEL)
+                    .inner_margin(egui::Margin::same(14))
+                    .stroke(egui::Stroke::new(1.0, theme::alpha(theme::LINE, 150))),
+            )
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| self.nav(ui));
             });
-        });
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::new()
+                    .fill(theme::BG)
+                    .inner_margin(egui::Margin::same(16)),
+            )
+            .show(ui, |ui| {
+                theme::card().show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        if self.workbench.design.is_dirty() {
+                            theme::pill(
+                                ui,
+                                &format!(
+                                    "{} v{} {} · {} v{}",
+                                    self.tr("● Inputs", "● 参数输入"),
+                                    self.workbench.design.revision(),
+                                    self.tr("pending", "待计算"),
+                                    self.tr("showing", "当前显示"),
+                                    self.workbench.design.result().revision,
+                                ),
+                                theme::WARN,
+                            );
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        egui::RichText::new(self.tr("Calculate", "立即计算"))
+                                            .strong(),
+                                    )
+                                    .fill(theme::alpha(theme::WARN, 60)),
+                                )
+                                .clicked()
+                            {
+                                self.recalculate();
+                            }
+                        } else {
+                            theme::pill(
+                                ui,
+                                &format!(
+                                    "{} · {} {}",
+                                    self.tr("✔ Calculated", "✔ 计算已完成"),
+                                    self.tr("revision", "版本"),
+                                    self.workbench.design.revision()
+                                ),
+                                theme::GOOD,
+                            );
+                        }
+                    });
+                    ui.add_space(6.0);
+                    self.dashboard_header(ui);
+                });
+                ui.add_space(12.0);
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    theme::card().show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        match self.page {
+                            Page::Hull => self.page_hull(ui),
+                            Page::Freeboard => self.page_freeboard(ui),
+                            Page::Armour => self.page_armour(ui),
+                            Page::Guns => self.page_guns(ui),
+                            Page::Weapons => self.page_weapons(ui),
+                            Page::Engine => self.page_engine(ui),
+                            Page::Blueprint => self.page_blueprint(ui),
+                            Page::Spaces => self.page_spaces(ui),
+                            Page::Calibration => self.page_calibration(ui),
+                            Page::Report => self.page_report(ui),
+                        }
+                    });
+                });
+            });
+        if self.workbench.sync_edits() {
+            ui.ctx().request_repaint();
+        }
     }
 }
 
 fn weapon_mount_ui(ui: &mut egui::Ui, title: &str, id_salt: &str, m: &mut WeaponMount) {
+    let lang = ui
+        .ctx()
+        .data(|d| d.get_temp(egui::Id::new("app_language")))
+        .unwrap_or(TextLanguage::Germanic);
+    let title = match title {
+        "Torpedo set 1" => crate::i18n::tr(lang, "Torpedo set 1", "鱼雷发射组 1"),
+        "Torpedo set 2" => crate::i18n::tr(lang, "Torpedo set 2", "鱼雷发射组 2"),
+        "Mine equipment" => crate::i18n::tr(lang, "Mine equipment", "水雷布设装备"),
+        "Depth charges / AS mortar 1" => {
+            crate::i18n::tr(lang, "Depth charges / AS mortar 1", "反潜深弹/臼炮组 1")
+        }
+        "Depth charges / AS mortar 2" => {
+            crate::i18n::tr(lang, "Depth charges / AS mortar 2", "反潜深弹/臼炮组 2")
+        }
+        _ => title,
+    };
     egui::CollapsingHeader::new(title)
         .id_salt(id_salt)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label("Weapon kind:");
+                field_label(ui, "Weapon kind:");
+                let (torp_txt, mine_txt, dc_txt) = if lang == TextLanguage::Han {
+                    ("鱼雷 (Torpedo)", "水雷 (Mine)", "深弹/反潜臼炮 (DC/Mortar)")
+                } else {
+                    ("Torpedo", "Mine", "Depth charge / AS mortar")
+                };
+                let selected_text = match m.kind {
+                    WeaponKind::Torpedo => torp_txt,
+                    WeaponKind::Mine => mine_txt,
+                    WeaponKind::DepthCharge => dc_txt,
+                };
                 egui::ComboBox::from_id_salt(format!("{id_salt}_kind"))
-                    .selected_text(match m.kind {
-                        WeaponKind::Torpedo => "Torpedo",
-                        WeaponKind::Mine => "Mine",
-                        WeaponKind::DepthCharge => "Depth charge / AS mortar",
-                    })
+                    .selected_text(selected_text)
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut m.kind, WeaponKind::Torpedo, "Torpedo");
-                        ui.selectable_value(&mut m.kind, WeaponKind::Mine, "Mine");
-                        ui.selectable_value(
-                            &mut m.kind,
-                            WeaponKind::DepthCharge,
-                            "Depth charge / AS mortar",
-                        );
+                        ui.selectable_value(&mut m.kind, WeaponKind::Torpedo, torp_txt);
+                        ui.selectable_value(&mut m.kind, WeaponKind::Mine, mine_txt);
+                        ui.selectable_value(&mut m.kind, WeaponKind::DepthCharge, dc_txt);
                     });
             });
             drag_i32(ui, "Number of tubes / weapons", &mut m.number);
@@ -3418,17 +4127,43 @@ fn weapon_mount_ui(ui: &mut egui::Ui, title: &str, id_salt: &str, m: &mut Weapon
                 0.0..=5000.0,
             );
             drag_f64(ui, "Length (ft, torpedo)", &mut m.length, 0.5, 0.0..=100.0);
-            drag_i32(ui, "Location index (0..8)", &mut m.location);
+            let locations = opts::weapon_locations_lang(m.kind, lang);
+            combo_i32(ui, "Location", &mut m.location, locations);
         });
+}
+
+/// Fixed-width label column so inputs line up down the page.
+fn field_label(ui: &mut egui::Ui, label: &str) {
+    let lang = ui
+        .ctx()
+        .data(|d| d.get_temp(egui::Id::new("app_language")))
+        .unwrap_or(TextLanguage::Germanic);
+    let display_text = if lang == TextLanguage::Han {
+        crate::i18n::translate_field(label)
+    } else {
+        label
+    };
+    let width = 230.0_f32.min(ui.available_width() * 0.5);
+    ui.add_sized(
+        [width, ui.spacing().interact_size.y],
+        egui::Label::new(egui::RichText::new(display_text).color(crate::theme::MUTED)).truncate(),
+    )
+    .on_hover_text(display_text);
 }
 
 fn combo_i32(ui: &mut egui::Ui, label: &str, value: &mut i32, options: &[&str]) {
     ui.horizontal(|ui| {
-        ui.label(label);
+        field_label(ui, label);
+        let lang = ui
+            .ctx()
+            .data(|d| d.get_temp(egui::Id::new("app_language")))
+            .unwrap_or(TextLanguage::Germanic);
+        let options = localized_options(label, options, lang);
         let curr_idx = (*value).max(0) as usize;
         let selected_text = options.get(curr_idx).copied().unwrap_or("Other");
-        egui::ComboBox::from_id_salt(label)
+        egui::ComboBox::from_id_salt(ui.id().with(label))
             .selected_text(selected_text)
+            .width(220.0)
             .show_ui(ui, |ui| {
                 for (idx, &opt) in options.iter().enumerate() {
                     ui.selectable_value(value, idx as i32, opt);
@@ -3437,244 +4172,37 @@ fn combo_i32(ui: &mut egui::Ui, label: &str, value: &mut i32, options: &[&str]) 
     });
 }
 
-fn get_layout_pos(layout: i32, fc: f64, fd: f64, qd: f64) -> f64 {
-    let ad = (1.0 - fc - fd - qd).max(0.0);
-    match layout {
-        0 | 9 => 0.5,
-        1 | 10 => 0.38,
-        2 | 11 => 0.62,
-        3 | 12 => fc + 0.25 * fd,
-        4 | 13 => fc + 0.50 * fd,
-        5 | 14 => fc + 0.75 * fd,
-        6 | 15 => 1.0 - (qd + 0.75 * ad),
-        7 | 16 => 1.0 - (qd + 0.50 * ad),
-        8 | 17 => 1.0 - (qd + 0.25 * ad),
-        _ => 0.5,
+fn localized_options<'a>(label: &str, options: &'a [&'a str], lang: TextLanguage) -> &'a [&'a str] {
+    if lang != TextLanguage::Han {
+        return options;
     }
-}
-
-#[derive(Clone, Copy, Debug)]
-struct BlueprintMount {
-    x: f64,
-    tier: i32,
-    side: i32,
-    fwd: bool,
-    bpm: i32,
-    is_casemate: bool,
-    #[allow(dead_code)]
-    mount_type: i32,
-}
-
-#[allow(clippy::too_many_arguments)]
-fn solve_group_mounts(
-    count: i32,
-    layout: i32,
-    super_cnt: i32,
-    bpm: i32,
-    fc: f64,
-    fd: f64,
-    qd: f64,
-    is_carrier: bool,
-    is_sec: bool,
-    mount_type: i32,
-    is_sub: bool,
-) -> Vec<BlueprintMount> {
-    let mut out = Vec::new();
-    if count <= 0 {
-        return out;
-    }
-    let is_side = layout >= 9;
-    let base_code = if is_side { layout - 9 } else { layout };
-    let step = if is_sec { 0.045 } else { 0.062 };
-    let bpm_clamped = bpm.max(1);
-    let is_casemate = mount_type == 6 || mount_type == 0 || is_sub;
-    let mut push_mount = |x: f64, tier: i32, side: i32, fwd: bool| {
-        out.push(BlueprintMount {
-            x: x.clamp(0.08, 0.92),
-            tier,
-            side,
-            fwd,
-            bpm: bpm_clamped,
-            is_casemate,
-            mount_type,
-        });
-    };
-
-    if base_code == 1 || base_code == 2 {
-        let n_fore = if base_code == 1 {
-            (count + 1) / 2
-        } else {
-            count / 2
-        };
-        let n_aft = count - n_fore;
-        let fore_start = if is_carrier {
-            0.23
-        } else {
-            (fc * 0.52).clamp(0.14, 0.24)
-        };
-        let aft_end = if is_carrier {
-            0.77
-        } else {
-            (1.0 - qd * 0.48).clamp(0.75, 0.86)
-        };
-        let mut s_rem = super_cnt.max(0);
-        let f_super = if n_fore >= 2 && s_rem >= 1 { 1 } else { 0 };
-        if f_super > 0 {
-            s_rem -= 1;
-        }
-        let a_super = if n_aft >= 2 && s_rem >= 1 { 1 } else { 0 };
-
-        for i in 0..n_fore {
-            let tier = if i == 1 && f_super > 0 {
-                1
-            } else if i == 2 && n_fore >= 3 && super_cnt >= 3 {
-                2
-            } else {
-                0
-            };
-            let side = if is_carrier {
-                -1
-            } else if is_side {
-                if i % 2 == 0 {
-                    -1
+    match label {
+        "Bow shape" => opts::BOW_TYPES_HAN,
+        "Stern shape" => opts::STERN_TYPES_HAN,
+        "Bulkhead type" => opts::BULKHEAD_TYPES_HAN,
+        "Deck coverage" => opts::DECK_COVERAGE_HAN,
+        "Gun type" => opts::GUN_TYPES_HAN,
+        "Mount type" => opts::MOUNT_TYPES_HAN,
+        "Guns/mount G1" | "Guns/mount G2" => opts::GUNS_IN_MOUNT_HAN,
+        "Layout G1" | "Layout G2" => opts::MOUNT_LAYOUTS_HAN,
+        "Location" => {
+            if options.len() == 9 {
+                opts::TORPEDO_LOCATIONS_HAN
+            } else if options.len() == 4 {
+                if options
+                    .first()
+                    .is_some_and(|s| s.contains("Stern depth charge"))
+                {
+                    opts::DC_LOCATIONS_HAN
                 } else {
-                    1
+                    opts::MINE_LOCATIONS_HAN
                 }
             } else {
-                0
-            };
-            push_mount(fore_start + (i as f64) * step, tier, side, true);
-        }
-        for j in 0..n_aft {
-            let tier = if j == 1 && a_super > 0 { 1 } else { 0 };
-            let side = if is_carrier {
-                -1
-            } else if is_side {
-                if j % 2 == 0 {
-                    -1
-                } else {
-                    1
-                }
-            } else {
-                0
-            };
-            push_mount(aft_end - (j as f64) * step, tier, side, false);
-        }
-    } else if base_code == 0 {
-        if is_side {
-            let pairs = (count + 1) / 2;
-            let span = ((pairs - 1) as f64 * 0.07).clamp(0.12, 0.38);
-            let start = 0.50 - span * 0.5;
-            for i in 0..count {
-                let pair_idx = i / 2;
-                let x = if pairs <= 1 {
-                    0.50
-                } else {
-                    start + (pair_idx as f64) * (span / ((pairs - 1).max(1) as f64))
-                };
-                let side = if i % 2 == 0 { -1 } else { 1 };
-                push_mount(x, 0, side, x < 0.5);
-            }
-        } else {
-            let start = 0.50 - ((count - 1) as f64) * step * 0.5;
-            for i in 0..count {
-                let x = start + (i as f64) * step;
-                let tier = if i % 2 == 1 && super_cnt > 0 { 1 } else { 0 };
-                push_mount(x, tier, 0, x < 0.5);
+                options
             }
         }
-    } else {
-        let center = get_layout_pos(layout, fc, fd, qd);
-        let fwd = base_code <= 5;
-        if is_side && !is_carrier {
-            let pairs = (count + 1) / 2;
-            for i in 0..count {
-                let pair_idx = i / 2;
-                let x = center + ((pair_idx as f64) - ((pairs - 1) as f64) * 0.5) * step;
-                let tier = if super_cnt > 0 && pair_idx > 0 { 1 } else { 0 };
-                let side = if i % 2 == 0 { -1 } else { 1 };
-                push_mount(x, tier, side, fwd);
-            }
-        } else {
-            for i in 0..count {
-                let x = center + ((i as f64) - ((count - 1) as f64) * 0.5) * step;
-                let tier = if super_cnt >= count || (i > 0 && i <= super_cnt) {
-                    1
-                } else {
-                    0
-                };
-                let side = if is_carrier { -1 } else { 0 };
-                push_mount(x, tier, side, fwd);
-            }
-        }
+        _ => options,
     }
-    out
-}
-
-fn solve_battery_mounts(
-    b: &GunBattery,
-    fc: f64,
-    fd: f64,
-    qd: f64,
-    is_carrier: bool,
-    is_sec: bool,
-) -> Vec<BlueprintMount> {
-    if b.mounts <= 0 || b.calibre <= 0.0 {
-        return Vec::new();
-    }
-    let mut list = Vec::new();
-    let is_casemate_battery = b.mount_type == 6 || b.mount_type == 0;
-    if b.mounts_g1 > 0 || b.mounts_g2 > 0 {
-        if b.mounts_g1 > 0 {
-            let is_sub1 =
-                is_casemate_battery || (b.mount_sub_g1 > 0 && b.mount_sub_g1 >= b.mounts_g1);
-            list.extend(solve_group_mounts(
-                b.mounts_g1,
-                b.layout_g1,
-                b.mount_super_g1,
-                b.per_mount_g1,
-                fc,
-                fd,
-                qd,
-                is_carrier,
-                is_sec,
-                b.mount_type,
-                is_sub1,
-            ));
-        }
-        if b.mounts_g2 > 0 {
-            let is_sub2 =
-                is_casemate_battery || (b.mount_sub_g2 > 0 && b.mount_sub_g2 >= b.mounts_g2);
-            list.extend(solve_group_mounts(
-                b.mounts_g2,
-                b.layout_g2,
-                b.mount_super_g2,
-                b.per_mount_g2,
-                fc,
-                fd,
-                qd,
-                is_carrier,
-                is_sec,
-                b.mount_type,
-                is_sub2,
-            ));
-        }
-    } else {
-        list = solve_group_mounts(
-            b.mounts,
-            b.layout_g1,
-            b.mount_super_g1,
-            b.per_mount_g1,
-            fc,
-            fd,
-            qd,
-            is_carrier,
-            is_sec,
-            b.mount_type,
-            is_casemate_battery || b.mount_sub_g1 > 0,
-        );
-    }
-    list
 }
 
 fn drag_f64(
@@ -3685,23 +4213,224 @@ fn drag_f64(
     range: std::ops::RangeInclusive<f64>,
 ) {
     ui.horizontal(|ui| {
-        ui.label(label);
-        ui.add(egui::DragValue::new(value).speed(speed).range(range));
+        field_label(ui, label);
+        ui.add_sized(
+            [120.0, ui.spacing().interact_size.y],
+            egui::DragValue::new(value).speed(speed).range(range),
+        );
     });
 }
 
 fn drag_i32(ui: &mut egui::Ui, label: &str, value: &mut i32) {
     ui.horizontal(|ui| {
-        ui.label(label);
-        ui.add(egui::DragValue::new(value).speed(1.0));
+        field_label(ui, label);
+        ui.add_sized(
+            [120.0, ui.spacing().interact_size.y],
+            egui::DragValue::new(value).speed(1.0),
+        );
     });
 }
 
 pub fn run() -> eframe::Result<()> {
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1360.0, 880.0])
+            .with_min_inner_size([960.0, 640.0]),
+        ..Default::default()
+    };
     eframe::run_native(
         "SpringSharp Rust",
         options,
-        Box::new(|_cc| Ok(Box::new(SpringSharpApp::new()))),
+        Box::new(|cc| {
+            let missing = crate::fonts::install(&cc.egui_ctx, TextLanguage::Germanic);
+            crate::theme::install(&cc.egui_ctx);
+            let mut app = SpringSharpApp::new();
+            if !missing.is_empty() {
+                app.status = format!("Missing bundled fonts: {}", missing.join(", "));
+            }
+            Ok(Box::new(app))
+        }),
     )
+}
+
+/// Segmented, rounded weight-distribution bar with hover details and a legend.
+fn weight_bar(ui: &mut egui::Ui, ship: &springsharp::model::ShipModel, metric: bool) {
+    use crate::theme;
+    let lang = ui
+        .ctx()
+        .data(|d| d.get_temp(egui::Id::new("app_language")))
+        .unwrap_or(TextLanguage::Germanic);
+    let total = ship.hull.displacement.max(1.0);
+    let (e, g, a, w) = (&ship.engine, &ship.guns, &ship.armour, &ship.weapons);
+    let (n_hull, n_arm, n_mach, n_armam, n_mag, n_bunker, n_misc, n_other) =
+        if lang == TextLanguage::Han {
+            (
+                "船体结构",
+                "装甲防护",
+                "动力机械",
+                "武器武备",
+                "弹药储备",
+                "燃油燃煤",
+                "杂项空舱",
+                "其余载荷",
+            )
+        } else {
+            (
+                "Hull",
+                "Armour",
+                "Machinery",
+                "Armament",
+                "Magazine",
+                "Bunker",
+                "Miscellaneous",
+                "Other load",
+            )
+        };
+    let mut parts = vec![
+        (n_hull, e.hull_weight, theme::W_HULL),
+        (n_arm, a.weight, theme::W_ARMOUR),
+        (n_mach, e.engine_weight, theme::W_MACHINERY),
+        (n_armam, g.borne_weight + w.weight, theme::W_ARMAMENT),
+        (n_mag, g.magazine, theme::W_MAGAZINE),
+        (n_bunker, e.bunker, theme::W_BUNKER),
+        (
+            n_misc,
+            w.misc_weight_vital
+                + w.misc_weight_hull
+                + w.misc_weight_deck
+                + w.misc_weight_above
+                + w.void_weight,
+            theme::W_MISC,
+        ),
+    ];
+    let used: f64 = parts.iter().map(|p| p.1.max(0.0)).sum();
+    if total - used > 0.5 {
+        parts.push((n_other, total - used, theme::W_OTHER));
+    }
+    let scale = if metric { 1.01605 } else { 1.0 };
+
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(crate::i18n::tr(
+                lang,
+                "WEIGHT DISTRIBUTION",
+                "重量分布与构成",
+            ))
+            .size(11.0)
+            .strong()
+            .color(theme::BRASS),
+        );
+        let subt = if lang == TextLanguage::Han {
+            format!("基准: {:.0} 吨标准排水量", total * scale)
+        } else {
+            format!("of {:.0} t normal", total * scale)
+        };
+        ui.label(egui::RichText::new(subt).small().color(theme::MUTED));
+    });
+
+    let height = 22.0;
+    let width = ui.available_width().max(300.0);
+    let (resp, painter) = ui.allocate_painter(egui::vec2(width, height), egui::Sense::hover());
+    let rect = resp.rect;
+    let radius = egui::CornerRadius::same(11);
+    painter.rect_filled(rect, radius, egui::Color32::from_rgb(6, 13, 22));
+
+    let hover = resp.hover_pos();
+    let mut hovered = None;
+    let mut x = rect.left();
+    let visible: Vec<_> = parts.iter().filter(|p| p.1 > 0.0).collect();
+    let painter = painter.with_clip_rect(rect);
+    for (i, (name, wt, color)) in visible.iter().enumerate() {
+        let w_px = ((wt / total).clamp(0.0, 1.0) as f32 * rect.width()).max(1.0);
+        let right = (x + w_px).min(rect.right());
+        let seg =
+            egui::Rect::from_min_max(egui::pos2(x, rect.top()), egui::pos2(right, rect.bottom()));
+        let is_hover = hover.is_some_and(|p| seg.contains(p));
+        let fill = if is_hover {
+            *color
+        } else {
+            theme::alpha(*color, 215)
+        };
+        // Round only the outer ends so the bar reads as one pill.
+        let mut cr = egui::CornerRadius::ZERO;
+        if i == 0 {
+            cr.nw = 11;
+            cr.sw = 11;
+        }
+        if i + 1 == visible.len() || right >= rect.right() - 0.5 {
+            cr.ne = 11;
+            cr.se = 11;
+        }
+        painter.rect_filled(seg, cr, fill);
+        // Glossy top highlight.
+        let gloss = egui::Rect::from_min_max(seg.min, egui::pos2(seg.right(), seg.center().y));
+        painter.rect_filled(
+            gloss,
+            cr,
+            egui::Color32::from_white_alpha(if is_hover { 46 } else { 22 }),
+        );
+        if i > 0 {
+            painter.line_segment(
+                [seg.left_top(), seg.left_bottom()],
+                egui::Stroke::new(1.0, egui::Color32::from_black_alpha(110)),
+            );
+        }
+        let pct = wt / total * 100.0;
+        if seg.width() > 46.0 {
+            painter.text(
+                seg.center(),
+                egui::Align2::CENTER_CENTER,
+                format!("{pct:.0}%"),
+                egui::FontId::proportional(11.0),
+                egui::Color32::from_rgba_unmultiplied(8, 17, 28, 230),
+            );
+        }
+        if is_hover {
+            hovered = Some((*name, *wt, pct, *color));
+        }
+        x = right;
+        if x >= rect.right() {
+            break;
+        }
+    }
+    painter.rect_stroke(
+        rect,
+        radius,
+        egui::Stroke::new(1.0, theme::alpha(theme::LINE, 200)),
+        egui::StrokeKind::Inside,
+    );
+    if let Some((name, wt, pct, color)) = hovered {
+        resp.on_hover_ui_at_pointer(|ui| {
+            ui.label(egui::RichText::new(name).strong().color(color));
+            let tip = if lang == TextLanguage::Han {
+                format!("{:.0} t  ·  占标排 {pct:.1}%", wt * scale)
+            } else {
+                format!("{:.0} t  ·  {pct:.1}% of normal", wt * scale)
+            };
+            ui.label(tip);
+        });
+    }
+
+    ui.add_space(6.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 14.0;
+        for (name, wt, color) in &parts {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 5.0;
+                let (r, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+                ui.painter()
+                    .rect_filled(r, egui::CornerRadius::same(3), *color);
+                ui.label(egui::RichText::new(*name).small());
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{:.0} t · {:.1}%",
+                        wt * scale,
+                        wt / total * 100.0
+                    ))
+                    .small()
+                    .color(theme::MUTED),
+                );
+            });
+        }
+    });
 }

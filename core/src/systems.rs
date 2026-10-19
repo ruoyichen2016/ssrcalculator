@@ -46,6 +46,22 @@ pub struct DimensionlessFeatures {
     pub aviation_capability_ratio: f64,
     /// Normalized technological maturity $\tau \in [0, 1]$ across 1890..=1950.
     pub tech_epoch: f64,
+    /// Underwater belt immersion / submergence depth ratio $\Pi_{\text{belt\_sub}} = h_{\text{sub}} / T$.
+    pub underwater_belt_submergence_ratio: f64,
+    /// Belt-to-TDS transverse horizontal convergence ratio $\Pi_{\text{belt\_conv}} = \Delta y_{\text{belt}} / d_{\text{tds}}$.
+    pub belt_tds_convergence_ratio: f64,
+    /// Effective lower strake taper thickness ratio $\Pi_{\text{taper}} = t_{\text{lower\_eff}} / t_{\text{main}}$.
+    pub belt_lower_taper_ratio: f64,
+    /// Relative transverse torpedo defense absorption depth ratio $\Pi_{\text{tds\_depth}} = (B_{\text{bulge}} - B_{\text{cit}}) / B_{\text{bulge}}$.
+    pub tds_depth_ratio: f64,
+    /// Coupled underwater ballistic-torpedo protection barrier index $\Pi_{\text{uw\_couple}}$.
+    pub underwater_protection_coupling: f64,
+    /// Horizontal-to-vertical ballistic protection balance ratio $\Pi_{\text{deck\_belt}} = t_{\text{deck}} / (t_{\text{belt}} \cos\theta)$.
+    pub deck_belt_balance_ratio: f64,
+    /// Horizontal deck mass allocation fraction $\Pi_{\text{horiz\_mass}} = W_{\text{deck}} / (W_{\text{deck}} + W_{\text{belts}})$.
+    pub horizontal_protection_mass_ratio: f64,
+    /// Fore/aft end deck continuity ratio $\Pi_{\text{end\_deck}} = (t_{\text{fc}} + t_{\text{qd}}) / (2 t_{\text{deck}})$.
+    pub end_deck_continuity_ratio: f64,
 }
 
 impl DimensionlessFeatures {
@@ -155,6 +171,119 @@ impl DimensionlessFeatures {
         }
         let aviation_capability_ratio = aviation_score.clamp(0.0, 1.0);
 
+        // Underwater belt & TDS dimensionless feature extraction
+        let belt_main = ship.armour.belt_main.max(0.0);
+        let belt_height = ship.armour.belt_main_height.max(0.0);
+        let belt_incline_deg = ship.armour.belts_incline.abs();
+        let belt_incline_rad = belt_incline_deg.to_radians();
+        let belt_vert_h = belt_height * belt_incline_rad.cos();
+        let belt_horiz_w = belt_height * belt_incline_rad.sin();
+
+        let b_cit = if ship.armour.bulkhead_beam > 0.0 {
+            ship.armour.bulkhead_beam
+        } else {
+            b * 0.75
+        };
+        let b_bulges = ship.hull.beam_bulges.max(b);
+        let tds_depth_ratio = ((b_bulges - b_cit) / b_bulges).clamp(0.0, 1.0);
+        let tds_depth_single = ((b_bulges - b_cit) * 0.5).max(0.05 * b);
+        let belt_tds_convergence_ratio = (belt_horiz_w / tds_depth_single).clamp(0.0, 1.5);
+
+        // Vertical underwater extension of belt
+        let h_upper_vert = ship.armour.belt_upper_height.max(0.0) * belt_incline_rad.cos();
+        let h_above = if h_upper_vert > 0.0 {
+            (belt_vert_h * 0.45).min(mean_free)
+        } else if ship.armour.deck_coverage == 6 {
+            (belt_vert_h * 0.75).min(mean_free)
+        } else {
+            (belt_vert_h * 0.55).min(mean_free)
+        };
+        let bh_vert_h = ship
+            .armour
+            .bulkhead_height
+            .max(ship.armour.bulge_height)
+            .max(0.0);
+        let delta_ext = (bh_vert_h - belt_vert_h).max(0.0) * 0.65;
+        let h_sub = if belt_main > 0.0 {
+            (belt_vert_h - h_above + delta_ext).clamp(0.0, t * 0.95)
+        } else {
+            0.0
+        };
+        let underwater_belt_submergence_ratio = (h_sub / t).clamp(0.0, 1.0);
+
+        // Lower edge taper thickness ratio
+        let lower_taper = if belt_main > 0.0 {
+            let t_bulge = ship.armour.bulge.max(0.0);
+            if t_bulge > 0.0 {
+                let eff_lower = t_bulge
+                    + belt_main
+                        * belt_incline_rad.sin()
+                        * (belt_vert_h / bh_vert_h.max(belt_vert_h).max(1.0));
+                (eff_lower / belt_main).clamp(0.10, 1.0)
+            } else if bh_vert_h > belt_vert_h && belt_incline_deg > 5.0 {
+                let span_ratio = (belt_vert_h / bh_vert_h).clamp(0.4, 1.0);
+                (span_ratio * span_ratio * belt_incline_rad.cos()).clamp(0.20, 1.0)
+            } else if belt_incline_deg > 10.0 {
+                0.60
+            } else {
+                1.0
+            }
+        } else {
+            0.0
+        };
+        let belt_lower_taper_ratio = lower_taper.clamp(0.0, 1.0);
+
+        // Underwater protection barrier coupling index
+        let t_hold = if ship.armour.bulkhead > 0.0 && ship.armour.bulkhead <= 5.0 {
+            ship.armour.bulkhead
+        } else if ship.armour.bulge > 0.0 {
+            ship.armour.bulge
+        } else {
+            belt_main * 0.25
+        };
+        let hold_ratio = if belt_main > 0.0 {
+            (t_hold / belt_main).clamp(0.05, 1.0)
+        } else {
+            0.0
+        };
+        let underwater_protection_coupling = underwater_belt_submergence_ratio
+            * belt_lower_taper_ratio
+            * (1.0 + belt_tds_convergence_ratio)
+            + tds_depth_ratio * hold_ratio;
+
+        // Horizontal protection dimensionless invariants
+        let t_deck = ship.armour.deck.max(0.0);
+        let deck_belt_balance_ratio = if belt_main > 0.1 {
+            (t_deck / (belt_main * belt_incline_rad.cos().max(0.5))).clamp(0.0, 2.0)
+        } else if t_deck > 0.1 {
+            2.0
+        } else {
+            0.0
+        };
+        let w_deck = ship.armour.weight_deck.max(0.0);
+        let w_belts = ship.armour.weight_belts.max(0.0);
+        let horizontal_protection_mass_ratio = if w_deck + w_belts > 0.1 {
+            (w_deck / (w_deck + w_belts)).clamp(0.0, 1.0)
+        } else {
+            let proxy_deck = l * b * cb.sqrt() * t_deck;
+            let proxy_belt = 2.0
+                * l
+                * 0.60
+                * (belt_height * belt_main
+                    + ship.armour.belt_upper_height.max(0.0) * ship.armour.belt_upper.max(0.0));
+            if proxy_deck + proxy_belt > 0.1 {
+                (proxy_deck / (proxy_deck + proxy_belt)).clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        };
+        let end_deck_continuity_ratio = if t_deck > 0.05 {
+            ((ship.armour.deck_fc.max(0.0) + ship.armour.deck_qd.max(0.0)) / (2.0 * t_deck))
+                .clamp(0.0, 1.5)
+        } else {
+            0.0
+        };
+
         Self {
             froude_number,
             slenderness_ratio,
@@ -173,6 +302,14 @@ impl DimensionlessFeatures {
             volumetric_froude_number,
             aviation_capability_ratio,
             tech_epoch,
+            underwater_belt_submergence_ratio,
+            belt_tds_convergence_ratio,
+            belt_lower_taper_ratio,
+            tds_depth_ratio,
+            underwater_protection_coupling,
+            deck_belt_balance_ratio,
+            horizontal_protection_mass_ratio,
+            end_deck_continuity_ratio,
         }
     }
 }
@@ -204,19 +341,6 @@ impl StyleDoctrine {
             Self::LongRangeOpticalStrike => "long_range_optical_strike",
             Self::StereoscopicSubdivided => "stereoscopic_subdivided",
             Self::Custom => "custom",
-        }
-    }
-
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::AdaptiveAuto => "Adaptive Auto (Dimensionless Ideal-Type Match)",
-            Self::AutomationAllElectric => "Type I · Automated Radar & High-Margin All-Electric",
-            Self::AllWeatherSeakeeping => "Type II · All-Weather Seakeeping & Balanced ASW",
-            Self::LongRangeOpticalStrike => "Type III · Long-Range Optical & Heavy-Ordnance Strike",
-            Self::StereoscopicSubdivided => {
-                "Type IV · Stereoscopic Precision & Subdivided Survivability"
-            }
-            Self::Custom => "Custom Mix-and-Match",
         }
     }
 
@@ -287,21 +411,6 @@ impl TacticalEchelon {
         }
     }
 
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Auto => "Auto (Dimensionless Echelon Match)",
-            Self::BattleLineMainBody => "Echelon I · Main Body & Line of Battle (主力决战本队)",
-            Self::FastWingVanguard => "Echelon II · Fast Wing & Vanguard (快速翼与前卫游击队)",
-            Self::OuterScoutingScreen => {
-                "Echelon III · Scouting Line & Outer Screen (外层侦察与搜索幕)"
-            }
-            Self::InnerFleetScreen => "Echelon IV · Fleet Screen & Inner Escort (舰队内层护卫幕)",
-            Self::FlotillaAssaultLine => {
-                "Echelon V · Torpedo Flotillas & Assault Line (水雷突击支队)"
-            }
-        }
-    }
-
     pub fn from_str_name(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "battle_line_main_body"
@@ -362,25 +471,6 @@ impl CombatModality {
             Self::AviationDeckProjection => "aviation_deck_projection",
             Self::MassedTorpedoStrike => "massed_torpedo_strike",
             Self::ScreenEscortDefense => "screen_escort_defense",
-        }
-    }
-
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Auto => "Auto (Dimensionless Modality Match)",
-            Self::HeavyArtilleryCitadel => {
-                "Modality A · Heavy Artillery & Armoured Citadel (重炮装甲堡垒)"
-            }
-            Self::RapidFireSurfaceGunnery => {
-                "Modality B · Rapid-Fire Surface Gunnery (高射速水面火炮)"
-            }
-            Self::AviationDeckProjection => {
-                "Modality C · Aviation Flight Deck Projection (航空甲板立体投射)"
-            }
-            Self::MassedTorpedoStrike => "Modality D · Massed Torpedo Strike (重雷击水面突击)",
-            Self::ScreenEscortDefense => {
-                "Modality E · AA & ASW Screen Escort Defense (防空反潜多维护卫)"
-            }
         }
     }
 
@@ -446,24 +536,6 @@ impl MobilityRegime {
         }
     }
 
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Auto => "Auto (Dimensionless Hydrodynamic Match)",
-            Self::HeavyDisplacementBlock => {
-                "Regime 1 · Heavy Displacement Block Form (丰满排水量稳性体制)"
-            }
-            Self::TransFroudeFastCapital => {
-                "Regime 2 · Trans-Froude Fast Capital Hull (跨弗劳德高速主力体制)"
-            }
-            Self::SlenderWaveCutting => {
-                "Regime 3 · Slender Wave-Cutting Seakeeping (细长破浪远洋巡航体制)"
-            }
-            Self::SuperCriticalHighFn => {
-                "Regime 4 · Super-Critical High-Fn & Semi-Planing (超临界半滑行体制)"
-            }
-        }
-    }
-
     pub fn from_str_name(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "heavy_displacement_block" | "displacement_block" | "block_form" | "regime_1" => {
@@ -497,7 +569,6 @@ pub struct TacticalAffinityProfile {
     pub dominant_echelon: TacticalEchelon,
     pub dominant_modality: CombatModality,
     pub dominant_mobility: MobilityRegime,
-    pub classification_summary: String,
 }
 
 /// Main Battery Fire-Control Director (pure functional ideal types).
@@ -529,20 +600,6 @@ impl MainDirector {
             Self::ArmouredStereoscopic10m => "armoured_stereoscopic_10m",
             Self::DuplexOpticalTower15m => "duplex_optical_tower_15m",
             Self::GyrostabilizedRadarBlindFire => "gyrostabilized_radar_blind_fire",
-        }
-    }
-
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Auto => "Auto (Dimensionless Match)",
-            Self::OpenSights => "Open Sights & Local Turret Hoods (Base 0m)",
-            Self::CentralTower => "Central Sighting Tower + 2.7m Coincidence",
-            Self::WeatherproofDct => "Weatherproof Director Tower + 4.6m/9m Coincidence",
-            Self::ArmouredStereoscopic10m => "Armoured Rotating Dome + 10.5m Stereoscopic",
-            Self::DuplexOpticalTower15m => "Elevated Duplex Tower + 15.5m Long-Baseline Optical",
-            Self::GyrostabilizedRadarBlindFire => {
-                "Gyrostabilized Director + Centimetric Blind-Fire Radar"
-            }
         }
     }
 
@@ -594,17 +651,6 @@ impl AaDirector {
         }
     }
 
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Auto => "Auto (Dimensionless Match)",
-            Self::None => "None / Local Optical Ring Sights",
-            Self::HighAngleTachymetric => "High-Angle Tachymetric Control Director",
-            Self::TriAxialStabilizedSphere => "Tri-Axially Stabilized Spherical Director",
-            Self::OpticalLeadComputing => "Optical High-Angle Lead-Computing Director",
-            Self::DualPurposeRadarDirector => "Dual-Purpose Gyrostabilized Radar Director",
-        }
-    }
-
     pub fn from_str_name(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "none" | "no" => Self::None,
@@ -648,22 +694,6 @@ impl BallisticComputer {
             Self::HighVelocityAnalog => "high_velocity_analog",
             Self::MultiAxisTriangulator => "multi_axis_triangulator",
             Self::GyroCamRangekeeper => "gyro_cam_rangekeeper",
-        }
-    }
-
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Auto => "Auto (Dimensionless Match)",
-            Self::ManualTables => "Manual Firing Tables & Rate Slide Rules (Order 1)",
-            Self::MechanicalRateClock => "Mechanical Range Clock & Disc Integrator (Order 2)",
-            Self::ElectroMechanicalTable => {
-                "Electro-Mechanical Plotting & Fire-Control Table (Order 4)"
-            }
-            Self::HighVelocityAnalog => "High-Velocity Analog Ballistic Computer (Order 4)",
-            Self::MultiAxisTriangulator => {
-                "Multi-Axis Target Triangulation & Ballistic Table (Order 4)"
-            }
-            Self::GyroCamRangekeeper => "3D-Cam Gyro-Coupled Mechanical Rangekeeper (Order 5)",
         }
     }
 
@@ -712,21 +742,6 @@ impl RadarSuite {
             Self::MetricSearchMagnetron => "metric_search_magnetron",
             Self::CentimetricFcDirectionFinder => "centimetric_fc_direction_finder",
             Self::DualBandBlindFireCic => "dual_band_blind_fire_cic",
-        }
-    }
-
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Auto => "Auto (Dimensionless Match)",
-            Self::None => "None (Optical & Wireless Telegraphy Only)",
-            Self::DecimetricSurfaceFc => "Decimetric Ranging Radar + Passive Warning Receiver",
-            Self::MetricSearchMagnetron => "Metric Air/Surface Search + Cavity Magnetron Radar",
-            Self::CentimetricFcDirectionFinder => {
-                "Centimetric Fire-Control Radar + HF/DF Direction Finder"
-            }
-            Self::DualBandBlindFireCic => {
-                "Dual-Band Search + Centimetric Blind-Fire Radar + Full CIC"
-            }
         }
     }
 
@@ -779,17 +794,6 @@ impl SonarSuite {
         }
     }
 
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Auto => "Auto (Dimensionless Match)",
-            Self::None => "None",
-            Self::PassiveHydrophones => "Hull Passive Hydrophone Listening Array",
-            Self::ActiveQuartzDome => "Retractable Active Piezoelectric Quartz Dome",
-            Self::MultiElementPassiveArray => "Multi-Element Balcony Passive Array + Active Pulse",
-            Self::HighPowerSearchSonar => "High-Power Magnetostrictive Searchlight Sonar",
-        }
-    }
-
     pub fn from_str_name(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "none" | "no" => Self::None,
@@ -832,18 +836,6 @@ impl ElectricalPlantStyle {
         }
     }
 
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Auto => "Auto (Dimensionless Match)",
-            Self::CompactSteam => "Compact Steam Dynamos (10–15% Reserve)",
-            Self::BalancedTurboDiesel => "Balanced Steam Turbo & Emergency Diesel (25–30% Reserve)",
-            Self::SubdividedHeavyDiesel => {
-                "Multi-Compartment Heavy Diesel/Turbo Plant (30–35% Reserve)"
-            }
-            Self::HighMarginAcGrid => "High-Margin 450V AC All-Electric Grid (40–50% Reserve)",
-        }
-    }
-
     pub fn from_str_name(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "compact_steam" | "compact" => Self::CompactSteam,
@@ -880,16 +872,6 @@ impl TransverseSubdivision {
             Self::TwinFileCenterline => "twin_file_centerline",
             Self::TripleFileCenterAndWings => "triple_file_center_and_wings",
             Self::QuadFileMultiLongitudinal => "quad_file_multi_longitudinal",
-        }
-    }
-
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Auto => "Auto (Dimensionless Subdivision Match)",
-            Self::SingleFileTransverse => "1-Row · Single-File Transverse (单列横通式)",
-            Self::TwinFileCenterline => "2-Row · Twin-File Centerline (双列中轴式)",
-            Self::TripleFileCenterAndWings => "3-Row · Triple-File Center & Wings (三列中轴两翼式)",
-            Self::QuadFileMultiLongitudinal => "4-Row · Quad-File Multi-Longitudinal (四列蜂窝式)",
         }
     }
 
@@ -941,22 +923,6 @@ impl TdsArchitecture {
             Self::MultiLayerLiquidVoid => "multi_layer_liquid_void",
             Self::PuglieseCylindricalAbsorber => "pugliese_cylindrical_absorber",
             Self::CompoundEboniteDeepTds => "compound_ebonite_deep_tds",
-        }
-    }
-
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Auto => "Auto (Dimensionless TDS Match)",
-            Self::UnarmouredDoubleBottom => "Type 0 · Unarmoured Double Bottom (无装甲双层底)",
-            Self::CoalBunkerWingBulkhead => "Type 1 · Coal Bunker Wing Bulkhead (储煤翼舱吸能)",
-            Self::ExternalBlisterBulge => "Type 2 · External Blister Bulge (外挂防雷突出部)",
-            Self::MultiLayerLiquidVoid => "Type 3 · Multi-Layer Liquid / Void (多层空液交替)",
-            Self::PuglieseCylindricalAbsorber => {
-                "Type 4 · Pugliese Collapsible Cylinder (普列塞吸能圆筒)"
-            }
-            Self::CompoundEboniteDeepTds => {
-                "Type 5 · Deep Ébonite Foam Compound (大纵深闭孔泡沫复合)"
-            }
         }
     }
 
@@ -1015,30 +981,6 @@ impl MachineryArrangement {
         }
     }
 
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Auto => "Auto (Dimensionless Machinery Match)",
-            Self::GroupedBoilerForward => {
-                "Arrangement 1 · Grouped Boilers Forward (集中式前炉后机 B-E)"
-            }
-            Self::GroupedEngineForward => {
-                "Arrangement 2 · Grouped Engines Forward (逆向集中式前机后炉 E-B)"
-            }
-            Self::SandwichEngineBoilerEngine => {
-                "Arrangement 3 · Sandwich Engine-Boiler-Engine (夹心式 E-B-E)"
-            }
-            Self::UnitAlternatingMachinery => {
-                "Arrangement 4 · Unit Alternating System (交替单元式 B-E-B-E)"
-            }
-            Self::CompactEchelonSural => {
-                "Arrangement 5 · Compact Echelon / Sural (梯队穿插增压紧凑型)"
-            }
-            Self::TurboElectricDistributed => {
-                "Arrangement 6 · Turbo-Electric Distributed (涡轮电力分布式)"
-            }
-        }
-    }
-
     pub fn from_str_name(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "grouped_boiler_forward" | "boiler_forward" | "b_e" | "grouped_be" => {
@@ -1064,6 +1006,128 @@ impl MachineryArrangement {
     }
 }
 
+/// Underwater Belt & Torpedo Defense System Joint Topology (主装甲带水下延伸及与防雷装甲衔接拓扑).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum BeltTdsJunction {
+    #[default]
+    Auto,
+    /// 1. 连续内倾削薄直连持弹隔壁 (Integral Tapered Belt-to-Holding-Bulkhead).
+    ///    E.g. Iowa, Yamato, Nelson, Richelieu.
+    IntegralTaperedHoldingBulkhead,
+    /// 2. 穹甲斜坡坡脚三角汇合节点 (Turtleback Slope Knee Joint).
+    ///    E.g. Bismarck, Hood, Mikasa, Iron Duke.
+    TurtlebackSlopeKneeJoint,
+    /// 3. 双层底/防雷圆筒内倾搁板过渡 (Spaced Strake & Absorber Shelf Joint).
+    ///    E.g. Vittorio Veneto, Lexington.
+    SpacedAbsorberShelfJoint,
+    /// 4. 垂直装甲盒阶梯平台转接内隔壁 (Stepped Horizontal Shelf Citadel).
+    ///    E.g. King George V, Scharnhorst, Baltimore.
+    SteppedShelfCitadel,
+    /// 5. 轻装甲/无防雷隔壁直接嵌合双层底 (Direct Hull Skin to Double Bottom).
+    ///    E.g. Fletcher, Shimakaze, Olympia.
+    DirectSkinDoubleBottom,
+}
+
+impl BeltTdsJunction {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::IntegralTaperedHoldingBulkhead => "integral_tapered_holding_bulkhead",
+            Self::TurtlebackSlopeKneeJoint => "turtleback_slope_knee_joint",
+            Self::SpacedAbsorberShelfJoint => "spaced_absorber_shelf_joint",
+            Self::SteppedShelfCitadel => "stepped_shelf_citadel",
+            Self::DirectSkinDoubleBottom => "direct_skin_double_bottom",
+        }
+    }
+
+    pub fn from_str_name(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "integral_tapered_holding_bulkhead" | "tapered_holding" | "integral" | "type_1" => {
+                Self::IntegralTaperedHoldingBulkhead
+            }
+            "turtleback_slope_knee_joint" | "turtleback_joint" | "turtleback" | "type_2" => {
+                Self::TurtlebackSlopeKneeJoint
+            }
+            "spaced_absorber_shelf_joint" | "absorber_shelf" | "pugliese_shelf" | "type_3" => {
+                Self::SpacedAbsorberShelfJoint
+            }
+            "stepped_shelf_citadel" | "stepped_shelf" | "box_shelf" | "type_4" => {
+                Self::SteppedShelfCitadel
+            }
+            "direct_skin_double_bottom" | "skin_double_bottom" | "direct_skin" | "type_5" => {
+                Self::DirectSkinDoubleBottom
+            }
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// Horizontal / Deck Protection Topology Ideal Type (水平防护结构理想类型).
+/// Decouples transverse/vertical deck architecture from longitudinal deck coverage weight formulas.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum HorizontalProtectionStyle {
+    #[default]
+    Auto,
+    /// 1. 弧形穹甲防护壳 (Protected Turtleback Carapace · 无垂直主带).
+    ///    E.g. Olympia (protected cruisers).
+    ProtectedTurtlebackCarapace,
+    /// 2. 低置内倾穹甲复合核心 (Low Turtleback Sloped Citadel · 穹甲斜坡+上装甲带).
+    ///    E.g. Bismarck, Scharnhorst, Hood, Mikasa, Dreadnought, Iron Duke.
+    LowTurtlebackSlopedCitadel,
+    /// 3. 多层被帽剥离与防破片复合甲板 (Multi-Layer Bomb-Decapping & Splinter Sandwich).
+    ///    E.g. Iowa, Yamato, Vittorio Veneto, Richelieu.
+    MultiLayerBombDecappingSandwich,
+    /// 4. 高置单层承力厚甲板装甲盒 (Monolithic Citadel Box Deck).
+    ///    E.g. King George V, Nelson, Baltimore, Belfast, Tiger (C20).
+    MonolithicCitadelBoxDeck,
+    /// 5. 航母装甲飞行甲板/封闭机库防护盒 (Armoured Flight Deck & Hangar Box).
+    ///    E.g. CV-2 Lexington, Essex.
+    ArmouredFlightDeckHangarBox,
+    /// 6. 轻型单层防破片露天甲板 (Light Splinter Weather Deck).
+    ///    E.g. Fletcher, Shimakaze, Atlanta.
+    LightSplinterWeatherDeck,
+}
+
+impl HorizontalProtectionStyle {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::ProtectedTurtlebackCarapace => "protected_turtleback_carapace",
+            Self::LowTurtlebackSlopedCitadel => "low_turtleback_sloped_citadel",
+            Self::MultiLayerBombDecappingSandwich => "multi_layer_bomb_decapping_sandwich",
+            Self::MonolithicCitadelBoxDeck => "monolithic_citadel_box_deck",
+            Self::ArmouredFlightDeckHangarBox => "armoured_flight_deck_hangar_box",
+            Self::LightSplinterWeatherDeck => "light_splinter_weather_deck",
+        }
+    }
+
+    pub fn from_str_name(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "protected_turtleback_carapace" | "turtleback_carapace" | "carapace" | "type_1" => {
+                Self::ProtectedTurtlebackCarapace
+            }
+            "low_turtleback_sloped_citadel"
+            | "low_turtleback"
+            | "turtleback_citadel"
+            | "type_2" => Self::LowTurtlebackSlopedCitadel,
+            "multi_layer_bomb_decapping_sandwich"
+            | "multi_layer_sandwich"
+            | "decapping_deck"
+            | "type_3" => Self::MultiLayerBombDecappingSandwich,
+            "monolithic_citadel_box_deck" | "monolithic_box" | "box_deck" | "type_4" => {
+                Self::MonolithicCitadelBoxDeck
+            }
+            "armoured_flight_deck_hangar_box" | "flight_deck_box" | "carrier_deck" | "type_5" => {
+                Self::ArmouredFlightDeckHangarBox
+            }
+            "light_splinter_weather_deck" | "light_splinter" | "splinter_deck" | "type_6" => {
+                Self::LightSplinterWeatherDeck
+            }
+            _ => Self::Auto,
+        }
+    }
+}
+
 /// Full configuration for a ship's systems suite.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct ShipSystemsConfig {
@@ -1080,6 +1144,8 @@ pub struct ShipSystemsConfig {
     pub transverse_subdivision: TransverseSubdivision,
     pub tds_architecture: TdsArchitecture,
     pub machinery_arrangement: MachineryArrangement,
+    pub belt_tds_junction: BeltTdsJunction,
+    pub horizontal_protection: HorizontalProtectionStyle,
     /// Explicit turbo generator override in kW (None = auto-calculated).
     pub custom_turbo_kw: Option<f64>,
     /// Explicit diesel generator override in kW (None = auto-calculated).
@@ -1112,6 +1178,8 @@ pub struct SystemsEvaluation {
     pub resolved_transverse_subdivision: TransverseSubdivision,
     pub resolved_tds_architecture: TdsArchitecture,
     pub resolved_machinery_arrangement: MachineryArrangement,
+    pub resolved_belt_tds_junction: BeltTdsJunction,
+    pub resolved_horizontal_protection: HorizontalProtectionStyle,
 
     // Pure Ideal-Type soft affinities (0.0 to 1.0, sum to 1.0)
     /// Type I: Radar-Automated & All-Electric affinity.
@@ -1122,7 +1190,6 @@ pub struct SystemsEvaluation {
     pub type3_affinity: f64,
     /// Type IV: Stereoscopic Precision & Subdivided Survivability affinity.
     pub type4_affinity: f64,
-    pub match_explanation: String,
 
     // Electrical plant metrics
     pub load_turrets_kw: f64,
@@ -1158,13 +1225,12 @@ impl ShipSystemsConfig {
         let mut eval = SystemsEvaluation::default();
 
         // 1. Extract dimensionless physical invariants and score pure Ideal-Type affinities
-        let (features, aff1, aff2, aff3, aff4, explanation) = evaluate_affinities(ship);
+        let (features, aff1, aff2, aff3, aff4) = evaluate_affinities(ship);
         eval.features = features;
         eval.type1_affinity = aff1;
         eval.type2_affinity = aff2;
         eval.type3_affinity = aff3;
         eval.type4_affinity = aff4;
-        eval.match_explanation = explanation;
 
         // 1b. Evaluate 3D Factored Tactical Role affinities
         let tactical_profile = evaluate_tactical_affinities(ship, &features);
@@ -1252,6 +1318,22 @@ impl ShipSystemsConfig {
 
         eval.resolved_machinery_arrangement = match self.machinery_arrangement {
             MachineryArrangement::Auto => Self::infer_machinery_arrangement(ship),
+            other => other,
+        };
+
+        eval.resolved_belt_tds_junction = match self.belt_tds_junction {
+            BeltTdsJunction::Auto => {
+                Self::infer_belt_tds_junction(ship, &features, eval.resolved_tds_architecture)
+            }
+            other => other,
+        };
+
+        eval.resolved_horizontal_protection = match self.horizontal_protection {
+            HorizontalProtectionStyle::Auto => Self::infer_horizontal_protection_style(
+                ship,
+                &features,
+                eval.resolved_belt_tds_junction,
+            ),
             other => other,
         };
 
@@ -1549,15 +1631,119 @@ impl ShipSystemsConfig {
             TdsArchitecture::UnarmouredDoubleBottom
         } else if pct_coal >= 15.0 && bh_thick >= 0.5 {
             TdsArchitecture::CoalBunkerWingBulkhead
-        } else if blister_ratio > 0.02 || ship.armour.bulge >= 1.0 {
+        } else if blister_ratio > 0.02 {
+            // True external blister bulge on hull sides
             TdsArchitecture::ExternalBlisterBulge
         } else if tds_depth_ratio >= 0.30 || (void_weight >= 100.0 && tds_depth_ratio >= 0.22) {
             TdsArchitecture::CompoundEboniteDeepTds
-        } else if bh_type == 0 && tds_depth_ratio >= 0.18 && bh_thick <= 2.8 {
+        } else if (bh_type == 0 && tds_depth_ratio >= 0.18 && bh_thick <= 2.8)
+            || (ship.armour.bulge >= 1.0
+                && ship.armour.deck_coverage == 3
+                && ship.armour.belt_upper > 0.0
+                && tds_depth_ratio >= 0.16)
+        {
+            // Pugliese cylindrical collapsible absorber (e.g. Vittorio Veneto composite belt, double deck, internal cylinder)
             TdsArchitecture::PuglieseCylindricalAbsorber
         } else {
             TdsArchitecture::MultiLayerLiquidVoid
         }
+    }
+
+    /// Automatically infer underwater belt and TDS holding bulkhead junction topology
+    /// based strictly on scale-free dimensionless geometric features and protection layout.
+    pub fn infer_belt_tds_junction(
+        ship: &ShipModel,
+        features: &DimensionlessFeatures,
+        tds: TdsArchitecture,
+    ) -> BeltTdsJunction {
+        let belt_main = ship.armour.belt_main;
+        if belt_main < 1.5 || features.protection_fraction < 0.06 {
+            return BeltTdsJunction::DirectSkinDoubleBottom;
+        }
+
+        // 1. Sloped internal/external belt directly converging onto holding bulkhead
+        // (Iowa, Yamato, Nelson, Richelieu)
+        if features.belt_tds_convergence_ratio >= 0.28
+            && features.underwater_belt_submergence_ratio >= 0.20
+        {
+            return BeltTdsJunction::IntegralTaperedHoldingBulkhead;
+        }
+
+        // 2. Turtleback deck slope knee joint (Bismarck, Hood, Mikasa, Iron Duke)
+        if matches!(ship.armour.deck_coverage, 1 | 2)
+            || (ship.armour.belt_upper >= 3.0
+                && features.belt_tds_convergence_ratio < 0.12
+                && features.tds_depth_ratio >= 0.20)
+        {
+            return BeltTdsJunction::TurtlebackSlopeKneeJoint;
+        }
+
+        // 3. Spaced strake & Pugliese cylindrical absorber shelf joint (Vittorio Veneto)
+        if tds == TdsArchitecture::PuglieseCylindricalAbsorber
+            || (features.belt_tds_convergence_ratio >= 0.08
+                && features.belt_tds_convergence_ratio < 0.28)
+        {
+            return BeltTdsJunction::SpacedAbsorberShelfJoint;
+        }
+
+        // 4. Stepped horizontal shelf citadel (King George V, Scharnhorst, Baltimore)
+        if features.tds_depth_ratio >= 0.08 {
+            return BeltTdsJunction::SteppedShelfCitadel;
+        }
+
+        BeltTdsJunction::DirectSkinDoubleBottom
+    }
+
+    /// Automatically infer Horizontal / Deck Protection Topology based strictly on
+    /// dimensionless protection invariants, belt-to-deck balance, and cross-sectional geometry.
+    /// Zero dependence on country or ship name strings.
+    pub fn infer_horizontal_protection_style(
+        ship: &ShipModel,
+        features: &DimensionlessFeatures,
+        junction: BeltTdsJunction,
+    ) -> HorizontalProtectionStyle {
+        let t_deck = ship.armour.deck.max(0.0);
+        let t_belt = ship.armour.belt_main.max(0.0);
+        let belt_vert_h = ship.armour.belt_main_height.max(0.0)
+            * ship.armour.belts_incline.abs().to_radians().cos();
+
+        // 1. Carrier flight deck & enclosed hangar protection box (Lexington, Essex)
+        if features.aviation_capability_ratio >= 0.55 && t_deck >= 1.0 {
+            return HorizontalProtectionStyle::ArmouredFlightDeckHangarBox;
+        }
+
+        // 2. Protected cruiser full-width curved turtleback carapace without vertical belt (Olympia)
+        if ship.armour.deck_coverage == 2 || (t_belt < 1.0 && t_deck >= 1.5) {
+            return HorizontalProtectionStyle::ProtectedTurtlebackCarapace;
+        }
+
+        // 3. Light splinter weather deck on unarmoured/lightly armoured hulls (Fletcher, Shimakaze, Atlanta)
+        if t_deck < 1.5 || features.protection_fraction < 0.06 {
+            return HorizontalProtectionStyle::LightSplinterWeatherDeck;
+        }
+
+        // 4. Multi-layer bomb-decapping, main ballistic & splinter sandwich (Iowa, Yamato, Vittorio Veneto, Richelieu)
+        if ship.armour.deck_coverage == 3
+            || (features.deck_belt_balance_ratio >= 0.41
+                && features.belt_tds_convergence_ratio >= 0.12
+                && belt_vert_h >= 15.0
+                && t_deck >= 4.5)
+        {
+            return HorizontalProtectionStyle::MultiLayerBombDecappingSandwich;
+        }
+
+        // 5. Low-set internal turtleback sloped citadel + upper side belt (Bismarck, Scharnhorst, Hood, Mikasa, Dreadnought, Iron Duke)
+        if ship.armour.deck_coverage == 1
+            || junction == BeltTdsJunction::TurtlebackSlopeKneeJoint
+            || (ship.armour.belt_upper >= 1.5
+                && features.deck_belt_balance_ratio < 0.38
+                && features.belt_tds_convergence_ratio < 0.25)
+        {
+            return HorizontalProtectionStyle::LowTurtlebackSlopedCitadel;
+        }
+
+        // 6. Monolithic thick horizontal citadel box deck (King George V, Nelson, Baltimore, Belfast, C20 Tiger)
+        HorizontalProtectionStyle::MonolithicCitadelBoxDeck
     }
 
     /// Automatically infer Machinery Longitudinal Arrangement based purely on drive type, layout and powerplant era.
@@ -1593,9 +1779,7 @@ impl ShipSystemsConfig {
 
 /// Evaluate pure Weberian Ideal-Type affinities strictly from dimensionless physical invariants ($\Pi$-groups).
 /// Zero reference to `ship.country` or `ship.name`.
-pub fn evaluate_affinities(
-    ship: &ShipModel,
-) -> (DimensionlessFeatures, f64, f64, f64, f64, String) {
+pub fn evaluate_affinities(ship: &ShipModel) -> (DimensionlessFeatures, f64, f64, f64, f64) {
     let f = DimensionlessFeatures::from_ship(ship);
 
     // Base prior across the 4 pure engineering ideal types
@@ -1661,30 +1845,7 @@ pub fn evaluate_affinities(
     let a3 = s3 / total;
     let a4 = s4 / total;
 
-    let dominant_label = if a1 >= a2 && a1 >= a3 && a1 >= a4 {
-        format!("Type I Automated/All-Electric ({:.0}%)", a1 * 100.0)
-    } else if a2 >= a1 && a2 >= a3 && a2 >= a4 {
-        format!("Type II All-Weather Seakeeping ({:.0}%)", a2 * 100.0)
-    } else if a3 >= a1 && a3 >= a2 && a3 >= a4 {
-        format!("Type III Optical/Ordnance Strike ({:.0}%)", a3 * 100.0)
-    } else {
-        format!("Type IV Stereoscopic/Subdivided ({:.0}%)", a4 * 100.0)
-    };
-
-    let explanation = format!(
-        "Extracted {} from dimensionless invariants: Fn={:.2}, L/∇¹/³={:.2}, L/B={:.2}, B/T={:.2}, Cb={:.2}, Π_arm={:.1}%, Π_dp={:.2}, Π_torp={:.2}.",
-        dominant_label,
-        f.froude_number,
-        f.slenderness_ratio,
-        f.length_beam_ratio,
-        f.beam_draught_ratio,
-        f.block_coeff,
-        f.protection_fraction * 100.0,
-        f.dp_barrel_density,
-        f.torpedo_strike_density
-    );
-
-    (f, a1, a2, a3, a4, explanation)
+    (f, a1, a2, a3, a4)
 }
 
 /// Evaluate 3-dimensional factored tactical-functional affinities strictly from dimensionless
@@ -1974,13 +2135,6 @@ pub fn evaluate_tactical_affinities(
         }
     };
 
-    let summary = format!(
-        "{} × {} × {}",
-        dominant_echelon.display_name(),
-        dominant_modality.display_name(),
-        dominant_mobility.display_name()
-    );
-
     TacticalAffinityProfile {
         echelon_affinities: echelon_aff,
         modality_affinities: mod_aff,
@@ -1988,7 +2142,6 @@ pub fn evaluate_tactical_affinities(
         dominant_echelon,
         dominant_modality,
         dominant_mobility,
-        classification_summary: summary,
     }
 }
 
@@ -2179,7 +2332,6 @@ mod tests {
         assert!((eval_a.type2_affinity - eval_b.type2_affinity).abs() < 1e-12);
         assert!((eval_a.type3_affinity - eval_b.type3_affinity).abs() < 1e-12);
         assert!((eval_a.type4_affinity - eval_b.type4_affinity).abs() < 1e-12);
-        assert_eq!(eval_a.match_explanation, eval_b.match_explanation);
     }
 
     #[test]
@@ -2413,5 +2565,227 @@ mod tests {
         assert!(c20.guns.batteries[0].shell_weight > 90.0);
         assert!(c20.damage_shell.is_finite() && c20.damage_shell > 0.0);
         assert!(eval_c20.load_turrets_kw > 200.0);
+    }
+
+    #[test]
+    fn underwater_belt_and_tds_junction_invariants_and_archetypes() {
+        use crate::presets::get_preset;
+
+        // 1. Deep Inclined Belt directly converging onto holding bulkhead (Yamato)
+        let yamato = get_preset("yamato").expect("Yamato preset");
+        let eval_yamato = yamato.systems.evaluate(&yamato);
+        assert!(eval_yamato.features.underwater_belt_submergence_ratio >= 0.25);
+        assert!(eval_yamato.features.belt_tds_convergence_ratio >= 0.35);
+        assert!((eval_yamato.features.belt_lower_taper_ratio - 0.53).abs() < 0.05);
+        assert_eq!(
+            eval_yamato.resolved_belt_tds_junction,
+            BeltTdsJunction::IntegralTaperedHoldingBulkhead
+        );
+
+        // 2. High-incline internal belt (Iowa)
+        let iowa = get_preset("iowa").expect("Iowa preset");
+        let eval_iowa = iowa.systems.evaluate(&iowa);
+        assert!(eval_iowa.features.underwater_belt_submergence_ratio >= 0.20);
+        assert!(eval_iowa.features.belt_tds_convergence_ratio >= 0.35);
+        assert_eq!(
+            eval_iowa.resolved_belt_tds_junction,
+            BeltTdsJunction::IntegralTaperedHoldingBulkhead
+        );
+
+        // 3. Turtleback slope knee joint (Bismarck, Mikasa)
+        let bismarck = get_preset("bismarck").expect("Bismarck preset");
+        let eval_bismarck = bismarck.systems.evaluate(&bismarck);
+        assert_eq!(
+            eval_bismarck.resolved_belt_tds_junction,
+            BeltTdsJunction::TurtlebackSlopeKneeJoint
+        );
+
+        let mikasa = get_preset("mikasa").expect("Mikasa preset");
+        let eval_mikasa = mikasa.systems.evaluate(&mikasa);
+        assert_eq!(
+            eval_mikasa.resolved_belt_tds_junction,
+            BeltTdsJunction::TurtlebackSlopeKneeJoint
+        );
+
+        // 4. Spaced belt absorber shelf joint (Vittorio Veneto, Hood)
+        let veneto = get_preset("vittorio_veneto").expect("Vittorio Veneto preset");
+        let eval_veneto = veneto.systems.evaluate(&veneto);
+        assert_eq!(
+            eval_veneto.resolved_tds_architecture,
+            TdsArchitecture::PuglieseCylindricalAbsorber
+        );
+        assert_eq!(
+            eval_veneto.resolved_belt_tds_junction,
+            BeltTdsJunction::SpacedAbsorberShelfJoint
+        );
+
+        let hood = get_preset("hood").expect("Hood preset");
+        let eval_hood = hood.systems.evaluate(&hood);
+        assert_eq!(
+            eval_hood.resolved_belt_tds_junction,
+            BeltTdsJunction::SpacedAbsorberShelfJoint
+        );
+
+        // 5. Vertical belt with stepped horizontal shelf citadel (King George V)
+        let kgv = get_preset("king_george_v").expect("KGV preset");
+        let eval_kgv = kgv.systems.evaluate(&kgv);
+        assert_eq!(
+            eval_kgv.resolved_belt_tds_junction,
+            BeltTdsJunction::SteppedShelfCitadel
+        );
+
+        // 6. Destroyer / light splinter protection (Fletcher)
+        let fletcher = get_preset("fletcher").expect("Fletcher preset");
+        let eval_fletcher = fletcher.systems.evaluate(&fletcher);
+        assert_eq!(
+            eval_fletcher.resolved_belt_tds_junction,
+            BeltTdsJunction::DirectSkinDoubleBottom
+        );
+
+        // 7. Test zero-country and zero-name invariance on all underwater invariants
+        let mut mutated_yamato = yamato.clone();
+        mutated_yamato.country = "Atlantis".into();
+        mutated_yamato.name = "Poseidon".into();
+        mutated_yamato.ship_type = "Super Dreadnought".into();
+        let eval_mutated = mutated_yamato.systems.evaluate(&mutated_yamato);
+        assert_eq!(
+            eval_yamato.resolved_belt_tds_junction,
+            eval_mutated.resolved_belt_tds_junction
+        );
+        assert_eq!(
+            eval_yamato.resolved_tds_architecture,
+            eval_mutated.resolved_tds_architecture
+        );
+        assert!(
+            (eval_yamato.features.underwater_belt_submergence_ratio
+                - eval_mutated.features.underwater_belt_submergence_ratio)
+                .abs()
+                < 1e-12
+        );
+        assert!(
+            (eval_yamato.features.belt_tds_convergence_ratio
+                - eval_mutated.features.belt_tds_convergence_ratio)
+                .abs()
+                < 1e-12
+        );
+        assert!(
+            (eval_yamato.features.belt_lower_taper_ratio
+                - eval_mutated.features.belt_lower_taper_ratio)
+                .abs()
+                < 1e-12
+        );
+    }
+
+    #[test]
+    fn horizontal_protection_invariants_and_ideal_types() {
+        use crate::presets::get_preset;
+
+        // 1. Protected cruiser curved turtleback carapace without vertical belt (Olympia)
+        let olympia = get_preset("olympia").expect("Olympia preset");
+        let eval_olympia = olympia.systems.evaluate(&olympia);
+        assert!((eval_olympia.features.deck_belt_balance_ratio - 2.0).abs() < 1e-9);
+        assert_eq!(
+            eval_olympia.resolved_horizontal_protection,
+            HorizontalProtectionStyle::ProtectedTurtlebackCarapace
+        );
+
+        // 2. Low-set internal turtleback sloped citadel (Bismarck, Scharnhorst, Hood, Mikasa, Dreadnought, Iron Duke)
+        for id in [
+            "bismarck",
+            "scharnhorst",
+            "hood",
+            "mikasa",
+            "dreadnought",
+            "iron_duke",
+        ] {
+            let ship = get_preset(id).expect(id);
+            let eval = ship.systems.evaluate(&ship);
+            assert_eq!(
+                eval.resolved_horizontal_protection,
+                HorizontalProtectionStyle::LowTurtlebackSlopedCitadel,
+                "Expected LowTurtlebackSlopedCitadel for {id}"
+            );
+        }
+
+        // 3. Multi-layer bomb-decapping, main ballistic & splinter sandwich (Iowa, Yamato, Vittorio Veneto, Richelieu)
+        for id in ["iowa", "yamato", "vittorio_veneto", "richelieu"] {
+            let ship = get_preset(id).expect(id);
+            let eval = ship.systems.evaluate(&ship);
+            assert!(eval.features.deck_belt_balance_ratio >= 0.41);
+            assert_eq!(
+                eval.resolved_horizontal_protection,
+                HorizontalProtectionStyle::MultiLayerBombDecappingSandwich,
+                "Expected MultiLayerBombDecappingSandwich for {id}"
+            );
+        }
+
+        // 4. Monolithic thick horizontal citadel box deck (KGV, Nelson, Baltimore, Belfast, C20 Tiger)
+        for id in [
+            "king_george_v",
+            "nelson",
+            "baltimore",
+            "belfast",
+            "c20_tiger",
+        ] {
+            let ship = get_preset(id).expect(id);
+            let eval = ship.systems.evaluate(&ship);
+            assert_eq!(
+                eval.resolved_horizontal_protection,
+                HorizontalProtectionStyle::MonolithicCitadelBoxDeck,
+                "Expected MonolithicCitadelBoxDeck for {id}"
+            );
+        }
+
+        // 5. Carrier flight deck & enclosed hangar box (Lexington, Essex)
+        for id in ["cv2_lexington", "essex"] {
+            let ship = get_preset(id).expect(id);
+            let eval = ship.systems.evaluate(&ship);
+            assert_eq!(
+                eval.resolved_horizontal_protection,
+                HorizontalProtectionStyle::ArmouredFlightDeckHangarBox,
+                "Expected ArmouredFlightDeckHangarBox for {id}"
+            );
+        }
+
+        // 6. Light splinter weather deck (Fletcher, Shimakaze, Atlanta)
+        for id in ["fletcher", "shimakaze", "atlanta"] {
+            let ship = get_preset(id).expect(id);
+            let eval = ship.systems.evaluate(&ship);
+            assert_eq!(
+                eval.resolved_horizontal_protection,
+                HorizontalProtectionStyle::LightSplinterWeatherDeck,
+                "Expected LightSplinterWeatherDeck for {id}"
+            );
+        }
+
+        // 7. Zero-country and zero-name invariance on horizontal protection invariants
+        let iowa = get_preset("iowa").expect("Iowa preset");
+        let eval_iowa = iowa.systems.evaluate(&iowa);
+        let mut mutated = iowa.clone();
+        mutated.country = "Utopia".into();
+        mutated.name = "Aegis".into();
+        let eval_mut = mutated.systems.evaluate(&mutated);
+        assert_eq!(
+            eval_iowa.resolved_horizontal_protection,
+            eval_mut.resolved_horizontal_protection
+        );
+        assert!(
+            (eval_iowa.features.deck_belt_balance_ratio
+                - eval_mut.features.deck_belt_balance_ratio)
+                .abs()
+                < 1e-12
+        );
+        assert!(
+            (eval_iowa.features.horizontal_protection_mass_ratio
+                - eval_mut.features.horizontal_protection_mass_ratio)
+                .abs()
+                < 1e-12
+        );
+        assert!(
+            (eval_iowa.features.end_deck_continuity_ratio
+                - eval_mut.features.end_deck_continuity_ratio)
+                .abs()
+                < 1e-12
+        );
     }
 }

@@ -1,5 +1,76 @@
 # Project change log
 
+## 2026-10-19 — GUI visual refresh, weight distribution bar, and reactive localization
+
+- Polished native egui and web workbench visual design: deep navy chart-room
+  palette, rounded glassmorphic surface cards, translucent panels, and subtle shadows.
+- Restored segmented weight distribution bar with percentage pill badges, hover
+  details (tonnage and percentage), and localized legends across desktop and web.
+- Positioned "汉字" at the bottom of the language list across both frontends
+  (`[Germanic, Italic, 汉字]`).
+- Implemented reactive UI localization for navigation groups, status badges, metric
+  cards, headings, 75+ engineering parameter fields, and discrete dropdown options,
+  while strictly preserving technical invariants (ship/preset names, dimensionless
+  ratios Cb/Cm/LCB/GM, and unit symbols).
+
+## 2026-10-18 — Windows portable and presentation separation
+
+- Extracted the dependency-free `springsharp-core` crate. Moved report/HTML
+  rendering, summaries and system display names into `src/presentation`.
+  Workbench commands return structured outcomes instead of success messages.
+- Added shared field labels and bundled Noto Sans/Serif/Mono fonts. Sans uses SC
+  Han shapes for Chinese/Japanese; serif uses JP Mincho for both, with dedicated
+  Latin Noto Serif. Font licenses/source hashes are shipped with the assets.
+- Added native file dialogs, GUI-subsystem executables, and a managed Web launcher
+  with an ephemeral loopback port and visible shutdown control. Web stays zero JS.
+- Added Windows MSVC release build, PE/font verification, license collection,
+  portable ZIP/checksum packaging and a manually dispatched Windows workflow.
+
+## 2026-10-18 — Shared workbench application layer
+
+- Added `Workbench` and typed commands for loading, calculation, calibration,
+  speed/range/displacement solvers, comparison and arrangement. Web and egui now
+  delegate operations to this layer instead of maintaining separate workflows.
+- Publish validated candidates atomically; preserve prior results/baselines on
+  failure. Pinning and arrangement consume current edits, and draft changes
+  invalidate arrangement results. Both frontends calculate before exporting.
+- Kept the zero-JavaScript native form workflow and shared Rust/SVG layout.
+- Validation: focused transaction test, three Web tests including shared-command
+  result parity, design snapshot test and native GUI compilation; no full gates.
+
+## 2026-10-18 — Zero-JavaScript web workbench
+
+- Replaced the inline browser application with native HTML form submissions and
+  complete Rust-rendered responses. HTML templates and CSS live in `web/`; no
+  JavaScript or WASM loader remains in the workbench. No frontend build is needed.
+- Split HTTP transport, form/template handling, workbench actions and SVG drawing
+  into separate Rust modules. SVG consumes the shared `BlueprintLayout`, while
+  egui and the calculation engine remain available.
+- Kept preset loading, file upload, raw text, calibration/solvers, comparisons,
+  arrangements, external CSV and planing through native forms. Exports are
+  standalone .ssr, SVG and HTML files; no compatibility JSON API is retained.
+- Removed live refresh and script modals in favor of Calculate, native details
+  panels and full SVG documents. Errors preserve edited inputs and clearly label
+  the last valid calculation. Responses prohibit script execution.
+- Validation: three focused web tests, core compilation and browser form-submit
+  smoke check. Full accuracy gates and the full test suite were not run.
+
+## 2026-10-18 — First architecture refactor
+
+- Introduced `DesignSession` and immutable `Evaluation` snapshots. Native result
+  views consistently use the last calculated revision; edits expose pending state
+  and invalidate arrangement caches. Reports are read-only calculation outputs.
+- Added immediate browser revision invalidation and latest-action sequencing for
+  evaluation, solvers and design replacement. Ordinary evaluation no longer
+  rewrites inputs; stale errors, preset comparisons and arrangements are ignored.
+- Moved mount solving, carrier classification, citadel bounds and longitudinal
+  bridge/funnel geometry into shared Rust `BlueprintLayout`; removed duplicate
+  JavaScript and egui solvers. Layout code 18 (None) emits no mounts.
+- Fixed the Calculate inline handler's collision with `document.evaluate`.
+- Validation: native `cargo check`, three focused Rust tests, Node controller race
+  regression, and browser smoke check (manual calculation after editing with Live
+  disabled). No full test suite, accuracy gate or native visual run was performed.
+
 ## Unreleased (Phases 29–40) — Historical Presets Expansion (21 Ships), Decoupled TDS & Subdivision, Citadel Coverage & Midship Cross-Section
 
 - **Historical Presets Expansion to 21 Ships, Decoupled TDS & Subdivision, Citadel Coverage & Midship Cross-Section** (Phase 40):

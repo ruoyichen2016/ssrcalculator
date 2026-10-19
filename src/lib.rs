@@ -1,42 +1,6 @@
-#![allow(
-    clippy::collapsible_match,
-    clippy::excessive_precision,
-    clippy::if_same_then_else,
-    clippy::manual_range_patterns,
-    clippy::needless_range_loop,
-    clippy::too_many_arguments
-)]
-
-pub mod accuracy;
-pub mod ballistics;
-pub mod calibration;
-pub mod cfd_proxy;
-pub mod features;
-pub mod io;
-pub mod model;
-pub mod planing;
-pub mod presets;
-pub mod regime;
-pub mod resistance;
-pub mod savitsky;
-pub mod scantling;
-pub mod spaces;
-pub mod systems;
+//! Presentation and local Web adapter. Numerical code lives in springsharp-core.
+pub use springsharp_core::*;
+pub mod presentation;
 pub mod web;
-
-pub use accuracy::*;
-pub use ballistics::*;
-pub use calibration::*;
-pub use cfd_proxy::*;
-pub use features::*;
-pub use io::*;
-pub use model::*;
-pub use planing::*;
-pub use presets::*;
-pub use regime::*;
-pub use resistance::*;
-pub use savitsky::*;
-pub use scantling::*;
-pub use spaces::*;
-pub use systems::*;
+pub use presentation::*;
 pub use web::*;

@@ -507,52 +507,6 @@ pub fn cfd_holdout_stability(samples: &[CfdSample]) -> Vec<(f64, f64)> {
 }
 
 /// Generate a simple HTML report for CFD proxy fitting.
-pub fn cfd_report_html(samples: &[CfdSample]) -> String {
-    let fit = fit_cfd_proxy_report(samples);
-    let loocv = cfd_loocv_report(samples);
-    let holdout = cfd_holdout_report(samples, 0.3);
-    let lambda = select_cfd_ridge_lambda(samples);
-    let mut html = String::from(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><title>CFD Surrogate Report</title></head><body>",
-    );
-    html.push_str("<h1>CFD Surrogate Report</h1>");
-    html.push_str("<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\">");
-    html.push_str("<tr><th>Fn</th><th>Empirical HP</th><th>CFD HP</th></tr>");
-    for s in samples {
-        html.push_str(&format!(
-            "<tr><td>{:.4}</td><td>{:.0}</td><td>{:.0}</td></tr>",
-            s.fn_, s.empirical_hp, s.cfd_hp
-        ));
-    }
-    html.push_str("</table>");
-    html.push_str(&format!(
-        "<h2>Fit</h2><p>viscous={:.4} wave={:.4} fn_ref={:.4} R2={:.4} RMSE={:.5} N={}</p>",
-        fit.config.viscous_correction,
-        fit.config.wave_correction,
-        fit.config.fn_ref,
-        fit.r2,
-        fit.rmse,
-        fit.samples
-    ));
-    html.push_str(&format!(
-        "<h2>LOOCV</h2><p>R2={:.4} RMSE={:.5} N={}</p>",
-        loocv.r2, loocv.rmse, loocv.samples
-    ));
-    html.push_str(&format!(
-        "<h2>Holdout (0.3)</h2><p>R2={:.4} RMSE={:.5} N={}</p>",
-        holdout.r2, holdout.rmse, holdout.samples
-    ));
-    html.push_str("<h2>Ridge lambda selection</h2><ul>");
-    for (lambda_value, rmse) in &lambda.results {
-        html.push_str(&format!("<li>lambda={lambda_value:.3} RMSE={rmse:.5}</li>"));
-    }
-    html.push_str(&format!(
-        "</ul><p>best lambda={:.3} RMSE={:.5}</p>",
-        lambda.best_lambda, lambda.best_rmse
-    ));
-    html.push_str("</body></html>");
-    html
-}
 
 #[cfg(test)]
 mod tests {
@@ -712,34 +666,6 @@ mod tests {
             assert!(fraction > 0.0 && fraction < 1.0);
             assert!(r2.is_finite());
         }
-    }
-
-    #[test]
-    fn cfd_report_contains_sections() {
-        let samples = vec![
-            CfdSample {
-                fn_: 0.24,
-                empirical_hp: 1000.0,
-                cfd_hp: 980.0,
-                provenance: CfdProvenance::Synthetic,
-            },
-            CfdSample {
-                fn_: 0.28,
-                empirical_hp: 1000.0,
-                cfd_hp: 1050.0,
-                provenance: CfdProvenance::Synthetic,
-            },
-            CfdSample {
-                fn_: 0.32,
-                empirical_hp: 1000.0,
-                cfd_hp: 1140.0,
-                provenance: CfdProvenance::Synthetic,
-            },
-        ];
-        let html = cfd_report_html(&samples);
-        assert!(html.contains("CFD Surrogate Report"));
-        assert!(html.contains("LOOCV"));
-        assert!(html.contains("Holdout"));
     }
 
     #[test]

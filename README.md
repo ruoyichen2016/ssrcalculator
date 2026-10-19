@@ -29,33 +29,99 @@ zero-dependency local web console are provided as working front-ends.
 ## Project layout
 
 ```
-springsharp/            # core crate: zero dependencies
-├── Cargo.toml          # core workspace (members = ["."], excludes gui/)
+springsharp/
+├── core/                  # independent springsharp-core crate, zero dependencies
+│   └── src/               # models, numerical solvers, workbench transactions
 ├── src/
-│   ├── lib.rs
-│   ├── main.rs         # thin CLI entry point (dispatch + interactive session)
-│   ├── cli/            # command bodies by theme
-│   │   ├── mod.rs      #   argument helpers, help text, grouped-alias mapping
-│   │   └── {design,calibration,validation,data,spaces,cfd,planing,web}.rs
-│   ├── model.rs        # calculation structures and formulas
-│   ├── io.rs           # save/load support (with input range validation)
-│   ├── features.rs     # reports, HTML escaping and iterative solvers
-│   ├── accuracy.rs     # historical cases, validation, provenance audits
-│   ├── resistance.rs   # Holtrop-Mennen style resistance/power
-│   ├── regime.rs       # modern regime model (Holtrop + per-type factor)
-│   ├── calibration.rs  # reduced/structural-form calibration
-│   ├── spaces.rs       # internal spaces + general-arrangement GA
-│   ├── scantling.rs    # rule-style plate/stiffener checks
-│   ├── planing.rs      # experimental planing model
-│   ├── savitsky.rs     # Savitsky planing solver
-│   ├── cfd_proxy.rs    # CFD-surrogate framework
-│   └── web.rs          # zero-dependency local web console
-├── tests/              # accuracy regression + CLI command-surface tests
-├── docs/               # ALGORITHM / VALIDATION / ROADMAP / CHANGELOG
-└── gui/                # separate workspace crate (springsharp-gui)
-    ├── Cargo.toml      # depends on `springsharp` + eframe
-    └── src/{main.rs,app.rs}
+│   ├── presentation/      # reports, display names, field metadata, font policy
+│   ├── web/               # forms, server-rendered workbench and SVG
+│   ├── web.rs             # loopback transport and managed service lifetime
+│   ├── cli/               # command-line adapter
+│   └── main.rs
+├── assets/
+│   ├── fields.tsv         # shared variable display labels (stable engine keys)
+│   └── fonts/             # five Noto fonts, source hashes and OFL licenses
+├── web/                   # HTML/CSS, no JavaScript
+├── gui/                   # independent eframe workspace; desktop + Web launcher
+├── scripts/               # Windows build and portable packaging
+└── docs/WINDOWS-PORTABLE.md
 ```
+
+## Zero-JavaScript web workbench and shared core
+
+The browser receives HTML, CSS and server-generated SVG only. There are no
+JavaScript assets, inline event handlers, WebAssembly loaders, npm dependencies
+or frontend build step. The local HTTP service embeds these files at compile time:
+
+- `web/index.html`: workbench layout and native form actions.
+- `web/editor.html`: parameter controls and enum options.
+- `web/styles.css`: responsive layout and styling.
+- `src/web/forms.rs`: form decoding, upload parsing and escaped template fields.
+- `src/web/workbench.rs`: HTTP form-to-command adapter and complete page responses.
+- `core/src/workbench.rs`: shared application commands, baseline and arrangement state.
+- `src/web/svg.rs`: blueprint, power and penetration chart rendering.
+- `src/web.rs`: loopback HTTP transport, fixed routes and response headers.
+
+Edit inputs and press **Calculate**. Each submission produces one complete result
+snapshot. Typing does not refresh results; the page explicitly identifies them as
+the last submitted calculation. Invalid submissions retain the entered values
+and show the last valid results with an error notice. Sections use native HTML
+`details`; full blueprints open as SVG documents, and `<title>` provides native
+hover descriptions. There are no live recalculation, script modals or asynchronous
+browser requests. Responses enforce `script-src 'none'`.
+
+Native forms support historical presets, UTF-8 `.ssr` uploads, raw save text,
+calibration, speed/range/displacement solvers, comparisons, arrangement planning,
+external CSV and planing estimates. `.ssr`, SVG and HTML reports download through
+normal form submissions. Exported HTML embeds its CSS and SVG for offline viewing.
+The workbench itself still requires the local Rust service; this is server-rendered
+HTML, not a standalone offline calculator.
+
+The old browser-only JSON endpoints have been removed. Current routes are
+`GET /`, `GET /assets/styles.css`, `GET /api/health`, `POST /workbench`, `POST /open`,
+`POST /blueprint`, and `POST /export/{design.ssr,blueprint.svg,report.html}`.
+
+The egui workspace remains available. Both frontends use `Workbench` commands
+for demo/preset/import, calculation, calibration, solvers, comparison and arrangement.
+Commands validate a candidate before publishing a result; failures preserve the
+previous snapshot and baseline. Arrangement consumes current edited inputs, and
+subsequent edits invalidate its cached placement. Saving calculates first and
+exports the same committed snapshot that is displayed. HTTP and filesystem I/O
+remain in their respective adapters; Web-only reference analyses remain in the
+Web adapter and validate before publishing.
+
+`core/src/design.rs` owns the shared mutable draft and immutable calculation snapshots. `core/src/blueprint.rs` supplies mount positions,
+superfiring tiers, casemate flags, carrier classification, citadel bounds, bridge
+and funnel positions to both egui and server SVG. Both frontends use the same
+Rust calculation engine; projection and painting remain renderer-specific.
+
+Focused validation: `cargo test -p springsharp-core --lib workbench::tests`, `cargo test --lib web::tests`;
+compile the native adapter with `cargo check --manifest-path gui/Cargo.toml`.
+
+## Windows x64 portable and typography
+
+Build with `scripts/build-windows.ps1` on Windows (Rust MSVC, C++ Build Tools,
+Windows SDK and Python 3). The manual **Windows x64 portable** workflow runs the
+same packaging path. It checks PE architecture/subsystems and font checksums,
+collects licenses, and emits a ZIP plus SHA-256 sidecar. Intermediate build files
+are cleaned by default. See [portable usage](docs/WINDOWS-PORTABLE.md).
+
+The native workbench and browser launcher hide their consoles; the CLI retains
+its console. File open/save uses native dialogs. The browser launcher owns its
+loopback server and provides a visible stop/close control.
+
+Numerical models, solvers and structured application outcomes live in `core`.
+Display names, reports, field labels and fonts live in the presentation layer;
+`core` has no dependency on that layer or any font/GUI package. Diagnostic errors
+from validation remain engine diagnostics; they are not translated UI labels.
+
+Final font policy: **Noto Sans + Noto Sans CJK SC** for Sans, **Noto Serif + Noto
+Serif CJK JP** for serif (including Chinese), **Noto Sans Mono + CJK SC** for
+monospace. No Sans JP font is bundled. Language metadata is retained, but Han
+shapes follow the selected family consistently across languages. Missing glyphs
+fall through the bundled chain and then renderer defaults. Exact typography in
+standalone exports depends on locally available fonts; the running workbenches
+load the bundled assets offline. UI translation is separate from glyph coverage.
 
 ## Usage
 
@@ -468,3 +534,5 @@ source is not OSI-licensed, so the MIT grant does not automatically extend to
 that derived formula content.  Read [NOTICE](NOTICE) before redistributing, and
 obtain permission from the upstream authors or reimplement the formula layer
 from public literature first.
+
+Superstructure concept planning is shared by Web and egui: automatic ideal types, independent mast forms, relative corrections and locked component geometry. See [planning controls](docs/WINDOWS-PORTABLE.md#superstructure-planning). Geometry diagnostics do not add mass to the calculation.

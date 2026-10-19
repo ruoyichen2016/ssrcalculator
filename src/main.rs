@@ -1,5 +1,6 @@
 mod cli;
 use cli::CliError;
+use springsharp::ShipSummary;
 
 use std::io::{self, BufRead, Write};
 

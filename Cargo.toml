@@ -8,15 +8,16 @@ description = "A Rust reimplementation of the SpringSharp naval design calculati
 license = "MIT"
 readme = "README.md"
 
-# The core is its own workspace with no dependencies, so `cargo build`/`test`
-# here never resolves eframe.  The GUI lives in `gui/` as a *separate* workspace
-# that depends on this crate by path; build it with `scripts/build-gui.sh` (which
-# pins CARGO_TARGET_DIR=target-gui) or from inside `gui/`, which
-# `gui/.cargo/config.toml` redirects to that same cache.
+# The numerical core is a separate zero-dependency crate. The root contains
+# presentation, CLI and Web adapters; neither resolves eframe. GUI has its own
+# workspace and build cache (scripts/build-gui.sh).
 [workspace]
-members = ["."]
+members = [".", "core"]
 exclude = ["gui"]
 resolver = "2"
+
+[dependencies]
+springsharp-core = { path = "core" }
 
 [lib]
 name = "springsharp"

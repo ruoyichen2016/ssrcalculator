@@ -4,6 +4,7 @@
 
 [package]
 name = "springsharp-gui"
+default-run = "springsharp-gui"
 version = "0.3.0"
 edition = "2021"
 publish = false
@@ -14,9 +15,14 @@ license = "MIT"
 name = "springsharp-gui"
 path = "src/main.rs"
 
+[[bin]]
+name = "springsharp-web"
+path = "src/web_main.rs"
+
 [dependencies]
 springsharp = { path = ".." }
-eframe = { version = "0.36", default-features = false, features = ["glow", "default_fonts", "x11", "wayland"] }
+rfd = "0.17.2"
+eframe = { version = "0.36", default-features = false, features = ["glow", "default_fonts", "links", "x11", "wayland"] }
 
 # Profiles are per-workspace, so this repeats the core `../Cargo.toml` policy:
 # line tables for the GUI crate itself, none at all for the ~300-crate eframe
@@ -31,3 +37,13 @@ debug = false
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[dev-dependencies]
+# Use the same OpenType parser as egui to verify bundled fallback coverage.
+skrifa = "0.44"
