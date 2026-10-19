@@ -1,18 +1,38 @@
 use eframe::egui::{self, FontFamily};
 use springsharp::presentation::fonts::{self, TextLanguage};
 
+const NOTO_SANS: &[u8] = include_bytes!("../../assets/fonts/NotoSans-Regular.ttf");
+const NOTO_SERIF: &[u8] = include_bytes!("../../assets/fonts/NotoSerif-Regular.ttf");
+const NOTO_SANS_MONO: &[u8] = include_bytes!("../../assets/fonts/NotoSansMono-Regular.ttf");
+const NOTO_SANS_CJK_SC: &[u8] = include_bytes!("../../assets/fonts/NotoSansCJKsc-Regular.otf");
+const NOTO_SERIF_CJK_JP: &[u8] = include_bytes!("../../assets/fonts/NotoSerifCJKjp-Regular.otf");
+
+pub fn embedded_font(name: &str) -> Option<&'static [u8]> {
+    match name {
+        "Noto Sans" => Some(NOTO_SANS),
+        "Noto Serif" => Some(NOTO_SERIF),
+        "Noto Sans Mono" => Some(NOTO_SANS_MONO),
+        "Noto Sans CJK SC" => Some(NOTO_SANS_CJK_SC),
+        "Noto Serif CJK JP" => Some(NOTO_SERIF_CJK_JP),
+        _ => None,
+    }
+}
+
 pub fn install(ctx: &egui::Context, language: TextLanguage) -> Vec<String> {
     let mut definitions = egui::FontDefinitions::default();
     let mut missing = Vec::new();
     for (name, file) in fonts::FONTS {
-        match fonts::font_path(file).and_then(|p| std::fs::read(p).ok()) {
-            Some(bytes) => {
-                definitions
-                    .font_data
-                    .insert(name.into(), egui::FontData::from_owned(bytes).into());
-            }
-            None => missing.push(file.to_string()),
-        }
+        let font_data = match fonts::font_path(file).and_then(|p| std::fs::read(p).ok()) {
+            Some(bytes) => egui::FontData::from_owned(bytes),
+            None => match embedded_font(name) {
+                Some(static_bytes) => egui::FontData::from_static(static_bytes),
+                None => {
+                    missing.push(file.to_string());
+                    continue;
+                }
+            },
+        };
+        definitions.font_data.insert(name.into(), font_data.into());
     }
     let available = |name: &&str| definitions.font_data.contains_key(*name);
     let proportional: Vec<String> = language
@@ -100,5 +120,15 @@ mod tests {
             });
         });
         output.textures_delta.clear();
+    }
+
+    #[test]
+    fn embedded_fonts_are_complete_and_valid() {
+        for (name, _) in fonts::FONTS {
+            let bytes =
+                embedded_font(name).unwrap_or_else(|| panic!("missing embedded font: {name}"));
+            assert!(!bytes.is_empty());
+            assert!(skrifa::FontRef::from_index(bytes, 0).is_ok());
+        }
     }
 }

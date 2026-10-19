@@ -12,6 +12,9 @@
   cards, headings, 75+ engineering parameter fields, and discrete dropdown options,
   while strictly preserving technical invariants (ship/preset names, dimensionless
   ratios Cb/Cm/LCB/GM, and unit symbols).
+- Embedded all 5 Noto font assets directly into the native GUI binary (`include_bytes!`),
+  enabling a 100% self-contained single-file Windows executable (`SpringSharp.exe`)
+  without requiring external asset folders, web servers, or CLI components.
 
 ## 2026-10-18 — Windows portable and presentation separation
 

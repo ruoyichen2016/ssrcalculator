@@ -54,11 +54,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--binaries", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=ROOT / "dist")
+    parser.add_argument("--gui-only", action="store_true", help="Package only the standalone SpringSharp.exe (with embedded fonts)")
     args = parser.parse_args()
     metadata = json.loads(subprocess.check_output(["cargo", "metadata", "--no-deps", "--format-version", "1"], cwd=ROOT))
     version = next(p["version"] for p in metadata["packages"] if p["name"] == "springsharp")
     name = f"SpringSharp-{version}-windows-x64"
-    for source, (_, subsystem) in BINARIES.items():
+    active_binaries = {"springsharp-gui.exe": ("SpringSharp.exe", 2)} if args.gui_only else BINARIES
+    for source, (_, subsystem) in active_binaries.items():
         verify_pe(args.binaries / source, subsystem)
     fonts = ROOT / "assets/fonts"
     for entry in json.loads((fonts / "sources.json").read_text(encoding="utf-8")):
@@ -69,9 +71,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix="springsharp-package-") as temp:
         stage = Path(temp) / name
         stage.mkdir()
-        for source, (dest, _) in BINARIES.items():
+        for source, (dest, _) in active_binaries.items():
             shutil.copy2(args.binaries / source, stage / dest)
-        shutil.copytree(ROOT / "assets", stage / "assets")
+        if not args.gui_only:
+            shutil.copytree(ROOT / "assets", stage / "assets")
         shutil.copytree(ROOT / "examples", stage / "examples")
         licenses = stage / "licenses"
         licenses.mkdir()
@@ -91,6 +94,12 @@ def main():
                     bundle.write(file, file.relative_to(stage.parent))
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     archive.with_suffix(".zip.sha256").write_text(f"{digest}  {archive.name}\n", encoding="ascii")
+    if args.gui_only:
+        standalone_exe = args.output / "SpringSharp.exe"
+        shutil.copy2(args.binaries / "springsharp-gui.exe", standalone_exe)
+        exe_digest = hashlib.sha256(standalone_exe.read_bytes()).hexdigest()
+        (args.output / "SpringSharp.exe.sha256").write_text(f"{exe_digest}  SpringSharp.exe\n", encoding="ascii")
+        print(f"Standalone executable: {standalone_exe.resolve()}")
     print(archive.resolve())
 
 if __name__ == "__main__":
