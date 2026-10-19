@@ -22,7 +22,7 @@ path = "src/web_main.rs"
 [dependencies]
 springsharp = { path = ".." }
 rfd = "0.17.2"
-eframe = { version = "0.36", default-features = false, features = ["glow", "default_fonts", "links", "x11", "wayland"] }
+eframe = { version = "0.36", default-features = false, features = ["wgpu", "glow", "default_fonts", "links", "x11", "wayland"] }
 
 # Profiles are per-workspace, so this repeats the core `../Cargo.toml` policy:
 # line tables for the GUI crate itself, none at all for the ~300-crate eframe

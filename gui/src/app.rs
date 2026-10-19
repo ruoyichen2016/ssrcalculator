@@ -4231,17 +4231,17 @@ fn drag_i32(ui: &mut egui::Ui, label: &str, value: &mut i32) {
     });
 }
 
-pub fn run() -> eframe::Result<()> {
-    let options = eframe::NativeOptions {
+pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let make_options = |renderer| eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1360.0, 880.0])
             .with_min_inner_size([960.0, 640.0]),
+        renderer,
         ..Default::default()
     };
-    eframe::run_native(
-        "SpringSharp Rust",
-        options,
-        Box::new(|cc| {
+
+    let make_creator = || {
+        let creator: eframe::AppCreator = Box::new(|cc| {
             let missing = crate::fonts::install(&cc.egui_ctx, TextLanguage::Germanic);
             crate::theme::install(&cc.egui_ctx);
             let mut app = SpringSharpApp::new();
@@ -4249,9 +4249,33 @@ pub fn run() -> eframe::Result<()> {
                 app.status = format!("Missing bundled fonts: {}", missing.join(", "));
             }
             Ok(Box::new(app))
-        }),
-    )
+        });
+        creator
+    };
+
+    match eframe::run_native(
+        "SpringSharp Rust",
+        make_options(eframe::Renderer::Wgpu),
+        make_creator(),
+    ) {
+        Ok(()) => Ok(()),
+        Err(wgpu_err) => {
+            eprintln!("Primary renderer (Wgpu) failed: {wgpu_err}. Attempting fallback to Glow (OpenGL)...");
+            eframe::run_native(
+                "SpringSharp Rust",
+                make_options(eframe::Renderer::Glow),
+                make_creator(),
+            )
+            .map_err(|glow_err| {
+                format!(
+                    "SpringSharp failed to initialize graphics renderer:\n\n- Primary (Wgpu/DirectX): {wgpu_err}\n- Fallback (Glow/OpenGL): {glow_err}"
+                )
+                .into()
+            })
+        }
+    }
 }
+
 
 /// Segmented, rounded weight-distribution bar with hover details and a legend.
 fn weight_bar(ui: &mut egui::Ui, ship: &springsharp::model::ShipModel, metric: bool) {
